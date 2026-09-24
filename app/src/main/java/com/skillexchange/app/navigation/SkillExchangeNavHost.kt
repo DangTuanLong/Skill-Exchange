@@ -7,79 +7,88 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.skillexchange.app.presentation.auth.LoginScreen
+import com.skillexchange.app.presentation.auth.OtpVerificationScreen
+import com.skillexchange.app.presentation.auth.RegisterScreen
 
 /**
  * Root NavHost của toàn bộ app.
- * Điểm khởi đầu: Onboarding (sẽ được thay bằng logic kiểm tra auth sau).
  */
 @Composable
 fun SkillExchangeNavHost(
     navController: NavHostController = rememberNavController(),
-    startDestination: String = Screen.Onboarding.route
+    startDestination: String = Screen.Login.route
 ) {
     NavHost(
         navController = navController,
         startDestination = startDestination
     ) {
-        // ── Auth ──────────────────────────────────────────────────
-        composable(Screen.Onboarding.route) {
-            // TODO: OnboardingScreen(navController) — Tuần 3
-            PlaceholderScreen("Onboarding")
-        }
+        // ── Auth ─────────────────────────────────────────────────────
         composable(Screen.Login.route) {
-            // TODO: LoginScreen(navController) — Tuần 3
-            PlaceholderScreen("Login")
+            LoginScreen(
+                onNavigateToRegister = { navController.navigate(Screen.Register.route) },
+                onNavigateToHome     = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            )
         }
+
         composable(Screen.Register.route) {
-            // TODO: RegisterScreen(navController) — Tuần 3
-            PlaceholderScreen("Register")
+            RegisterScreen(
+                onNavigateToOtp   = { email ->
+                    navController.navigate(Screen.OtpVerification.createRoute(email))
+                },
+                onNavigateToLogin = { navController.popBackStack() }
+            )
         }
+
         composable(
             route = Screen.OtpVerification.route,
             arguments = listOf(navArgument("email") { type = NavType.StringType })
         ) { backStackEntry ->
             val email = backStackEntry.arguments?.getString("email") ?: ""
-            // TODO: OtpVerificationScreen(email, navController) — Tuần 3
-            PlaceholderScreen("OTP Verification")
+            OtpVerificationScreen(
+                email            = email,
+                onNavigateToHome = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNavigateBack   = { navController.popBackStack() }
+            )
         }
 
-        // ── Main ──────────────────────────────────────────────────
+        // ── Onboarding (reserved) ─────────────────────────────────────
+        composable(Screen.Onboarding.route) {
+            PlaceholderScreen("Onboarding")
+        }
+
+        // ── Main ─────────────────────────────────────────────────────
         composable(Screen.Home.route) {
-            PlaceholderScreen("Home")
+            PlaceholderScreen("Home — Tuần 5")
         }
         composable(Screen.ProfileSetup.route) {
-            // TODO: ProfileSetupScreen(navController) — Tuần 4
-            PlaceholderScreen("Profile Setup")
+            PlaceholderScreen("Profile Setup — Tuần 4")
         }
         composable(
             route = Screen.ProfileDetail.route,
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) {
-            PlaceholderScreen("Profile Detail")
+            PlaceholderScreen("Profile Detail — Tuần 4")
         }
-        composable(Screen.Discovery.route) {
-            PlaceholderScreen("Discovery")
-        }
-        composable(Screen.ChatList.route) {
-            PlaceholderScreen("Chat List")
-        }
+        composable(Screen.Discovery.route)   { PlaceholderScreen("Discovery — Tuần 5") }
+        composable(Screen.ChatList.route)    { PlaceholderScreen("Chat — Tuần 9") }
         composable(
             route = Screen.ChatDetail.route,
             arguments = listOf(navArgument("chatId") { type = NavType.StringType })
-        ) {
-            PlaceholderScreen("Chat Detail")
-        }
-        composable(Screen.BookingList.route) {
-            PlaceholderScreen("Booking List")
-        }
+        ) { PlaceholderScreen("Chat Detail — Tuần 9") }
+        composable(Screen.BookingList.route) { PlaceholderScreen("Booking — Tuần 7") }
         composable(
             route = Screen.Rating.route,
             arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
-        ) {
-            PlaceholderScreen("Rating")
-        }
-        composable(Screen.Dashboard.route) {
-            PlaceholderScreen("Dashboard")
-        }
+        ) { PlaceholderScreen("Rating — Tuần 8") }
+        composable(Screen.Dashboard.route)   { PlaceholderScreen("Dashboard — Tuần 6") }
     }
 }

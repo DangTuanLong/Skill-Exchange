@@ -1,14 +1,18 @@
 package com.skillexchange.app.di
 
 import com.skillexchange.app.core.network.NetworkModule
+import com.skillexchange.app.data.remote.auth.AuthRemoteDataSource
+import com.skillexchange.app.data.repository.AuthRepositoryImpl
+import com.skillexchange.app.domain.repository.IAuthRepository
+import com.skillexchange.app.presentation.auth.AuthViewModel
+import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
-/**
- * Root Koin module — tập hợp tất cả module con.
- * Mỗi feature sẽ có module riêng được thêm vào đây.
- */
 val appModule = module {
-    includes(
-        NetworkModule.module,
-    )
+    includes(NetworkModule.module)
+
+    // ── Auth ─────────────────────────────────────────────────────────
+    single { AuthRemoteDataSource(get()) }
+    single<IAuthRepository> { AuthRepositoryImpl(get()) }
+    viewModel { AuthViewModel(get()) }
 }
