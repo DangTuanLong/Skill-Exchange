@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -208,27 +212,25 @@ fun OtpVerificationScreen(
 }
 
 /**
- * 6-ô nhập OTP — mỗi ô hiển thị 1 chữ số, tự động focus next khi nhập.
+ * 6-ô nhập OTP — BasicTextField transparent overlay toàn hàng,
+ * tap bất kỳ đâu trên OTP area là keyboard hiện lên.
  */
 @Composable
 fun OtpInputField(
     otp: String,
     onOtpChange: (String) -> Unit
 ) {
-    Box {
-        // Hidden input để capture keyboard
-        BasicTextField(
-            value = otp,
-            onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) onOtpChange(it) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            cursorBrush = SolidColor(Color.Transparent),
-            modifier = Modifier.size(1.dp)  // invisible but focusable
-        )
+    val focusRequester = remember { FocusRequester() }
 
-        // Visual OTP boxes
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+    ) {
+        // Visual boxes on top
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxSize()
         ) {
             repeat(6) { index ->
                 val char = otp.getOrNull(index)?.toString() ?: ""
@@ -237,14 +239,14 @@ fun OtpInputField(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp)
+                        .fillMaxHeight()
                         .background(DarkSurface2, RoundedCornerShape(12.dp))
                         .border(
                             width = if (isFocused) 2.dp else 1.dp,
                             color = when {
-                                isFocused -> Brand500
+                                isFocused   -> Brand500
                                 char.isNotEmpty() -> Brand600
-                                else -> DarkSurface3
+                                else        -> DarkSurface3
                             },
                             shape = RoundedCornerShape(12.dp)
                         ),
@@ -259,5 +261,27 @@ fun OtpInputField(
                 }
             }
         }
+
+        // Invisible BasicTextField — đặt TRÊN visual boxes để nhận input
+        BasicTextField(
+            value = otp,
+            onValueChange = { new ->
+                if (new.length <= 6 && new.all { it.isDigit() }) onOtpChange(new)
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            cursorBrush = SolidColor(Color.Transparent),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .alpha(0f)
+        )
+    }
+
+    // Auto-request focus khi screen hiện
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(400)
+        runCatching { focusRequester.requestFocus() }
     }
 }
+
+
