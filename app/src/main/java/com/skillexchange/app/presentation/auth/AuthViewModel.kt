@@ -43,7 +43,8 @@ sealed class AuthIntent {
 }
 
 class AuthViewModel(
-    private val authRepository: IAuthRepository
+    private val authRepository: IAuthRepository,
+    private val tokenManager: com.skillexchange.app.core.security.TokenManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthUiState())
@@ -78,7 +79,8 @@ class AuthViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             authRepository.login(s.email.trim(), s.password)
-                .onSuccess {
+                .onSuccess { session ->
+                    tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
                     _state.update { it.copy(isLoading = false) }
                     _effect.send(AuthEffect.NavigateToHome)
                 }
@@ -120,7 +122,8 @@ class AuthViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             authRepository.verifyOtp(email, otp)
-                .onSuccess {
+                .onSuccess { session ->
+                    tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
                     _state.update { it.copy(isLoading = false) }
                     _effect.send(AuthEffect.NavigateToHome)
                 }

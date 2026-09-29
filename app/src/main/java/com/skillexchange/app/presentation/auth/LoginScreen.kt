@@ -3,18 +3,9 @@ package com.skillexchange.app.presentation.auth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -25,32 +16,16 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,12 +34,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.skillexchange.app.core.ui.theme.Brand500
-import com.skillexchange.app.core.ui.theme.Brand600
-import com.skillexchange.app.core.ui.theme.DarkBackground
-import com.skillexchange.app.core.ui.theme.DarkSurface
-import com.skillexchange.app.core.ui.theme.DarkSurface2
-import com.skillexchange.app.core.ui.theme.TextSecondary
+import com.skillexchange.app.R
+import com.skillexchange.app.core.ui.theme.*
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
@@ -83,8 +54,8 @@ fun LoginScreen(
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
-                is AuthEffect.NavigateToHome    -> onNavigateToHome()
-                is AuthEffect.ShowError         -> snackbarHostState.showSnackbar(effect.message)
+                is AuthEffect.NavigateToHome -> onNavigateToHome()
+                is AuthEffect.ShowError      -> snackbarHostState.showSnackbar(effect.message)
                 else -> {}
             }
         }
@@ -99,45 +70,56 @@ fun LoginScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(DarkBackground, Color(0xFF141830), DarkBackground)
+                        listOf(Color(0xFF050B16), DarkBackground, Color(0xFF071020))
                     )
                 )
                 .padding(paddingValues)
         ) {
+            // Subtle radial glow behind logo
+            Box(
+                modifier = Modifier
+                    .size(300.dp)
+                    .offset(y = (-30).dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Brand500.copy(alpha = 0.12f), Color.Transparent)
+                        )
+                    )
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp)
+                    .padding(horizontal = 28.dp)
                     .imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(72.dp))
 
-                // ── Logo / Title ──────────────────────────────────────
-                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
+                // ── Logo + Title ───────────────────────────────────────
+                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -50 }) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = "SkillExchange Logo",
                             modifier = Modifier
-                                .size(72.dp)
-                                .background(
-                                    Brush.linearGradient(listOf(Brand500, Brand600)),
-                                    RoundedCornerShape(20.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("SE", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
+                                .size(90.dp)
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color.White)
+                                .padding(8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             "Chào mừng trở lại",
-                            style = MaterialTheme.typography.headlineMedium,
+                            fontSize = 26.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Đăng nhập để tiếp tục trao đổi kỹ năng",
+                            "Tiếp tục hành trình trao đổi kỹ năng",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary,
                             textAlign = TextAlign.Center
@@ -145,10 +127,10 @@ fun LoginScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(40.dp))
 
-                // ── Form ─────────────────────────────────────────────
-                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { 60 }) {
+                // ── Form Card ──────────────────────────────────────────
+                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { 70 }) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -156,22 +138,19 @@ fun LoginScreen(
                             .padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Email field
                         AuthTextField(
                             value = state.email,
                             onValueChange = { viewModel.onIntent(AuthIntent.EmailChanged(it)) },
                             label = "Email",
                             leadingIcon = { Icon(Icons.Default.Email, null, tint = Brand500) },
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Email,
-                                imeAction = ImeAction.Next
+                                keyboardType = KeyboardType.Email, imeAction = ImeAction.Next
                             ),
                             keyboardActions = KeyboardActions(
                                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
                             )
                         )
 
-                        // Password field
                         AuthTextField(
                             value = state.password,
                             onValueChange = { viewModel.onIntent(AuthIntent.PasswordChanged(it)) },
@@ -188,57 +167,56 @@ fun LoginScreen(
                                 }
                             },
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Password,
-                                imeAction = ImeAction.Done
+                                keyboardType = KeyboardType.Password, imeAction = ImeAction.Done
                             ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    focusManager.clearFocus()
-                                    viewModel.onIntent(AuthIntent.SubmitLogin)
-                                }
-                            )
+                            keyboardActions = KeyboardActions(onDone = {
+                                focusManager.clearFocus()
+                                viewModel.onIntent(AuthIntent.SubmitLogin)
+                            })
                         )
 
-                        // Error message
                         if (state.error != null) {
-                            Text(
-                                text = state.error!!,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Text(state.error!!, color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall)
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Login button
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.onIntent(AuthIntent.SubmitLogin)
-                            },
-                            enabled = !state.isLoading,
+                        // Gradient login button
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Brand500,
-                                disabledContainerColor = DarkSurface2
-                            )
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (!state.isLoading)
+                                        Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))
+                                    else Brush.horizontalGradient(listOf(DarkSurface2, DarkSurface2))
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            if (state.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text(
-                                    "Đăng nhập",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 16.sp
-                                )
+                            Button(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    viewModel.onIntent(AuthIntent.SubmitLogin)
+                                },
+                                enabled = !state.isLoading,
+                                modifier = Modifier.fillMaxSize(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(0.dp)
+                            ) {
+                                if (state.isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = Color.White, strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Đăng nhập", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                }
                             }
                         }
                     }
@@ -246,14 +224,10 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ── Register link ─────────────────────────────────────
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Chưa có tài khoản?", color = TextSecondary, fontSize = 14.sp)
                     TextButton(onClick = onNavigateToRegister) {
-                        Text("Đăng ký ngay", color = Brand500, fontWeight = FontWeight.SemiBold)
+                        Text("Đăng ký ngay", color = Brand400, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
