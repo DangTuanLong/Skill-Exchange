@@ -54,7 +54,10 @@ class AuthViewModel(
 
     fun onIntent(intent: AuthIntent) {
         when (intent) {
-            is AuthIntent.EmailChanged        -> _state.update { it.copy(email = intent.email, error = null) }
+            is AuthIntent.EmailChanged        -> {
+                val cleanEmail = intent.email.replace("\n", "").replace("\r", "").replace(" ", "")
+                _state.update { it.copy(email = cleanEmail, error = null) }
+            }
             is AuthIntent.PasswordChanged     -> _state.update { it.copy(password = intent.password, error = null) }
             is AuthIntent.FullNameChanged     -> _state.update { it.copy(fullName = intent.name, error = null) }
             is AuthIntent.OtpChanged          -> _state.update { it.copy(otp = intent.otp, error = null) }
@@ -94,12 +97,13 @@ class AuthViewModel(
             }
             s.password.length < 6 -> { _state.update { it.copy(error = "Mật khẩu phải ít nhất 6 ký tự") }; return }
         }
+        val cleanEmail = s.email.replace("\n", "").replace("\r", "").replace(" ", "").trim()
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            authRepository.register(s.email.trim(), s.password, s.fullName.trim())
+            authRepository.register(cleanEmail, s.password, s.fullName.trim())
                 .onSuccess {
                     _state.update { it.copy(isLoading = false) }
-                    _effect.send(AuthEffect.NavigateToOtp(s.email.trim()))
+                    _effect.send(AuthEffect.NavigateToOtp(cleanEmail))
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "Đăng ký thất bại") }
@@ -109,8 +113,8 @@ class AuthViewModel(
 
     private fun verifyOtp(email: String) {
         val otp = _state.value.otp
-        if (otp.length != 6) {
-            _state.update { it.copy(error = "Mã OTP phải đủ 6 chữ số") }
+        if (otp.length !in 6..8) {
+            _state.update { it.copy(error = "Mã OTP phải có 6 đến 8 chữ số") }
             return
         }
         viewModelScope.launch {

@@ -128,7 +128,7 @@ fun OtpVerificationScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "Mã 6 chữ số đã được gửi đến",
+                            "Mã xác thực OTP đã được gửi đến",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -153,9 +153,10 @@ fun OtpVerificationScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        // 6 OTP digit boxes
+                        // 8 OTP digit boxes
                         OtpInputField(
                             otp = state.otp,
+                            otpLength = 8,
                             onOtpChange = { viewModel.onIntent(AuthIntent.OtpChanged(it)) }
                         )
 
@@ -171,7 +172,7 @@ fun OtpVerificationScreen(
 
                         Button(
                             onClick = { viewModel.onIntent(AuthIntent.SubmitOtp(email)) },
-                            enabled = !state.isLoading && state.otp.length == 6,
+                            enabled = !state.isLoading && state.otp.length in 6..8,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp),
@@ -212,12 +213,13 @@ fun OtpVerificationScreen(
 }
 
 /**
- * 6-ô nhập OTP — BasicTextField transparent overlay toàn hàng,
+ * 8-ô nhập OTP — BasicTextField transparent overlay toàn hàng,
  * tap bất kỳ đâu trên OTP area là keyboard hiện lên.
  */
 @Composable
 fun OtpInputField(
     otp: String,
+    otpLength: Int = 8,
     onOtpChange: (String) -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -229,10 +231,10 @@ fun OtpInputField(
     ) {
         // Visual boxes on top
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            repeat(6) { index ->
+            repeat(otpLength) { index ->
                 val char = otp.getOrNull(index)?.toString() ?: ""
                 val isFocused = index == otp.length
 
@@ -240,7 +242,7 @@ fun OtpInputField(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(DarkSurface2, RoundedCornerShape(12.dp))
+                        .background(DarkSurface2, RoundedCornerShape(10.dp))
                         .border(
                             width = if (isFocused) 2.dp else 1.dp,
                             color = when {
@@ -248,14 +250,14 @@ fun OtpInputField(
                                 char.isNotEmpty() -> Brand600
                                 else        -> DarkSurface3
                             },
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = char,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -266,7 +268,7 @@ fun OtpInputField(
         BasicTextField(
             value = otp,
             onValueChange = { new ->
-                if (new.length <= 6 && new.all { it.isDigit() }) onOtpChange(new)
+                if (new.length <= otpLength && new.all { it.isDigit() }) onOtpChange(new)
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             cursorBrush = SolidColor(Color.Transparent),
