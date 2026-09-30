@@ -16,17 +16,19 @@ import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
+import com.skillexchange.app.core.security.TokenManager
+import io.ktor.client.request.header
+
 object NetworkModule {
     val module = module {
-        single { provideHttpClient(androidContext()) }
+        single { provideHttpClient(androidContext(), get()) }
     }
 }
 
 /**
- * Ktor HttpClient được cấu hình cho Android engine.
- * Sau này khi chuyển sang KMP, chỉ cần thay Android engine → Darwin engine cho iOS.
+ * Ktor HttpClient được cấu hình cho Android engine với Token Interceptor.
  */
-fun provideHttpClient(context: Context): HttpClient {
+fun provideHttpClient(context: Context, tokenManager: TokenManager): HttpClient {
     return HttpClient(Android) {
         engine {
             connectTimeout = Constants.CONNECT_TIMEOUT_MS.toInt()
@@ -54,6 +56,9 @@ fun provideHttpClient(context: Context): HttpClient {
         defaultRequest {
             contentType(ContentType.Application.Json)
             url(Constants.BASE_URL)
+            tokenManager.getAccessToken()?.let { token ->
+                header("Authorization", "Bearer $token")
+            }
         }
     }
 }

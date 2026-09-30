@@ -18,6 +18,6 @@ val appModule = module {
 
     // ── Auth ─────────────────────────────────────────────────────────
     single { AuthRemoteDataSource(get()) }
-    single<IAuthRepository> { AuthRepositoryImpl(get()) }
-    viewModel { AuthViewModel(get(), get()) }   // repository + tokenManager
+    single<IAuthRepository> { AuthRepositoryImpl(get(), get()) }
+    viewModel { AuthViewModel(get(), get()) }
 }

@@ -9,8 +9,11 @@ import com.skillexchange.app.domain.model.auth.AuthSession
 import com.skillexchange.app.domain.model.auth.RegisterResult
 import com.skillexchange.app.domain.repository.IAuthRepository
 
+import com.skillexchange.app.core.security.TokenManager
+
 class AuthRepositoryImpl(
-    private val remote: AuthRemoteDataSource
+    private val remote: AuthRemoteDataSource,
+    private val tokenManager: TokenManager
 ) : IAuthRepository {
 
     override suspend fun register(
@@ -25,6 +28,7 @@ class AuthRepositoryImpl(
         runCatching {
             val resp = remote.login(LoginRequestDto(email, password))
             val data = resp.data ?: throw Exception(resp.message ?: "Đăng nhập thất bại")
+            tokenManager.saveSession(data.accessToken, data.refreshToken, data.userId)
             data.toDomain()
         }
 
@@ -33,6 +37,7 @@ class AuthRepositoryImpl(
     ): Result<AuthSession> = runCatching {
         val resp = remote.verifyOtp(VerifyOtpRequestDto(email, token, type))
         val data = resp.data ?: throw Exception(resp.message ?: "OTP không hợp lệ")
+        tokenManager.saveSession(data.accessToken, data.refreshToken, data.userId)
         data.toDomain()
     }
 
@@ -40,6 +45,7 @@ class AuthRepositoryImpl(
         runCatching {
             val resp = remote.refresh(RefreshRequestDto(refreshToken))
             val data = resp.data ?: throw Exception(resp.message ?: "Refresh thất bại")
+            tokenManager.saveSession(data.accessToken, data.refreshToken, data.userId)
             data.toDomain()
         }
 
