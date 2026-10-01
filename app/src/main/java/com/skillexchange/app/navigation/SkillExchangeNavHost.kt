@@ -12,6 +12,8 @@ import com.skillexchange.app.presentation.auth.LoginScreen
 import com.skillexchange.app.presentation.auth.OtpVerificationScreen
 import com.skillexchange.app.presentation.auth.RegisterScreen
 import com.skillexchange.app.presentation.onboarding.OnboardingScreen
+import com.skillexchange.app.presentation.profile.ProfileSetupScreen
+import com.skillexchange.app.presentation.profile.SkillSelectionScreen
 
 /**
  * Root NavHost — với Navigation Guard.
