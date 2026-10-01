@@ -1,7 +1,6 @@
 package com.skillexchange.app.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -69,7 +68,7 @@ fun SkillExchangeNavHost(
             OtpVerificationScreen(
                 email = email,
                 onNavigateToHome = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.ProfileSetup.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
@@ -77,24 +76,47 @@ fun SkillExchangeNavHost(
             )
         }
 
-        // ── Main (Placeholders — triển khai theo tuần) ─────────────
-        composable(Screen.Home.route)         { PlaceholderScreen("🏠 Home — Tuần 5") }
-        composable(Screen.ProfileSetup.route) { PlaceholderScreen("👤 Profile Setup — Tuần 4") }
+        // ── Profile Setup Flow ────────────────────────────────────────
+        composable(Screen.ProfileSetup.route) {
+            ProfileSetupScreen(
+                onNavigateToSkillSelection = {
+                    navController.navigate(Screen.SkillSelection.route)
+                },
+                onNavigateToHome = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.SkillSelection.route) {
+            SkillSelectionScreen(
+                onNavigateToHome = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ── Main Screens ─────────────────────────────────────────────
+        composable(Screen.Home.route)         { PlaceholderScreen("Home") }
         composable(
             route = Screen.ProfileDetail.route,
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
-        ) { PlaceholderScreen("Profile Detail — Tuần 4") }
-        composable(Screen.Discovery.route)   { PlaceholderScreen("🔍 Discovery — Tuần 5") }
-        composable(Screen.ChatList.route)    { PlaceholderScreen("💬 Chat — Tuần 9") }
+        ) { PlaceholderScreen("Profile Detail") }
+        composable(Screen.Discovery.route)   { PlaceholderScreen("Discovery") }
+        composable(Screen.ChatList.route)    { PlaceholderScreen("Chat") }
         composable(
             route = Screen.ChatDetail.route,
             arguments = listOf(navArgument("chatId") { type = NavType.StringType })
         ) { PlaceholderScreen("Chat Detail") }
-        composable(Screen.BookingList.route) { PlaceholderScreen("📅 Booking — Tuần 7") }
+        composable(Screen.BookingList.route) { PlaceholderScreen("Booking") }
         composable(
             route = Screen.Rating.route,
             arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
-        ) { PlaceholderScreen("⭐ Rating — Tuần 8") }
-        composable(Screen.Dashboard.route)   { PlaceholderScreen("📊 Dashboard — Tuần 6") }
+        ) { PlaceholderScreen("Rating") }
+        composable(Screen.Dashboard.route)   { PlaceholderScreen("Dashboard") }
     }
 }

@@ -19,7 +19,7 @@ fun PlaceholderScreen(name: String) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "🚧 $name\n(Đang phát triển)",
+            text = "$name\n(Đang phát triển)",
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center

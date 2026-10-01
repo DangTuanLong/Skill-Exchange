@@ -44,6 +44,7 @@ sealed class ProfileIntent {
     data class FullNameChanged(val value: String) : ProfileIntent()
     data class BioChanged(val value: String) : ProfileIntent()
     data class CityChanged(val value: String) : ProfileIntent()
+    data class AvatarUrlChanged(val value: String) : ProfileIntent()
     object SaveProfile : ProfileIntent()
     object LoadData : ProfileIntent()
     data class SelectCategory(val id: Int?) : ProfileIntent()
@@ -58,6 +59,7 @@ sealed class ProfileIntent {
 // ─── Effect ───────────────────────────────────────────────────────────
 sealed class ProfileEffect {
     object NavigateToHome : ProfileEffect()
+    object NavigateToSkillSelection : ProfileEffect()
     data class ShowSnackbar(val message: String) : ProfileEffect()
 }
 
@@ -76,18 +78,19 @@ class ProfileViewModel(
 
     fun onIntent(intent: ProfileIntent) {
         when (intent) {
-            is ProfileIntent.LoadData        -> loadData()
-            is ProfileIntent.FullNameChanged -> _state.update { it.copy(fullName = intent.value, error = null) }
-            is ProfileIntent.BioChanged      -> _state.update { it.copy(bio = intent.value) }
-            is ProfileIntent.CityChanged     -> _state.update { it.copy(city = intent.value) }
-            is ProfileIntent.SaveProfile     -> saveProfile()
-            is ProfileIntent.SelectCategory  -> _state.update { it.copy(selectedCategoryId = intent.id) }
-            is ProfileIntent.SelectTab       -> _state.update { it.copy(selectedTab = intent.tab) }
-            is ProfileIntent.AddSkill        -> addSkill(intent.skillId)
-            is ProfileIntent.RemoveSkill     -> removeSkill(intent.userSkillId)
-            is ProfileIntent.SetProficiency  -> _state.update { it.copy(proficiencyLevel = intent.level) }
-            is ProfileIntent.GoToSkillStep   -> _state.update { it.copy(step = ProfileStep.SKILL_SELECTION) }
-            is ProfileIntent.GoToDone        -> _state.update { it.copy(step = ProfileStep.DONE) }
+            is ProfileIntent.LoadData         -> loadData()
+            is ProfileIntent.FullNameChanged  -> _state.update { it.copy(fullName = intent.value, error = null) }
+            is ProfileIntent.BioChanged       -> _state.update { it.copy(bio = intent.value) }
+            is ProfileIntent.CityChanged      -> _state.update { it.copy(city = intent.value) }
+            is ProfileIntent.AvatarUrlChanged -> _state.update { it.copy(avatarUrl = intent.value) }
+            is ProfileIntent.SaveProfile      -> saveProfile()
+            is ProfileIntent.SelectCategory   -> _state.update { it.copy(selectedCategoryId = intent.id) }
+            is ProfileIntent.SelectTab        -> _state.update { it.copy(selectedTab = intent.tab) }
+            is ProfileIntent.AddSkill         -> addSkill(intent.skillId)
+            is ProfileIntent.RemoveSkill      -> removeSkill(intent.userSkillId)
+            is ProfileIntent.SetProficiency   -> _state.update { it.copy(proficiencyLevel = intent.level) }
+            is ProfileIntent.GoToSkillStep    -> _state.update { it.copy(step = ProfileStep.SKILL_SELECTION) }
+            is ProfileIntent.GoToDone         -> _state.update { it.copy(step = ProfileStep.DONE) }
         }
     }
 
@@ -100,7 +103,8 @@ class ProfileViewModel(
                     .onSuccess { p ->
                         _state.update { it.copy(
                             savedProfile = p, fullName = p.fullName,
-                            bio = p.bio ?: "", city = p.city ?: ""
+                            bio = p.bio ?: "", city = p.city ?: "",
+                            avatarUrl = p.avatarUrl ?: ""
                         )}
                     }
             }
@@ -126,10 +130,16 @@ class ProfileViewModel(
         }
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true, error = null) }
-            profileRepo.updateProfile(s.fullName, s.bio.ifBlank { null }, s.city.ifBlank { null }, null)
+            profileRepo.updateProfile(
+                fullName = s.fullName,
+                bio = s.bio.ifBlank { null },
+                city = s.city.ifBlank { null },
+                avatarUrl = s.avatarUrl.ifBlank { null }
+            )
                 .onSuccess { profile ->
                     _state.update { it.copy(isSaving = false, savedProfile = profile) }
                     _effect.send(ProfileEffect.ShowSnackbar("Lưu hồ sơ thành công!"))
+                    _effect.send(ProfileEffect.NavigateToSkillSelection)
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isSaving = false, error = e.message) }

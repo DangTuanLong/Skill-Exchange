@@ -41,6 +41,7 @@ fun SkillSelectionScreen(
             when (effect) {
                 is ProfileEffect.ShowSnackbar   -> snackbarHostState.showSnackbar(effect.message)
                 is ProfileEffect.NavigateToHome -> onNavigateToHome()
+                else -> {}
             }
         }
     }

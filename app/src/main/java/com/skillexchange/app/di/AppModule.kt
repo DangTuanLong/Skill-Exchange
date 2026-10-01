@@ -1,7 +1,10 @@
 package com.skillexchange.app.di
 
+import androidx.room.Room
 import com.skillexchange.app.core.network.NetworkModule
 import com.skillexchange.app.core.security.TokenManager
+import com.skillexchange.app.data.local.AppDatabase
+import com.skillexchange.app.data.local.ProfileLocalDataSource
 import com.skillexchange.app.data.remote.auth.AuthRemoteDataSource
 import com.skillexchange.app.data.remote.profile.ProfileRemoteDataSource
 import com.skillexchange.app.data.remote.skill.SkillRemoteDataSource
@@ -14,24 +17,34 @@ import com.skillexchange.app.domain.repository.ISkillRepository
 import com.skillexchange.app.presentation.auth.AuthViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
 import org.koin.android.ext.koin.androidContext
-import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val appModule = module {
     includes(NetworkModule.module)
 
-    // ── Security ─────────────────────────────────────────────────────
+    // ── Security & Database ───────────────────────────────────────────
     single { TokenManager(androidContext()) }
+
+    single {
+        Room.databaseBuilder(
+            androidContext(),
+            AppDatabase::class.java,
+            "skillexchange_db"
+        ).fallbackToDestructiveMigrationOnDowngrade().build()
+    }
+    single { get<AppDatabase>().profileDao() }
+    single { ProfileLocalDataSource(get()) }
 
     // ── Auth ─────────────────────────────────────────────────────────
     single { AuthRemoteDataSource(get()) }
     single<IAuthRepository> { AuthRepositoryImpl(get(), get()) }
-    viewModel { AuthViewModel(get(), get()) }
+    viewModelOf(::AuthViewModel)
 
     // ── Profile & Skills ─────────────────────────────────────────────
     single { ProfileRemoteDataSource(get()) }
     single { SkillRemoteDataSource(get()) }
-    single<IProfileRepository> { ProfileRepositoryImpl(get(), get()) }
+    single<IProfileRepository> { ProfileRepositoryImpl(get(), get(), get()) }
     single<ISkillRepository>   { SkillRepositoryImpl(get(), get()) }
-    viewModel { ProfileViewModel(get(), get()) }
+    viewModelOf(::ProfileViewModel)
 }
