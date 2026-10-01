@@ -10,7 +10,9 @@ import androidx.navigation.navArgument
 import com.skillexchange.app.presentation.auth.LoginScreen
 import com.skillexchange.app.presentation.auth.OtpVerificationScreen
 import com.skillexchange.app.presentation.auth.RegisterScreen
+import com.skillexchange.app.presentation.discovery.DiscoveryScreen
 import com.skillexchange.app.presentation.onboarding.OnboardingScreen
+import com.skillexchange.app.presentation.profile.ProfileDetailScreen
 import com.skillexchange.app.presentation.profile.ProfileSetupScreen
 import com.skillexchange.app.presentation.profile.SkillSelectionScreen
 
@@ -100,13 +102,31 @@ fun SkillExchangeNavHost(
             )
         }
 
-        // ── Main Screens ─────────────────────────────────────────────
-        composable(Screen.Home.route)         { PlaceholderScreen("Home") }
+        // ── Discovery & Search ────────────────────────────────────────
+        composable(Screen.Discovery.route) {
+            DiscoveryScreen(
+                onNavigateToProfileDetail = { userId ->
+                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                }
+            )
+        }
+
         composable(
             route = Screen.ProfileDetail.route,
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
-        ) { PlaceholderScreen("Profile Detail") }
-        composable(Screen.Discovery.route)   { PlaceholderScreen("Discovery") }
+        ) { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            ProfileDetailScreen(
+                userId = userId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBooking = { receiverId ->
+                    navController.navigate(Screen.BookingRequest.createRoute(receiverId))
+                }
+            )
+        }
+
+        // ── Main Screens ─────────────────────────────────────────────
+        composable(Screen.Home.route)         { PlaceholderScreen("Home") }
         composable(Screen.ChatList.route)    { PlaceholderScreen("Chat") }
         composable(
             route = Screen.ChatDetail.route,

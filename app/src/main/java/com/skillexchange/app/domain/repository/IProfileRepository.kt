@@ -6,6 +6,7 @@ import com.skillexchange.app.domain.model.UserSkill
 
 interface IProfileRepository {
     suspend fun getMyProfile(): Result<Profile>
+    suspend fun getUserProfile(userId: String): Result<Profile>
     suspend fun updateProfile(fullName: String, bio: String?, city: String?, avatarUrl: String?): Result<Profile>
 }
 

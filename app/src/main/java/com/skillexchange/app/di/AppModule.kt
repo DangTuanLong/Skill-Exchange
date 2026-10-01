@@ -6,15 +6,20 @@ import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.data.local.AppDatabase
 import com.skillexchange.app.data.local.ProfileLocalDataSource
 import com.skillexchange.app.data.remote.auth.AuthRemoteDataSource
+import com.skillexchange.app.data.remote.discovery.DiscoveryRemoteDataSource
 import com.skillexchange.app.data.remote.profile.ProfileRemoteDataSource
 import com.skillexchange.app.data.remote.skill.SkillRemoteDataSource
 import com.skillexchange.app.data.repository.AuthRepositoryImpl
+import com.skillexchange.app.data.repository.DiscoveryRepositoryImpl
 import com.skillexchange.app.data.repository.ProfileRepositoryImpl
 import com.skillexchange.app.data.repository.SkillRepositoryImpl
 import com.skillexchange.app.domain.repository.IAuthRepository
+import com.skillexchange.app.domain.repository.IDiscoveryRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
 import com.skillexchange.app.presentation.auth.AuthViewModel
+import com.skillexchange.app.presentation.discovery.DiscoveryViewModel
+import com.skillexchange.app.presentation.profile.ProfileDetailViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
@@ -47,4 +52,10 @@ val appModule = module {
     single<IProfileRepository> { ProfileRepositoryImpl(get(), get(), get()) }
     single<ISkillRepository>   { SkillRepositoryImpl(get(), get()) }
     viewModelOf(::ProfileViewModel)
+    viewModelOf(::ProfileDetailViewModel)
+
+    // ── Discovery & Search ────────────────────────────────────────────
+    single { DiscoveryRemoteDataSource(get()) }
+    single<IDiscoveryRepository> { DiscoveryRepositoryImpl(get()) }
+    viewModelOf(::DiscoveryViewModel)
 }

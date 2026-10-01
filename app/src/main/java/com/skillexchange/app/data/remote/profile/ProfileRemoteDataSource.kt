@@ -44,6 +44,9 @@ class ProfileRemoteDataSource(private val httpClient: HttpClient) {
             headers { append("Authorization", "Bearer $accessToken") }
         }.body()
 
+    suspend fun getUserProfile(userId: String): ProfileResponseDto =
+        httpClient.get("${Constants.BASE_URL}/api/profile/$userId").body()
+
     suspend fun updateProfile(accessToken: String, dto: UpdateProfileDto): ProfileResponseDto =
         httpClient.put("${Constants.BASE_URL}/api/profile") {
             headers { append("Authorization", "Bearer $accessToken") }

@@ -33,6 +33,19 @@ class ProfileRepositoryImpl(
         }
     }
 
+    override suspend fun getUserProfile(userId: String): Result<Profile> = runCatching {
+        val resp = remoteDataSource.getUserProfile(userId)
+        val data = resp.data ?: error(resp.message ?: "Không tìm thấy profile")
+        Profile(
+            id = data.id ?: "",
+            userId = data.userId,
+            fullName = data.fullName,
+            bio = data.bio,
+            city = data.city,
+            avatarUrl = data.avatarUrl
+        )
+    }
+
     override suspend fun updateProfile(
         fullName: String, bio: String?, city: String?, avatarUrl: String?
     ): Result<Profile> = runCatching {
