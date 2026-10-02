@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: skillexchange-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+
+    # Environment variables — thay bằng giá trị thật trong Render Dashboard
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: KTOR_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false   # Set manually in Render dashboard (Supabase URL)
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true   # Render tự gen random secret
+      - key: JWT_ISSUER
+        value: skillexchange-api
+      - key: JWT_AUDIENCE
+        value: skillexchange-app
