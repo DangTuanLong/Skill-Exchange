@@ -3,6 +3,7 @@ package com.skillexchange.api.routes
 import com.skillexchange.api.models.skill.AddUserSkillRequest
 import com.skillexchange.api.plugins.getUserId
 import com.skillexchange.api.services.SkillService
+import com.skillexchange.api.services.UserService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -13,7 +14,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
-fun Route.skillRoutes(skillService: SkillService) {
+fun Route.skillRoutes(skillService: SkillService, userService: UserService) {
     route("/api/skills") {
 
         // GET /api/skills/categories - public
@@ -24,23 +25,16 @@ fun Route.skillRoutes(skillService: SkillService) {
 
         // GET /api/skills/search - public/authenticated user search
         get("/search") {
-            val q = call.request.queryParameters["q"]
-            val categoryId = call.request.queryParameters["category"]?.toIntOrNull()
-            val city = call.request.queryParameters["city"]
-            val minProficiency = call.request.queryParameters["minProficiency"]?.toIntOrNull()
-            val type = call.request.queryParameters["type"]
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            val query        = call.request.queryParameters["q"]
+            val categoryId   = call.request.queryParameters["category"]?.toIntOrNull()
+            val city         = call.request.queryParameters["city"]
+            val minLevel     = call.request.queryParameters["minProficiency"]?.toIntOrNull()
+                ?: call.request.queryParameters["minLevel"]?.toIntOrNull()
+            val type         = call.request.queryParameters["type"]
+            val limit        = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 50) ?: 20
+            val offset       = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
 
-            val results = skillService.searchDiscovery(
-                query = q,
-                categoryId = categoryId,
-                city = city,
-                minProficiency = minProficiency,
-                type = type,
-                limit = limit,
-                offset = offset
-            )
+            val results = userService.searchUsers(query, categoryId, city, minLevel, type, limit, offset)
             call.respond(HttpStatusCode.OK, ApiSuccess(data = results))
         }
 

@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.plugins
+package com.skillexchange.api.plugins
 
 import com.skillexchange.api.routes.authRoutes
 import com.skillexchange.api.routes.healthRoutes
@@ -23,7 +23,7 @@ fun Application.configureRouting() {
         healthRoutes()
         authRoutes(authService)
         profileRoutes(profileService)
-        skillRoutes(skillService)
+        skillRoutes(skillService, userService)
         userRoutes(userService)
     }
 }
