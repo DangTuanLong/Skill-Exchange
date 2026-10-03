@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.routes
+package com.skillexchange.api.routes
 
 import com.skillexchange.api.models.profile.UpdateProfileRequest
 import com.skillexchange.api.plugins.getUserId
@@ -15,25 +15,15 @@ import io.ktor.server.routing.route
 fun Route.profileRoutes(profileService: ProfileService) {
     route("/api/profile") {
 
-        // GET /api/profile/{userId} - public
-        get("/{userId}") {
-            val userId = call.parameters["userId"]
-                ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing userId"))
-            val profile = profileService.getProfile(userId)
-                ?: return@get call.respond(HttpStatusCode.NotFound, mapOf("error" to "Profile not found"))
-            call.respond(mapOf("success" to true, "data" to profile))
-        }
-
-        // Yêu cầu JWT cho các routes sau
+        // Yêu cầu JWT cho me và put profile
         authenticate("auth-jwt") {
 
             // GET /api/profile/me - lấy profile của mình
             get("/me") {
                 val userId = call.getUserId()
                 val profile = profileService.getProfile(userId)
-                    ?: return@get call.respond(HttpStatusCode.NotFound,
-                        mapOf("success" to false, "message" to "Profile chưa được tạo"))
-                call.respond(mapOf("success" to true, "data" to profile))
+                    ?: return@get call.respond(HttpStatusCode.NotFound, RouteApiError(message = "Profile chưa được tạo", code = 404))
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = profile))
             }
 
             // PUT /api/profile - tạo hoặc cập nhật profile
@@ -41,12 +31,20 @@ fun Route.profileRoutes(profileService: ProfileService) {
                 val userId = call.getUserId()
                 val req = call.receive<UpdateProfileRequest>()
                 if (req.fullName.isBlank()) {
-                    return@put call.respond(HttpStatusCode.BadRequest,
-                        mapOf("success" to false, "message" to "Tên không được để trống"))
+                    return@put call.respond(HttpStatusCode.BadRequest, RouteApiError(message = "Tên không được để trống", code = 400))
                 }
                 val profile = profileService.upsertProfile(userId, req)
-                call.respond(HttpStatusCode.OK, mapOf("success" to true, "data" to profile))
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = profile))
             }
+        }
+
+        // GET /api/profile/{userId} - public
+        get("/{userId}") {
+            val userId = call.parameters["userId"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, RouteApiError(message = "Missing userId", code = 400))
+            val profile = profileService.getProfile(userId)
+                ?: return@get call.respond(HttpStatusCode.NotFound, RouteApiError(message = "Profile not found", code = 404))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = profile))
         }
     }
 }

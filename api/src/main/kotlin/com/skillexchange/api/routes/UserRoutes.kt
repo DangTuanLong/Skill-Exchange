@@ -1,6 +1,7 @@
-﻿package com.skillexchange.api.routes
+package com.skillexchange.api.routes
 
 import com.skillexchange.api.services.UserService
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -22,7 +23,7 @@ fun Route.userRoutes(userService: UserService) {
             val offset       = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
 
             val results = userService.searchUsers(query, categoryId, city, minLevel, type, limit, offset)
-            call.respond(mapOf("success" to true, "data" to results))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = results))
         }
     }
 
@@ -39,7 +40,7 @@ fun Route.userRoutes(userService: UserService) {
             val offset       = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
 
             val results = userService.searchUsers(query, categoryId, city, minLevel, type, limit, offset)
-            call.respond(mapOf("success" to true, "data" to results))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = results))
         }
     }
 }

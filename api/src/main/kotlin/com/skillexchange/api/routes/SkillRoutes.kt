@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.routes
+package com.skillexchange.api.routes
 
 import com.skillexchange.api.models.skill.AddUserSkillRequest
 import com.skillexchange.api.plugins.getUserId
@@ -19,7 +19,7 @@ fun Route.skillRoutes(skillService: SkillService) {
         // GET /api/skills/categories - public
         get("/categories") {
             val categories = skillService.getCategories()
-            call.respond(mapOf("success" to true, "data" to categories))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = categories))
         }
 
         // GET /api/skills/search - public/authenticated user search
@@ -41,7 +41,7 @@ fun Route.skillRoutes(skillService: SkillService) {
                 limit = limit,
                 offset = offset
             )
-            call.respond(mapOf("success" to true, "data" to results))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = results))
         }
 
         // GET /api/skills?category=1
@@ -49,7 +49,7 @@ fun Route.skillRoutes(skillService: SkillService) {
             val categoryId = call.request.queryParameters["category"]?.toIntOrNull()
             val skills = if (categoryId != null) skillService.getSkillsByCategory(categoryId)
                          else emptyList()
-            call.respond(mapOf("success" to true, "data" to skills))
+            call.respond(HttpStatusCode.OK, ApiSuccess(data = skills))
         }
 
         authenticate("auth-jwt") {
@@ -58,15 +58,15 @@ fun Route.skillRoutes(skillService: SkillService) {
             get("/user") {
                 val userId = call.getUserId()
                 val skills = skillService.getUserSkills(userId)
-                call.respond(mapOf("success" to true, "data" to skills))
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = skills))
             }
 
             // GET /api/skills/user/{userId} - other user's skills
             get("/user/{userId}") {
                 val userId = call.parameters["userId"]
-                    ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, RouteApiError(message = "Missing userId", code = 400))
                 val skills = skillService.getUserSkills(userId)
-                call.respond(mapOf("success" to true, "data" to skills))
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = skills))
             }
 
             // POST /api/skills/user - add skill
@@ -75,20 +75,20 @@ fun Route.skillRoutes(skillService: SkillService) {
                 val req = call.receive<AddUserSkillRequest>()
                 if (req.type !in listOf("HAVE", "WANT")) {
                     return@post call.respond(HttpStatusCode.BadRequest,
-                        mapOf("success" to false, "message" to "type pháº£i lÃ  HAVE hoáº·c WANT"))
+                        RouteApiError(message = "type phải là HAVE hoặc WANT", code = 400))
                 }
                 val skill = skillService.addUserSkill(userId, req)
-                call.respond(HttpStatusCode.Created, mapOf("success" to true, "data" to skill))
+                call.respond(HttpStatusCode.Created, ApiSuccess(data = skill))
             }
 
             // DELETE /api/skills/user/{id}
             delete("/user/{id}") {
                 val userId = call.getUserId()
                 val skillId = call.parameters["id"]
-                    ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, RouteApiError(message = "Missing id", code = 400))
                 val deleted = skillService.removeUserSkill(userId, skillId)
-                if (deleted) call.respond(mapOf("success" to true, "message" to "ÄÃ£ xÃ³a"))
-                else call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "KhÃ´ng tÃ¬m tháº¥y"))
+                if (deleted) call.respond(HttpStatusCode.OK, ApiSuccess(data = "Đã xóa"))
+                else call.respond(HttpStatusCode.NotFound, RouteApiError(message = "Không tìm thấy", code = 404))
             }
         }
     }
