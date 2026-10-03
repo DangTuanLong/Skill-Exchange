@@ -1,2 +1,36 @@
+# ─── Documentation & Internal Files ──────────────────────────────────
+docs/
+AGENTS.md
 PROJECT_PLAN.md
 runDevice.md
+
+# ─── Secrets, Credentials & API Keys ──────────────────────────────────
+*.env
+.env
+.env.*
+!.env.example
+local.properties
+google-services.json
+keystore.properties
+*.jks
+*.keystore
+
+# ─── Build Outputs & Caches ───────────────────────────────────────────
+.gradle/
+**/build/
+out/
+.kotlin/
+.externalNativeBuild/
+.cxx/
+captures/
+*.log
+logs/
+
+# ─── IDE Configurations & Temp Files ─────────────────────────────────
+.idea/
+*.iml
+*.xml.bak
+.DS_Store
+
+# ─── Docker Override ──────────────────────────────────────────────────
+docker-compose.override.yml
