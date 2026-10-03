@@ -65,7 +65,8 @@ sealed class ProfileEffect {
 
 class ProfileViewModel(
     private val profileRepo: IProfileRepository,
-    private val skillRepo: ISkillRepository
+    private val skillRepo: ISkillRepository,
+    private val tokenManager: com.skillexchange.app.core.security.TokenManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -106,6 +107,7 @@ class ProfileViewModel(
                             bio = p.bio ?: "", city = p.city ?: "",
                             avatarUrl = p.avatarUrl ?: ""
                         )}
+                        checkAndUpdateProfileCompletion()
                     }
             }
             launch {
@@ -116,6 +118,7 @@ class ProfileViewModel(
             launch {
                 skillRepo.getUserSkills("me").onSuccess { skills ->
                     _state.update { it.copy(mySkills = skills) }
+                    checkAndUpdateProfileCompletion()
                 }
             }
             _state.update { it.copy(isLoading = false) }
@@ -138,6 +141,7 @@ class ProfileViewModel(
             )
                 .onSuccess { profile ->
                     _state.update { it.copy(isSaving = false, savedProfile = profile) }
+                    checkAndUpdateProfileCompletion()
                     _effect.send(ProfileEffect.ShowSnackbar("Lưu hồ sơ thành công!"))
                     _effect.send(ProfileEffect.NavigateToSkillSelection)
                 }
@@ -153,7 +157,9 @@ class ProfileViewModel(
         viewModelScope.launch {
             skillRepo.addUserSkill(skillId, type, s.proficiencyLevel, null)
                 .onSuccess { skill ->
-                    _state.update { it.copy(mySkills = it.mySkills + skill) }
+                    val updatedSkills = _state.value.mySkills + skill
+                    _state.update { it.copy(mySkills = updatedSkills) }
+                    checkAndUpdateProfileCompletion()
                     _effect.send(ProfileEffect.ShowSnackbar("Đã thêm kỹ năng!"))
                 }
                 .onFailure { e ->
@@ -166,8 +172,16 @@ class ProfileViewModel(
         viewModelScope.launch {
             skillRepo.removeUserSkill(userSkillId)
                 .onSuccess {
-                    _state.update { it.copy(mySkills = it.mySkills.filter { sk -> sk.id != userSkillId }) }
+                    val updatedSkills = _state.value.mySkills.filter { sk -> sk.id != userSkillId }
+                    _state.update { it.copy(mySkills = updatedSkills) }
+                    checkAndUpdateProfileCompletion()
                 }
         }
+    }
+
+    private fun checkAndUpdateProfileCompletion() {
+        val s = _state.value
+        val isCompleted = s.fullName.isNotBlank() && s.mySkills.isNotEmpty()
+        tokenManager?.saveProfileCompleted(isCompleted)
     }
 }

@@ -38,6 +38,7 @@ fun OtpVerificationScreen(
     email: String,
     onNavigateToHome: () -> Unit,
     onNavigateBack: () -> Unit,
+    onNavigateToProfileSetup: () -> Unit = onNavigateToHome,
     viewModel: AuthViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -49,6 +50,7 @@ fun OtpVerificationScreen(
         viewModel.effect.collectLatest { effect ->
             when (effect) {
                 is AuthEffect.NavigateToHome -> onNavigateToHome()
+                is AuthEffect.NavigateToProfileSetup -> onNavigateToProfileSetup()
                 is AuthEffect.ShowError      -> snackbarHostState.showSnackbar(effect.message)
                 else -> {}
             }

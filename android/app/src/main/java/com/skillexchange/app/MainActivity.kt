@@ -19,12 +19,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Navigation Guard: kiểm tra token trước khi render
-        val startDestination = if (tokenManager.isLoggedIn()) {
-            Screen.Home.route
-        } else {
-            Screen.Onboarding.route
-        }
+        // Navigation Guard: kiểm tra 3 cờ (onboardingSeen, hasToken, profileCompleted)
+        val destination = com.skillexchange.app.domain.model.StartDestinationDecision.decide(
+            onboardingSeen = tokenManager.isOnboardingSeen(),
+            hasToken = tokenManager.isLoggedIn(),
+            profileCompleted = tokenManager.isProfileCompleted()
+        )
+        val startDestination = destination.route
 
         setContent {
             SkillExchangeTheme {

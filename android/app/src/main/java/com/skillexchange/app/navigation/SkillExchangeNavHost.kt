@@ -23,7 +23,8 @@ import com.skillexchange.app.presentation.profile.SkillSelectionScreen
 @Composable
 fun SkillExchangeNavHost(
     navController: NavHostController = rememberNavController(),
-    startDestination: String = Screen.Onboarding.route
+    startDestination: String = Screen.Onboarding.route,
+    tokenManager: com.skillexchange.app.core.security.TokenManager = org.koin.compose.koinInject()
 ) {
     NavHost(
         navController = navController,
@@ -34,6 +35,7 @@ fun SkillExchangeNavHost(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onFinish = {
+                    tokenManager.saveOnboardingSeen(true)
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
@@ -47,6 +49,11 @@ fun SkillExchangeNavHost(
                 onNavigateToRegister = { navController.navigate(Screen.Register.route) },
                 onNavigateToHome = {
                     navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNavigateToProfileSetup = {
+                    navController.navigate(Screen.ProfileSetup.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
@@ -70,6 +77,11 @@ fun SkillExchangeNavHost(
             OtpVerificationScreen(
                 email = email,
                 onNavigateToHome = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNavigateToProfileSetup = {
                     navController.navigate(Screen.ProfileSetup.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }

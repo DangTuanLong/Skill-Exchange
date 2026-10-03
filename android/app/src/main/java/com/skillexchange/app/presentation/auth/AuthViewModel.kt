@@ -26,6 +26,7 @@ data class AuthUiState(
 sealed class AuthEffect {
     data class NavigateToOtp(val email: String) : AuthEffect()
     object NavigateToHome : AuthEffect()
+    object NavigateToProfileSetup : AuthEffect()
     data class ShowError(val message: String) : AuthEffect()
 }
 
@@ -44,7 +45,9 @@ sealed class AuthIntent {
 
 class AuthViewModel(
     private val authRepository: IAuthRepository,
-    private val tokenManager: com.skillexchange.app.core.security.TokenManager
+    private val tokenManager: com.skillexchange.app.core.security.TokenManager,
+    private val profileRepository: com.skillexchange.app.domain.repository.IProfileRepository? = null,
+    private val skillRepository: com.skillexchange.app.domain.repository.ISkillRepository? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthUiState())
@@ -81,8 +84,7 @@ class AuthViewModel(
             authRepository.login(s.email.trim(), s.password)
                 .onSuccess { session ->
                     tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
-                    _state.update { it.copy(isLoading = false) }
-                    _effect.send(AuthEffect.NavigateToHome)
+                    checkProfileCompletionAndNavigate()
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "Đăng nhập thất bại") }
@@ -124,12 +126,26 @@ class AuthViewModel(
             authRepository.verifyOtp(email, otp)
                 .onSuccess { session ->
                     tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
-                    _state.update { it.copy(isLoading = false) }
-                    _effect.send(AuthEffect.NavigateToHome)
+                    checkProfileCompletionAndNavigate()
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "OTP không đúng") }
                 }
+        }
+    }
+
+    private suspend fun checkProfileCompletionAndNavigate() {
+        val profileResult = profileRepository?.getMyProfile()
+        val skillsResult = skillRepository?.getUserSkills("me")
+        val hasName = profileResult?.getOrNull()?.fullName?.isNotBlank() == true
+        val hasSkills = skillsResult?.getOrNull()?.isNotEmpty() == true
+        val isCompleted = hasName && hasSkills
+        tokenManager.saveProfileCompleted(isCompleted)
+        _state.update { it.copy(isLoading = false) }
+        if (isCompleted) {
+            _effect.send(AuthEffect.NavigateToHome)
+        } else {
+            _effect.send(AuthEffect.NavigateToProfileSetup)
         }
     }
 }
