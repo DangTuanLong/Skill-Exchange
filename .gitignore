@@ -3,6 +3,7 @@ docs/
 AGENTS.md
 PROJECT_PLAN.md
 runDevice.md
+tmp.md
 
 # ─── Secrets, Credentials & API Keys ──────────────────────────────────
 *.env

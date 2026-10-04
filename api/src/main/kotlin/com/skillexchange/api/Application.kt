@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api
+package com.skillexchange.api
 
 import com.skillexchange.api.config.DatabaseConfig
 import com.skillexchange.api.models.db.ProfilesTable
@@ -42,13 +42,16 @@ fun Application.module() {
 }
 
 fun Application.initDatabase() {
-    transaction {
-        SchemaUtils.createMissingTablesAndColumns(
-            ProfilesTable,
-            SkillCategoriesTable,
-            SkillsTable,
-            UserSkillsTable
-        )
+    val createTables = System.getenv("DB_CREATE_TABLES")?.toBoolean() ?: false
+    if (createTables) {
+        transaction {
+            SchemaUtils.createMissingTablesAndColumns(
+                ProfilesTable,
+                SkillCategoriesTable,
+                SkillsTable,
+                UserSkillsTable
+            )
+        }
     }
     // Seed skill categories nếu chưa có
     val skillService: SkillService by inject()
