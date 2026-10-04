@@ -31,6 +31,7 @@ data class ProfileUiState(
     val selectedTab: Int = 0,         // 0 = HAVE, 1 = WANT
     val selectedCategoryId: Int? = null,
     val proficiencyLevel: Int = 3,
+    val selectedSkillIdForEdit: String? = null,
     // UI
     val error: String? = null,
     val successMessage: String? = null,
@@ -52,6 +53,7 @@ sealed class ProfileIntent {
     data class AddSkill(val skillId: Int) : ProfileIntent()
     data class RemoveSkill(val userSkillId: String) : ProfileIntent()
     data class SetProficiency(val level: Int) : ProfileIntent()
+    data class SelectSkillForEdit(val userSkillId: String?) : ProfileIntent()
     object GoToSkillStep : ProfileIntent()
     object GoToDone : ProfileIntent()
 }
@@ -86,10 +88,11 @@ class ProfileViewModel(
             is ProfileIntent.AvatarUrlChanged -> _state.update { it.copy(avatarUrl = intent.value) }
             is ProfileIntent.SaveProfile      -> saveProfile()
             is ProfileIntent.SelectCategory   -> _state.update { it.copy(selectedCategoryId = intent.id) }
-            is ProfileIntent.SelectTab        -> _state.update { it.copy(selectedTab = intent.tab) }
+            is ProfileIntent.SelectTab        -> _state.update { it.copy(selectedTab = intent.tab, selectedSkillIdForEdit = null) }
             is ProfileIntent.AddSkill         -> addSkill(intent.skillId)
             is ProfileIntent.RemoveSkill      -> removeSkill(intent.userSkillId)
-            is ProfileIntent.SetProficiency   -> _state.update { it.copy(proficiencyLevel = intent.level) }
+            is ProfileIntent.SetProficiency   -> updateProficiency(intent.level)
+            is ProfileIntent.SelectSkillForEdit -> selectSkillForEdit(intent.userSkillId)
             is ProfileIntent.GoToSkillStep    -> _state.update { it.copy(step = ProfileStep.SKILL_SELECTION) }
             is ProfileIntent.GoToDone         -> _state.update { it.copy(step = ProfileStep.DONE) }
         }
@@ -157,8 +160,10 @@ class ProfileViewModel(
         viewModelScope.launch {
             skillRepo.addUserSkill(skillId, type, s.proficiencyLevel, null)
                 .onSuccess { skill ->
-                    val updatedSkills = _state.value.mySkills + skill
-                    _state.update { it.copy(mySkills = updatedSkills) }
+                    // Replace existing skill with same skillId and type to avoid duplicates
+                    val updatedSkills = _state.value.mySkills
+                        .filterNot { it.skillId == skill.skillId && it.type == skill.type } + skill
+                    _state.update { it.copy(mySkills = updatedSkills, selectedSkillIdForEdit = skill.id) }
                     checkAndUpdateProfileCompletion()
                     _effect.send(ProfileEffect.ShowSnackbar("Đã thêm kỹ năng!"))
                 }
@@ -173,9 +178,40 @@ class ProfileViewModel(
             skillRepo.removeUserSkill(userSkillId)
                 .onSuccess {
                     val updatedSkills = _state.value.mySkills.filter { sk -> sk.id != userSkillId }
-                    _state.update { it.copy(mySkills = updatedSkills) }
+                    val currentEditId = _state.value.selectedSkillIdForEdit
+                    val nextEditId = if (currentEditId == userSkillId) null else currentEditId
+                    _state.update { it.copy(mySkills = updatedSkills, selectedSkillIdForEdit = nextEditId) }
                     checkAndUpdateProfileCompletion()
                 }
+        }
+    }
+
+    private fun selectSkillForEdit(userSkillId: String?) {
+        val skill = _state.value.mySkills.find { it.id == userSkillId }
+        _state.update {
+            it.copy(
+                selectedSkillIdForEdit = userSkillId,
+                proficiencyLevel = skill?.proficiencyLevel ?: it.proficiencyLevel
+            )
+        }
+    }
+
+    private fun updateProficiency(level: Int) {
+        _state.update { it.copy(proficiencyLevel = level) }
+        val editId = _state.value.selectedSkillIdForEdit ?: return
+        val targetSkill = _state.value.mySkills.find { it.id == editId } ?: return
+
+        viewModelScope.launch {
+            skillRepo.addUserSkill(
+                skillId = targetSkill.skillId,
+                type = targetSkill.type.name,
+                proficiencyLevel = level,
+                note = targetSkill.note
+            ).onSuccess { updated ->
+                val updatedSkills = _state.value.mySkills
+                    .filterNot { it.id == targetSkill.id } + updated
+                _state.update { it.copy(mySkills = updatedSkills, selectedSkillIdForEdit = updated.id) }
+            }
         }
     }
 

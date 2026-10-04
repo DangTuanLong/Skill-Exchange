@@ -119,10 +119,13 @@ fun SkillSelectionScreen(
                         fontSize = 13.sp, color = TextSecondaryLight, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     myTabSkills.forEach { skill ->
+                        val isSelectedForEdit = state.selectedSkillIdForEdit == skill.id
                         UserSkillChip(
                             name = skill.skillName,
                             level = skill.proficiencyLevel,
                             type = skill.type,
+                            isSelected = isSelectedForEdit,
+                            onClick = { viewModel.onIntent(ProfileIntent.SelectSkillForEdit(skill.id)) },
                             onRemove = { viewModel.onIntent(ProfileIntent.RemoveSkill(skill.id)) }
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -133,8 +136,10 @@ fun SkillSelectionScreen(
             // Proficiency slider (only for HAVE)
             if (state.selectedTab == 0) {
                 item {
+                    val editingSkill = state.mySkills.find { it.id == state.selectedSkillIdForEdit }
                     ProficiencySlider(
                         level = state.proficiencyLevel,
+                        editingSkillName = editingSkill?.skillName,
                         onLevelChange = { viewModel.onIntent(ProfileIntent.SetProficiency(it)) }
                     )
                 }
@@ -155,7 +160,7 @@ fun SkillSelectionScreen(
                                 .clickable { viewModel.onIntent(ProfileIntent.SelectCategory(cat.id)) }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Text("${cat.icon} ${cat.name}",
+                            Text(formatCategoryLabel(cat.icon, cat.name),
                                 color = if (isSelected) Color.White else TextPrimaryLight,
                                 fontSize = 13.sp)
                         }
@@ -187,7 +192,12 @@ fun SkillSelectionScreen(
                                         RoundedCornerShape(12.dp)
                                     )
                                     .clickable {
-                                        if (!alreadyAdded) viewModel.onIntent(ProfileIntent.AddSkill(skill.id))
+                                        if (!alreadyAdded) {
+                                            viewModel.onIntent(ProfileIntent.AddSkill(skill.id))
+                                        } else {
+                                            val existingUserSkill = state.mySkills.find { it.skillId == skill.id && it.type == tabType }
+                                            viewModel.onIntent(ProfileIntent.SelectSkillForEdit(existingUserSkill?.id))
+                                        }
                                     }
                                     .padding(12.dp)
                             ) {
@@ -212,14 +222,35 @@ fun SkillSelectionScreen(
     }
 }
 
+private fun formatCategoryLabel(icon: String, name: String): String {
+    return if (icon.isBlank() || icon.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+        name
+    } else {
+        "$icon $name"
+    }
+}
+
 @Composable
-private fun UserSkillChip(name: String, level: Int, type: SkillType, onRemove: () -> Unit) {
+private fun UserSkillChip(
+    name: String,
+    level: Int,
+    type: SkillType,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(if (type == SkillType.HAVE) Color(0xFFEFF6FF) else Color(0xFFF0FDF4))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .border(
+                width = if (isSelected) 1.5.dp else 0.dp,
+                color = if (isSelected) Brand500 else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(name, color = TextPrimaryLight, fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -230,15 +261,30 @@ private fun UserSkillChip(name: String, level: Int, type: SkillType, onRemove: (
                 Spacer(modifier = Modifier.width(2.dp))
             }
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) {
-            Icon(Icons.Default.Close, null, tint = TextSecondaryLight, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable { onRemove() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Xóa kỹ năng",
+                tint = TextSecondaryLight,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun ProficiencySlider(level: Int, onLevelChange: (Int) -> Unit) {
+private fun ProficiencySlider(
+    level: Int,
+    editingSkillName: String?,
+    onLevelChange: (Int) -> Unit
+) {
     val labels = listOf("Mới học", "Cơ bản", "Trung bình", "Thành thạo", "Chuyên gia")
     Column(
         modifier = Modifier
@@ -252,8 +298,13 @@ private fun ProficiencySlider(level: Int, onLevelChange: (Int) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Mức độ thành thạo", fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold, color = TextPrimaryLight)
+            Column {
+                Text("Mức độ thành thạo", fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold, color = TextPrimaryLight)
+                if (editingSkillName != null) {
+                    Text("Đang chỉnh: $editingSkillName", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.Medium)
+                }
+            }
             Text(labels.getOrNull(level - 1) ?: "",
                 fontSize = 13.sp, color = Brand500, fontWeight = FontWeight.Bold)
         }

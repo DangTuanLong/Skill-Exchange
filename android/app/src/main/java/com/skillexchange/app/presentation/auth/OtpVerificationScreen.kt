@@ -128,7 +128,7 @@ fun OtpVerificationScreen(
                             .fillMaxWidth().height(52.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
-                                if (!state.isLoading && state.otp.length >= 6)
+                                if (!state.isLoading && state.otp.length == 6)
                                     Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))
                                 else Brush.horizontalGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1)))
                             ),
@@ -136,7 +136,7 @@ fun OtpVerificationScreen(
                     ) {
                         Button(
                             onClick = { viewModel.onIntent(AuthIntent.SubmitOtp(email)) },
-                            enabled = !state.isLoading && state.otp.length >= 6,
+                            enabled = !state.isLoading && state.otp.length == 6,
                             modifier = Modifier.fillMaxSize(),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -179,14 +179,14 @@ fun OtpVerificationScreen(
 }
 
 /**
- * 6–8 ô nhập OTP — BasicTextField transparent overlay, tự focus khi vào màn hình.
+ * 6 ô nhập OTP — BasicTextField transparent overlay, tự focus khi vào màn hình.
  * Light Theme: ô nền xám nhẹ, border xanh khi focus.
  */
 @Composable
 fun OtpInputField(
     otp: String,
     onOtpChange: (String) -> Unit,
-    maxLength: Int = 8
+    maxLength: Int = 6
 ) {
     val focusRequester = remember { FocusRequester() }
 

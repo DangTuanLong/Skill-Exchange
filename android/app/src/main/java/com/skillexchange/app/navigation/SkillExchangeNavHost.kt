@@ -1,12 +1,15 @@
 package com.skillexchange.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.skillexchange.app.core.network.SessionManager
+import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.presentation.auth.LoginScreen
 import com.skillexchange.app.presentation.auth.OtpVerificationScreen
 import com.skillexchange.app.presentation.auth.RegisterScreen
@@ -15,6 +18,7 @@ import com.skillexchange.app.presentation.onboarding.OnboardingScreen
 import com.skillexchange.app.presentation.profile.ProfileDetailScreen
 import com.skillexchange.app.presentation.profile.ProfileSetupScreen
 import com.skillexchange.app.presentation.profile.SkillSelectionScreen
+import org.koin.compose.koinInject
 
 /**
  * Root NavHost — với Navigation Guard.
@@ -24,8 +28,19 @@ import com.skillexchange.app.presentation.profile.SkillSelectionScreen
 fun SkillExchangeNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Onboarding.route,
-    tokenManager: com.skillexchange.app.core.security.TokenManager = org.koin.compose.koinInject()
+    tokenManager: TokenManager = koinInject()
 ) {
+    // Quan sát sự kiện session hết hạn do refresh token thất bại.
+    // clearSession() đã được gọi trong NetworkModule trước khi emit.
+    // Điều hướng về Login và xóa toàn bộ back stack — onboardingSeen vẫn được giữ.
+    LaunchedEffect(Unit) {
+        SessionManager.sessionExpiredFlow.collect {
+            navController.navigate(Screen.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination

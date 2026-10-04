@@ -170,4 +170,53 @@ class ProfileViewModelTest {
         assertEquals(1, viewModel.state.value.selectedTab)
         assertEquals(5, viewModel.state.value.proficiencyLevel)
     }
+
+    @Test
+    fun `AddSkill intent deduplicates skill with same skillId and type`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.AddSkill(skillId = 10))
+        advanceUntilIdle()
+        viewModel.onIntent(ProfileIntent.AddSkill(skillId = 10))
+        advanceUntilIdle()
+
+        val skills = viewModel.state.value.mySkills
+        assertEquals(1, skills.size)
+        assertEquals(10, skills.first().skillId)
+    }
+
+    @Test
+    fun `SelectSkillForEdit and SetProficiency update selected skill proficiency`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.AddSkill(skillId = 10))
+        advanceUntilIdle()
+
+        val addedSkillId = viewModel.state.value.mySkills.first().id
+        viewModel.onIntent(ProfileIntent.SelectSkillForEdit(addedSkillId))
+        assertEquals(addedSkillId, viewModel.state.value.selectedSkillIdForEdit)
+
+        viewModel.onIntent(ProfileIntent.SetProficiency(5))
+        advanceUntilIdle()
+
+        assertEquals(5, viewModel.state.value.mySkills.first().proficiencyLevel)
+    }
+
+    @Test
+    fun `RemoveSkill clears selectedSkillIdForEdit if removed skill was selected`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.AddSkill(skillId = 10))
+        advanceUntilIdle()
+
+        val addedSkillId = viewModel.state.value.mySkills.first().id
+        viewModel.onIntent(ProfileIntent.SelectSkillForEdit(addedSkillId))
+        viewModel.onIntent(ProfileIntent.RemoveSkill(addedSkillId))
+        advanceUntilIdle()
+
+        assertNull(viewModel.state.value.selectedSkillIdForEdit)
+    }
 }

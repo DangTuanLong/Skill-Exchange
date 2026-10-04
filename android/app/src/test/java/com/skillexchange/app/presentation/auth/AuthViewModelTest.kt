@@ -126,4 +126,14 @@ class AuthViewModelTest {
         val effect = viewModel.effect.first()
         assertEquals(AuthEffect.NavigateToProfileSetup, effect)
     }
+
+    @Test
+    fun `SubmitOtp with non-6-digit OTP sets error`() = runTest {
+        val viewModel = AuthViewModel(fakeAuthRepository, tokenManager)
+
+        viewModel.onIntent(AuthIntent.OtpChanged("12345")) // 5 digits
+        viewModel.onIntent(AuthIntent.SubmitOtp("test@example.com"))
+
+        assertEquals("Mã OTP phải có đúng 6 chữ số", viewModel.state.value.error)
+    }
 }

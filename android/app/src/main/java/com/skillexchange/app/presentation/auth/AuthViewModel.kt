@@ -117,8 +117,8 @@ class AuthViewModel(
 
     private fun verifyOtp(email: String) {
         val otp = _state.value.otp
-        if (otp.length !in 6..8) {
-            _state.update { it.copy(error = "Mã OTP phải có 6 đến 8 chữ số") }
+        if (otp.length != 6) {
+            _state.update { it.copy(error = "Mã OTP phải có đúng 6 chữ số") }
             return
         }
         viewModelScope.launch {
