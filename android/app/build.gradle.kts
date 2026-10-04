@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -21,10 +23,36 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Reading local.properties file if present
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { stream ->
+            localProperties.load(stream)
+        }
+    }
+
+    val overrideBaseUrl = localProperties.getProperty("API_BASE_URL")
+        ?: project.findProperty("API_BASE_URL")?.toString()
+        ?: System.getenv("API_BASE_URL")
+
     buildTypes {
+        debug {
+            val debugUrl = overrideBaseUrl?.takeIf { it.isNotBlank() } ?: "http://10.0.2.2:8080"
+            buildConfigField("String", "BASE_URL", "\"$debugUrl\"")
+        }
         release {
             optimization {
                 enable = false
+            }
+            val releaseUrl = overrideBaseUrl?.takeIf { it.isNotBlank() }
+            val isReleaseBuildRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+            if (releaseUrl != null) {
+                buildConfigField("String", "BASE_URL", "\"$releaseUrl\"")
+            } else if (isReleaseBuildRequested) {
+                throw GradleException("Release build requires API_BASE_URL to be set in local.properties (-PAPI_BASE_URL=... or environment variable API_BASE_URL)!")
+            } else {
+                buildConfigField("String", "BASE_URL", "\"UNSET_RELEASE_API_BASE_URL\"")
             }
         }
     }
@@ -34,6 +62,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

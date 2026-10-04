@@ -1,16 +1,13 @@
 package com.skillexchange.app.core.common
 
+import com.skillexchange.app.BuildConfig
+
 /**
  * Constants toàn cục của app.
  */
 object Constants {
     // ─── API Server (Ktor) ──────────────────────────────────────────
-    // Local dev: chạy Ktor trên máy tính, emulator dùng 10.0.2.2 để trỏ về localhost
-    const val BASE_URL_LOCAL = "http://10.0.2.2:8080"
-    const val BASE_URL_PROD  = "https://skillexchange-api.onrender.com" // TODO: thay URL Render thật
-
-    // Đổi sang BASE_URL_PROD khi deploy
-    const val BASE_URL = BASE_URL_LOCAL
+    val BASE_URL: String = BuildConfig.BASE_URL
 
     // ─── Supabase ───────────────────────────────────────────────────
     const val SUPABASE_URL      = "https://nleafbmggblqggttnfoa.supabase.co"
