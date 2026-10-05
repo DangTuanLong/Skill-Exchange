@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -21,7 +22,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.skillexchange.app.core.ui.theme.*
+import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
 import com.skillexchange.app.domain.model.UserSkill
@@ -47,12 +48,33 @@ fun DiscoveryScreen(
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
+    val listState = rememberLazyListState()
+
+    // Detect reaching end of list for cursor load-more
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisibleItemIndex >= totalItems - 2
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && state.nextCursor != null && !state.isLoading && !state.isLoadingMore) {
+            viewModel.onIntent(DiscoveryIntent.LoadMore)
+        }
+    }
 
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
-                is DiscoveryEffect.ShowSnackbar            -> snackbarHostState.showSnackbar(effect.message)
-                is DiscoveryEffect.NavigateToProfileDetail -> onNavigateToProfileDetail(effect.userId)
+                is DiscoveryEffect.ShowSnackbar -> {
+                    snackbarHostState.showSnackbar(effect.message)
+                }
+                is DiscoveryEffect.NavigateToProfileDetail -> {
+                    onNavigateToProfileDetail(effect.userId)
+                }
             }
         }
     }
@@ -66,12 +88,12 @@ fun DiscoveryScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Header Bar & Search Box
+            // Header Search & Filter Bar
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
@@ -96,19 +118,21 @@ fun DiscoveryScreen(
                         onClick = { viewModel.onIntent(DiscoveryIntent.ToggleFilterSheet) },
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(if (state.selectedCity != null || state.minProficiency != null || state.selectedType != null) Color(0xFFEFF6FF) else Color(0xFFF1F5F9))
+                            .background(if (state.activeFilterCount > 0) Color(0xFFEFF6FF) else Color(0xFFF1F5F9))
                     ) {
                         BadgedBox(
                             badge = {
-                                if (state.selectedCity != null || state.minProficiency != null || state.selectedType != null) {
-                                    Badge(containerColor = Brand500)
+                                if (state.activeFilterCount > 0) {
+                                    Badge(containerColor = Brand500) {
+                                        Text("${state.activeFilterCount}", color = Color.White, fontSize = 10.sp)
+                                    }
                                 }
                             }
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Tune,
                                 contentDescription = "Filter",
-                                tint = if (state.selectedCity != null || state.minProficiency != null || state.selectedType != null) Brand500 else TextPrimaryLight
+                                tint = if (state.activeFilterCount > 0) Brand500 else TextPrimaryLight
                             )
                         }
                     }
@@ -149,16 +173,23 @@ fun DiscoveryScreen(
                     })
                 )
 
-                // Category Filter Chips Row
+                // Category Filter Chips Row (DEC-014: multi-select OR, selected categories pushed to front)
                 if (state.categories.isNotEmpty()) {
+                    val selectedIds = state.selectedCategoryIds
+                    val orderedCategories = remember(state.categories, selectedIds) {
+                        state.categories.sortedWith(
+                            compareByDescending<SkillCategory> { it.id in selectedIds }
+                                .thenBy { it.name }
+                        )
+                    }
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         item {
                             FilterChip(
-                                selected = state.selectedCategoryId == null,
-                                onClick = { viewModel.onIntent(DiscoveryIntent.CategorySelected(null)) },
+                                selected = state.selectedCategoryIds.isEmpty(),
+                                onClick = { viewModel.onIntent(DiscoveryIntent.ClearCategories) },
                                 label = { Text("Tất cả") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Brand500,
@@ -166,11 +197,11 @@ fun DiscoveryScreen(
                                 )
                             )
                         }
-                        items(state.categories) { cat ->
-                            val isSelected = state.selectedCategoryId == cat.id
+                        items(orderedCategories, key = { it.id }) { cat ->
+                            val isSelected = state.selectedCategoryIds.contains(cat.id)
                             FilterChip(
                                 selected = isSelected,
-                                onClick = { viewModel.onIntent(DiscoveryIntent.CategorySelected(cat.id)) },
+                                onClick = { viewModel.onIntent(DiscoveryIntent.ToggleCategory(cat.id)) },
                                 label = { Text(formatCategoryLabel(cat.icon, cat.name)) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Brand500,
@@ -223,15 +254,33 @@ fun DiscoveryScreen(
                     }
                 } else {
                     LazyColumn(
+                        state = listState,
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(state.usersList) { user ->
+                        items(state.usersList, key = { it.userId }) { user ->
                             UserCardItem(
                                 user = user,
                                 onClick = { onNavigateToProfileDetail(user.userId) }
                             )
+                        }
+
+                        if (state.isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = Brand500,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -239,7 +288,7 @@ fun DiscoveryScreen(
         }
     }
 
-    // Filter Bottom Sheet
+    // Filter Bottom Sheet (DEC-014: shares selectedCategoryIds with chip row)
     if (state.isFilterOpen) {
         ModalBottomSheet(
             onDismissRequest = { viewModel.onIntent(DiscoveryIntent.ToggleFilterSheet) },
@@ -260,6 +309,45 @@ fun DiscoveryScreen(
                     Text("Bộ lọc nâng cao", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimaryLight)
                     TextButton(onClick = { viewModel.onIntent(DiscoveryIntent.ResetFilters) }) {
                         Text("Đặt lại", color = Brand500, fontSize = 14.sp)
+                    }
+                }
+
+                // Categories multi-select in Bottom Sheet (shared state per DEC-014)
+                if (state.categories.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Danh mục kỹ năng", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimaryLight)
+                            if (state.selectedCategoryIds.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { viewModel.onIntent(DiscoveryIntent.ClearCategories) },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Xóa chọn", fontSize = 12.sp, color = Brand500)
+                                }
+                            }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            state.categories.forEach { cat ->
+                                val isSelected = state.selectedCategoryIds.contains(cat.id)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.onIntent(DiscoveryIntent.ToggleCategory(cat.id)) },
+                                    label = { Text(formatCategoryLabel(cat.icon, cat.name)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Brand500,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
 

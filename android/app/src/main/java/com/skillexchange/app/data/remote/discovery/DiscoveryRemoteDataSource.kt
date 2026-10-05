@@ -20,9 +20,15 @@ data class UserDiscoveryDto(
 )
 
 @Serializable
+data class DiscoverySearchDataDto(
+    val items: List<UserDiscoveryDto> = emptyList(),
+    val nextCursor: String? = null
+)
+
+@Serializable
 data class DiscoverySearchResponseDto(
     val success: Boolean,
-    val data: List<UserDiscoveryDto> = emptyList(),
+    val data: DiscoverySearchDataDto? = null,
     val message: String? = null
 )
 
@@ -30,19 +36,23 @@ class DiscoveryRemoteDataSource(private val httpClient: HttpClient) {
 
     suspend fun searchUsers(
         query: String?,
-        categoryId: Int?,
+        categoryIds: List<Int>?,
         city: String?,
         minProficiency: Int?,
+        maxProficiency: Int? = null,
         type: String?,
         limit: Int = 20,
-        offset: Int = 0
-    ): DiscoverySearchResponseDto = httpClient.get("${Constants.BASE_URL}/api/skills/search") {
+        lastId: String? = null
+    ): DiscoverySearchResponseDto = httpClient.get("${Constants.BASE_URL}/api/users/search") {
         query?.takeIf { it.isNotBlank() }?.let { parameter("q", it) }
-        categoryId?.let { parameter("category", it) }
+        if (!categoryIds.isNullOrEmpty()) {
+            parameter("categoryIds", categoryIds.joinToString(","))
+        }
         city?.takeIf { it.isNotBlank() }?.let { parameter("city", it) }
         minProficiency?.let { parameter("minProficiency", it) }
+        maxProficiency?.let { parameter("maxProficiency", it) }
         type?.takeIf { it.isNotBlank() }?.let { parameter("type", it) }
         parameter("limit", limit)
-        parameter("offset", offset)
+        lastId?.takeIf { it.isNotBlank() }?.let { parameter("lastId", it) }
     }.body()
 }

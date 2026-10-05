@@ -1,7 +1,7 @@
 -- ============================================================
 -- SkillExchange — Supabase Database Schema (v2)
 -- Phiên bản đã đối chiếu với Exposed runtime + các quyết định đã chốt
--- Cập nhật: 2026-10-05 (TASK-005, TASK-010)
+-- Cập nhật: 2026-10-05 (TASK-005, TASK-010, TASK-007)
 --
 -- Quyết định đã ghi nhận:
 --   DEC-006: Không lưu password trong app. Auth = Supabase.
@@ -84,6 +84,8 @@ CREATE TABLE profiles (
 
 CREATE INDEX idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX idx_profiles_city    ON profiles(city);
+CREATE INDEX idx_profiles_city_unaccent_trgm
+    ON profiles USING GIN (public.f_unaccent(city) gin_trgm_ops);
 CREATE INDEX idx_profiles_full_name_trgm
     ON profiles USING GIN (public.f_unaccent(full_name) gin_trgm_ops);
 

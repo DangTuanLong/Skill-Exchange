@@ -61,6 +61,15 @@ fun ApplicationCall.getUserId(): String {
 }
 
 /**
+ * Lấy Supabase User ID từ JWT nếu có xác thực, hoặc null nếu không có token.
+ * Dùng cho các route công khai nhưng cá nhân hóa (như tìm kiếm loại trừ bản thân).
+ */
+fun ApplicationCall.getUserIdOrNull(): String? {
+    val principal = principal<JWTPrincipal>()
+    return principal?.payload?.subject
+}
+
+/**
  * Lấy email từ JWT claims.
  */
 fun ApplicationCall.getUserEmail(): String? {

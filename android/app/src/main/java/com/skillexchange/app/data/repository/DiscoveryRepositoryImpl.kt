@@ -4,6 +4,7 @@ import com.skillexchange.app.data.remote.discovery.DiscoveryRemoteDataSource
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
 import com.skillexchange.app.domain.model.UserSkill
+import com.skillexchange.app.domain.repository.DiscoverySearchResult
 import com.skillexchange.app.domain.repository.IDiscoveryRepository
 
 class DiscoveryRepositoryImpl(
@@ -12,26 +13,29 @@ class DiscoveryRepositoryImpl(
 
     override suspend fun searchUsers(
         query: String?,
-        categoryId: Int?,
+        categoryIds: List<Int>?,
         city: String?,
         minProficiency: Int?,
+        maxProficiency: Int?,
         type: String?,
         limit: Int,
-        offset: Int
-    ): Result<List<UserDiscovery>> = runCatching {
+        lastId: String?
+    ): Result<DiscoverySearchResult> = runCatching {
         val response = remoteDataSource.searchUsers(
             query = query,
-            categoryId = categoryId,
+            categoryIds = categoryIds,
             city = city,
             minProficiency = minProficiency,
+            maxProficiency = maxProficiency,
             type = type,
             limit = limit,
-            offset = offset
+            lastId = lastId
         )
         if (!response.success) {
             error(response.message ?: "Không thể tìm kiếm")
         }
-        response.data.map { userDto ->
+        val items = response.data?.items ?: emptyList()
+        val users = items.map { userDto ->
             UserDiscovery(
                 userId = userDto.userId,
                 fullName = userDto.fullName,
@@ -51,5 +55,9 @@ class DiscoveryRepositoryImpl(
                 }
             )
         }
+        DiscoverySearchResult(
+            users = users,
+            nextCursor = response.data?.nextCursor
+        )
     }
 }

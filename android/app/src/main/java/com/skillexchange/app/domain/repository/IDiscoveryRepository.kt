@@ -2,14 +2,20 @@ package com.skillexchange.app.domain.repository
 
 import com.skillexchange.app.domain.model.UserDiscovery
 
+data class DiscoverySearchResult(
+    val users: List<UserDiscovery>,
+    val nextCursor: String? = null
+)
+
 interface IDiscoveryRepository {
     suspend fun searchUsers(
         query: String?,
-        categoryId: Int?,
+        categoryIds: List<Int>?,
         city: String?,
         minProficiency: Int?,
+        maxProficiency: Int? = null,
         type: String?,
         limit: Int = 20,
-        offset: Int = 0
-    ): Result<List<UserDiscovery>>
+        lastId: String? = null
+    ): Result<DiscoverySearchResult>
 }
