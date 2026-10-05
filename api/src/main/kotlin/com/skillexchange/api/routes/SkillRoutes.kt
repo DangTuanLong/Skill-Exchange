@@ -68,8 +68,16 @@ fun Route.skillRoutes(skillService: SkillService, userService: UserService) {
                 val userId = call.getUserId()
                 val req = call.receive<AddUserSkillRequest>()
                 if (req.type !in listOf("HAVE", "WANT")) {
-                    return@post call.respond(HttpStatusCode.BadRequest,
-                        RouteApiError(message = "type phải là HAVE hoặc WANT", code = 400))
+                    return@post call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        RouteApiError(message = "type phải là HAVE hoặc WANT", code = 422)
+                    )
+                }
+                if (req.proficiencyLevel !in 1..5) {
+                    return@post call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        RouteApiError(message = "Trình độ kỹ năng phải từ 1 đến 5", code = 422)
+                    )
                 }
                 val skill = skillService.addUserSkill(userId, req)
                 call.respond(HttpStatusCode.Created, ApiSuccess(data = skill))

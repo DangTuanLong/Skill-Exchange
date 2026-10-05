@@ -14,6 +14,8 @@ data class ApiError(
     val code: Int
 )
 
+open class ValidationException(message: String) : IllegalArgumentException(message)
+
 fun Application.configureStatusPages() {
     install(StatusPages) {
         // 401 Unauthorized
@@ -40,11 +42,11 @@ fun Application.configureStatusPages() {
             )
         }
 
-        // 422 Unprocessable Entity (Validation Error)
-        status(HttpStatusCode.UnprocessableEntity) { call, status ->
+        // ValidationException — 422 Unprocessable Entity
+        exception<ValidationException> { call, cause ->
             call.respond(
-                status,
-                ApiError(message = "Dữ liệu không hợp lệ.", code = 422)
+                HttpStatusCode.UnprocessableEntity,
+                ApiError(message = cause.message ?: "Dữ liệu không hợp lệ.", code = 422)
             )
         }
 

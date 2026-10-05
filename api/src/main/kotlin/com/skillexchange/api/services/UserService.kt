@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.services
+package com.skillexchange.api.services
 
 import com.skillexchange.api.models.db.ProfilesTable
 import com.skillexchange.api.models.db.SkillCategoriesTable
@@ -37,11 +37,14 @@ class UserService {
     ): List<UserSearchDto> = transaction {
 
         // Bước 1: Lấy user_ids phù hợp từ join Profiles + UserSkills + Skills + Categories
-        val joinedQuery = (ProfilesTable innerJoin UserSkillsTable innerJoin SkillsTable innerJoin SkillCategoriesTable)
+        val joinedQuery = ProfilesTable
+            .join(UserSkillsTable, JoinType.LEFT, onColumn = null, additionalConstraint = { ProfilesTable.userId eq UserSkillsTable.userId })
+            .join(SkillsTable, JoinType.LEFT, onColumn = null, additionalConstraint = { UserSkillsTable.skillId eq SkillsTable.id })
+            .join(SkillCategoriesTable, JoinType.LEFT, onColumn = null, additionalConstraint = { SkillsTable.categoryId eq SkillCategoriesTable.id })
             .select(ProfilesTable.userId)
             .withDistinct()
             .apply {
-                // Filter theo query (tìm theo tên hoặc thành phố)
+                // Filter theo query (tìm theo tên hoặc thành phố hoặc tên kỹ năng)
                 query?.takeIf { it.isNotBlank() }?.let { q ->
                     andWhere {
                         (ProfilesTable.fullName like "%$q%") or

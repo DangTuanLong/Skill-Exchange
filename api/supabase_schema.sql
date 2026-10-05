@@ -1,7 +1,7 @@
 -- ============================================================
 -- SkillExchange — Supabase Database Schema (v2)
 -- Phiên bản đã đối chiếu với Exposed runtime + các quyết định đã chốt
--- Cập nhật: 2026-10-04 (TASK-005)
+-- Cập nhật: 2026-10-05 (TASK-005, TASK-010)
 --
 -- Quyết định đã ghi nhận:
 --   DEC-006: Không lưu password trong app. Auth = Supabase.
@@ -71,7 +71,7 @@ CREATE INDEX idx_skills_name_unaccent_trgm ON skills USING GIN (public.f_unaccen
 CREATE TABLE profiles (
     id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id      UUID         NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name    VARCHAR(255) NOT NULL,
+    full_name    VARCHAR(255) NOT NULL CONSTRAINT profiles_full_name_not_blank CHECK (char_length(trim(full_name)) > 0),
     bio          TEXT         CONSTRAINT profiles_bio_length_check CHECK (char_length(bio) <= 500),
     city         VARCHAR(100),
     avatar_url   VARCHAR(500),
@@ -110,8 +110,8 @@ CREATE TABLE user_skills (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id           UUID    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     skill_id          INT     NOT NULL CONSTRAINT fk_user_skills_skill_id__id REFERENCES skills(id) ON DELETE RESTRICT,
-    type              VARCHAR(10) NOT NULL CHECK (type IN ('HAVE', 'WANT')),
-    proficiency_level INT     DEFAULT 1 CHECK (proficiency_level BETWEEN 1 AND 5),
+    type              VARCHAR(10) NOT NULL CONSTRAINT user_skills_type_check CHECK (type IN ('HAVE', 'WANT')),
+    proficiency_level INT     DEFAULT 1 CONSTRAINT user_skills_proficiency_range CHECK (proficiency_level BETWEEN 1 AND 5),
     note              TEXT,
     created_at        TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, skill_id, type)   -- Mỗi user chỉ HAVE/WANT 1 lần mỗi skill

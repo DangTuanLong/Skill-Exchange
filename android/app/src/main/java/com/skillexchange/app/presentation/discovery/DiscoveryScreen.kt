@@ -171,7 +171,7 @@ fun DiscoveryScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.onIntent(DiscoveryIntent.CategorySelected(cat.id)) },
-                                label = { Text("${cat.icon} ${cat.name}") },
+                                label = { Text(formatCategoryLabel(cat.icon, cat.name)) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Brand500,
                                     selectedLabelColor = Color.White
@@ -486,5 +486,13 @@ private fun SkillBadgeChip(name: String, level: Int, isHave: Boolean) {
                 )
             }
         }
+    }
+}
+
+private fun formatCategoryLabel(icon: String, name: String): String {
+    return if (icon.isBlank() || icon.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+        name
+    } else {
+        "$icon $name"
     }
 }

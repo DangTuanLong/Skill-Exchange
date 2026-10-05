@@ -67,7 +67,7 @@ class ProfileRoutesTest {
     }
 
     @Test
-    fun `PUT profile with blank fullName returns 400 Bad Request`() = testApplication {
+    fun `PUT profile with blank fullName returns 422 Unprocessable Entity`() = testApplication {
         val testToken = createTestJwt()
 
         application {
@@ -101,8 +101,96 @@ class ProfileRoutesTest {
             setBody("""{"full_name":"","bio":"Dev","city":"HCM"}""")
         }
 
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        assertTrue(response.bodyAsText().contains("Tên không được để trống"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Họ tên không được để trống"))
+    }
+
+    @Test
+    fun `PUT profile with bio 500 characters succeeds with 200 OK`() = testApplication {
+        val testToken = createTestJwt()
+        val bio500 = "a".repeat(500)
+        val sampleProfile = ProfileDto(
+            id = "p-123",
+            userId = "user-test-123",
+            fullName = "Nguyễn Văn A",
+            bio = bio500,
+            city = "HCM"
+        )
+        every { mockProfileService.upsertProfile("user-test-123", any()) } returns sampleProfile
+
+        application {
+            configureSerialization()
+            configureStatusPages()
+            install(Authentication) {
+                jwt("auth-jwt") {
+                    realm = "Test Realm"
+                    verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                    validate { credential ->
+                        if (!credential.payload.subject.isNullOrEmpty()) {
+                            JWTPrincipal(credential.payload)
+                        } else null
+                    }
+                }
+            }
+            routing {
+                profileRoutes(mockProfileService)
+            }
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.put("/api/profile") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"full_name":"Nguyễn Văn A","bio":"$bio500","city":"HCM"}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("Nguyễn Văn A"))
+    }
+
+    @Test
+    fun `PUT profile with bio 501 characters returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+        val bio501 = "a".repeat(501)
+
+        application {
+            configureSerialization()
+            configureStatusPages()
+            install(Authentication) {
+                jwt("auth-jwt") {
+                    realm = "Test Realm"
+                    verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                    validate { credential ->
+                        if (!credential.payload.subject.isNullOrEmpty()) {
+                            JWTPrincipal(credential.payload)
+                        } else null
+                    }
+                }
+            }
+            routing {
+                profileRoutes(mockProfileService)
+            }
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.put("/api/profile") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"full_name":"Nguyễn Văn A","bio":"$bio501","city":"HCM"}""")
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Tiểu sử không được vượt quá 500 ký tự"))
     }
 
     @Test

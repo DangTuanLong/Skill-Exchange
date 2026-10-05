@@ -31,7 +31,16 @@ fun Route.profileRoutes(profileService: ProfileService) {
                 val userId = call.getUserId()
                 val req = call.receive<UpdateProfileRequest>()
                 if (req.fullName.isBlank()) {
-                    return@put call.respond(HttpStatusCode.BadRequest, RouteApiError(message = "Tên không được để trống", code = 400))
+                    return@put call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        RouteApiError(message = "Họ tên không được để trống", code = 422)
+                    )
+                }
+                if (req.bio != null && req.bio.length > 500) {
+                    return@put call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        RouteApiError(message = "Tiểu sử không được vượt quá 500 ký tự", code = 422)
+                    )
                 }
                 val profile = profileService.upsertProfile(userId, req)
                 call.respond(HttpStatusCode.OK, ApiSuccess(data = profile))

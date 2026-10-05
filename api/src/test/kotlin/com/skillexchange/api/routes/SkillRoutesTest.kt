@@ -2,6 +2,7 @@ package com.skillexchange.api.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.skillexchange.api.models.skill.UserSkillDto
 import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
 import com.skillexchange.api.services.SkillService
@@ -62,7 +63,7 @@ class SkillRoutesTest {
     }
 
     @Test
-    fun `POST user-skill with invalid type returns 400 Bad Request`() = testApplication {
+    fun `POST user-skill with invalid type returns 422 Unprocessable Entity`() = testApplication {
         val testToken = createTestJwt()
 
         application {
@@ -81,8 +82,120 @@ class SkillRoutesTest {
             setBody("""{"skill_id":1,"type":"INVALID","proficiency_level":3}""")
         }
 
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertTrue(response.bodyAsText().contains("type phải là HAVE hoặc WANT"))
+    }
+
+    @Test
+    fun `POST user-skill with proficiency 0 returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.post("/api/skills/user") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"skill_id":1,"type":"HAVE","proficiency_level":0}""")
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Trình độ kỹ năng phải từ 1 đến 5"))
+    }
+
+    @Test
+    fun `POST user-skill with proficiency 6 returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.post("/api/skills/user") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"skill_id":1,"type":"HAVE","proficiency_level":6}""")
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Trình độ kỹ năng phải từ 1 đến 5"))
+    }
+
+    @Test
+    fun `POST user-skill with boundary proficiency 1 succeeds with 201 Created`() = testApplication {
+        val testToken = createTestJwt()
+        val sampleSkill = UserSkillDto(
+            id = "us-1",
+            skillId = 1,
+            skillName = "Kotlin",
+            categoryName = "Lập trình",
+            type = "HAVE",
+            proficiencyLevel = 1
+        )
+        every { mockSkillService.addUserSkill("user-test-123", any()) } returns sampleSkill
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.post("/api/skills/user") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"skill_id":1,"type":"HAVE","proficiency_level":1}""")
+        }
+
+        assertEquals(HttpStatusCode.Created, response.status)
+    }
+
+    @Test
+    fun `POST user-skill with boundary proficiency 5 succeeds with 201 Created`() = testApplication {
+        val testToken = createTestJwt()
+        val sampleSkill = UserSkillDto(
+            id = "us-2",
+            skillId = 1,
+            skillName = "Kotlin",
+            categoryName = "Lập trình",
+            type = "WANT",
+            proficiencyLevel = 5
+        )
+        every { mockSkillService.addUserSkill("user-test-123", any()) } returns sampleSkill
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.post("/api/skills/user") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"skill_id":1,"type":"WANT","proficiency_level":5}""")
+        }
+
+        assertEquals(HttpStatusCode.Created, response.status)
     }
 
     @Test
