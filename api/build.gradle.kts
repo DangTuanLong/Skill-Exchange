@@ -1,4 +1,4 @@
-﻿import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     kotlin("jvm") version "2.2.10"
@@ -41,8 +41,16 @@ val koinVersion = "4.0.4"
 val jwtVersion = "4.4.0"
 val bcryptVersion = "0.10.2"
 val logbackVersion = "1.5.6"
+val awsSdkVersion = "2.29.35"
 
 dependencies {
+    // AWS S3 for Cloudflare R2 (DEC-009) - exclusion of Netty and Apache client to keep lightweight
+    implementation("software.amazon.awssdk:s3:$awsSdkVersion") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
+
     // Ktor Server
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")

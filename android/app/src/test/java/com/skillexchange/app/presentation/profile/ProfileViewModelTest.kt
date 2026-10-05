@@ -27,12 +27,26 @@ class ProfileViewModelTest {
         override suspend fun getUserProfile(userId: String): Result<Profile> = Result.success(profile)
 
         override suspend fun updateProfile(
-            fullName: String, bio: String?, city: String?, avatarUrl: String?
+            fullName: String, bio: String?, city: String?, avatarUrl: String?,
+            availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
         ): Result<Profile> {
-            profile = profile.copy(fullName = fullName, bio = bio, city = city, avatarUrl = avatarUrl)
+            profile = profile.copy(
+                fullName = fullName,
+                bio = bio,
+                city = city,
+                avatarUrl = avatarUrl,
+                availability = availability ?: profile.availability
+            )
             return Result.success(profile)
         }
+
+        var uploadAvatarResult: Result<String> = Result.success("https://r2.example.com/avatars/new_avatar.jpg")
+
+        override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> {
+            return uploadAvatarResult
+        }
     }
+
 
     private val mockSkillRepository = object : ISkillRepository {
         val skillsList = mutableListOf<UserSkill>()
@@ -219,4 +233,114 @@ class ProfileViewModelTest {
 
         assertNull(viewModel.state.value.selectedSkillIdForEdit)
     }
+
+    @Test
+    fun `AddAvailabilityWindow adds valid window to state`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val window = com.skillexchange.app.domain.model.AvailabilityWindow(day = "MON", from = "18:00", to = "21:00")
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(window))
+
+        assertTrue(viewModel.state.value.availability.contains(window))
+    }
+
+    @Test
+    fun `AddAvailabilityWindow rejects overlapping window on same day`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val window1 = com.skillexchange.app.domain.model.AvailabilityWindow(day = "MON", from = "18:00", to = "21:00")
+        val windowOverlap = com.skillexchange.app.domain.model.AvailabilityWindow(day = "MON", from = "20:00", to = "22:00")
+
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(window1))
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(windowOverlap))
+
+        assertEquals(1, viewModel.state.value.availability.size)
+        assertEquals(window1, viewModel.state.value.availability.first())
+    }
+
+    @Test
+    fun `AddAvailabilityWindow rejects invalid times`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val invalidFormat = com.skillexchange.app.domain.model.AvailabilityWindow(day = "MON", from = "8:00", to = "21:00")
+        val invertedTimes = com.skillexchange.app.domain.model.AvailabilityWindow(day = "MON", from = "21:00", to = "18:00")
+
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(invalidFormat))
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(invertedTimes))
+
+        assertTrue(viewModel.state.value.availability.isEmpty())
+    }
+
+    @Test
+    fun `RemoveAvailabilityWindow removes window from state`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val window = com.skillexchange.app.domain.model.AvailabilityWindow(day = "TUE", from = "14:00", to = "16:00")
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(window))
+        assertEquals(1, viewModel.state.value.availability.size)
+
+        viewModel.onIntent(ProfileIntent.RemoveAvailabilityWindow(window))
+        assertTrue(viewModel.state.value.availability.isEmpty())
+    }
+
+    @Test
+    fun `SaveProfile saves availability to repository`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val window = com.skillexchange.app.domain.model.AvailabilityWindow(day = "FRI", from = "09:00", to = "11:00")
+        viewModel.onIntent(ProfileIntent.FullNameChanged("Nguyễn Văn A"))
+        viewModel.onIntent(ProfileIntent.AddAvailabilityWindow(window))
+        viewModel.onIntent(ProfileIntent.SaveProfile)
+        advanceUntilIdle()
+
+        val saved = mockProfileRepository.profile
+        assertEquals(1, saved.availability.size)
+        assertEquals(window, saved.availability.first())
+    }
+
+    @Test
+    fun `UploadAvatar intent with file greater than 2MB does not upload and sends snackbar`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        val largeBytes = ByteArray(2 * 1024 * 1024 + 1)
+        viewModel.onIntent(ProfileIntent.UploadAvatar(largeBytes, "avatar.jpg", "image/jpeg"))
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.state.value.isUploadingAvatar)
+        assertEquals("", viewModel.state.value.avatarUrl)
+    }
+
+    @Test
+    fun `UploadAvatar intent with valid file uploads successfully and updates avatarUrl`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        mockProfileRepository.uploadAvatarResult = Result.success("https://r2.example.com/avatars/uploaded_123.jpg")
+        val validBytes = byteArrayOf(1, 2, 3)
+        viewModel.onIntent(ProfileIntent.UploadAvatar(validBytes, "avatar.jpg", "image/jpeg"))
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.state.value.isUploadingAvatar)
+        assertEquals("https://r2.example.com/avatars/uploaded_123.jpg", viewModel.state.value.avatarUrl)
+    }
+
+    @Test
+    fun `UploadAvatar intent failure resets isUploadingAvatar to false`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        mockProfileRepository.uploadAvatarResult = Result.failure(Exception("413 Payload Too Large"))
+        val validBytes = byteArrayOf(1, 2, 3)
+        viewModel.onIntent(ProfileIntent.UploadAvatar(validBytes, "avatar.jpg", "image/jpeg"))
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.state.value.isUploadingAvatar)
+    }
 }
+

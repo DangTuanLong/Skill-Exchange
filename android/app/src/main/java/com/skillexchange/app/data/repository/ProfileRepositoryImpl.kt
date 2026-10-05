@@ -24,7 +24,10 @@ class ProfileRepositoryImpl(
                 fullName = data.fullName,
                 bio = data.bio,
                 city = data.city,
-                avatarUrl = data.avatarUrl
+                avatarUrl = data.avatarUrl,
+                availability = data.availability.map {
+                    com.skillexchange.app.domain.model.AvailabilityWindow(it.day, it.from, it.to)
+                }
             )
             localDataSource.saveProfile(profile)
             profile
@@ -42,15 +45,25 @@ class ProfileRepositoryImpl(
             fullName = data.fullName,
             bio = data.bio,
             city = data.city,
-            avatarUrl = data.avatarUrl
+            avatarUrl = data.avatarUrl,
+            availability = data.availability.map {
+                com.skillexchange.app.domain.model.AvailabilityWindow(it.day, it.from, it.to)
+            }
         )
     }
 
     override suspend fun updateProfile(
-        fullName: String, bio: String?, city: String?, avatarUrl: String?
+        fullName: String,
+        bio: String?,
+        city: String?,
+        avatarUrl: String?,
+        availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
     ): Result<Profile> = runCatching {
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
-        val resp = remoteDataSource.updateProfile(token, UpdateProfileDto(fullName, bio, city, avatarUrl))
+        val availDto = availability?.map {
+            com.skillexchange.app.data.remote.profile.AvailabilityWindowDto(it.day, it.from, it.to)
+        }
+        val resp = remoteDataSource.updateProfile(token, UpdateProfileDto(fullName, bio, city, avatarUrl, availDto))
         val data = resp.data ?: error(resp.message ?: "Cập nhật thất bại")
         val profile = Profile(
             id = data.id ?: "",
@@ -58,9 +71,28 @@ class ProfileRepositoryImpl(
             fullName = data.fullName,
             bio = data.bio,
             city = data.city,
-            avatarUrl = data.avatarUrl
+            avatarUrl = data.avatarUrl,
+            availability = data.availability.map {
+                com.skillexchange.app.domain.model.AvailabilityWindow(it.day, it.from, it.to)
+            }
         )
         localDataSource.saveProfile(profile)
         profile
     }
+
+    override suspend fun uploadAvatar(
+        fileBytes: ByteArray,
+        fileName: String,
+        mimeType: String
+    ): Result<String> = runCatching {
+        val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
+        val resp = remoteDataSource.uploadAvatar(token, fileBytes, fileName, mimeType)
+        val url = resp.data?.avatarUrl ?: error(resp.message ?: "Tải ảnh đại diện thất bại")
+        val current = localDataSource.getProfile()
+        if (current != null) {
+            localDataSource.saveProfile(current.copy(avatarUrl = url))
+        }
+        url
+    }
+
 }

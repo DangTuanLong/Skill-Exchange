@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.services
+package com.skillexchange.api.services
 
 import com.skillexchange.api.models.db.ProfilesTable
 import com.skillexchange.api.models.profile.ProfileDto
@@ -30,6 +30,7 @@ class ProfileService {
                 it[bio]                    = req.bio
                 it[city]                   = req.city
                 it[avatarUrl]              = req.avatarUrl
+                it[availability]           = req.availability ?: emptyList()
                 it[updatedAt]              = LocalDateTime.now()
             }
         } else {
@@ -39,6 +40,9 @@ class ProfileService {
                 it[bio]        = req.bio
                 it[city]       = req.city
                 it[avatarUrl]  = req.avatarUrl
+                if (req.availability != null) {
+                    it[availability] = req.availability
+                }
                 it[updatedAt]  = LocalDateTime.now()
             }
         }
@@ -48,13 +52,39 @@ class ProfileService {
             .first().toDto()
     }
 
+    fun updateAvatarUrl(userId: String, newAvatarUrl: String): String? = transaction {
+        val existing = ProfilesTable.selectAll()
+            .where { ProfilesTable.userId eq userId }
+            .firstOrNull()
+
+        val oldAvatarUrl = existing?.get(ProfilesTable.avatarUrl)
+
+        if (existing == null) {
+            ProfilesTable.insert {
+                it[ProfilesTable.userId] = userId
+                it[fullName]             = "User"
+                it[avatarUrl]            = newAvatarUrl
+                it[updatedAt]            = LocalDateTime.now()
+            }
+        } else {
+            ProfilesTable.update({ ProfilesTable.userId eq userId }) {
+                it[avatarUrl] = newAvatarUrl
+                it[updatedAt] = LocalDateTime.now()
+            }
+        }
+        oldAvatarUrl
+    }
+
+
     private fun ResultRow.toDto() = ProfileDto(
-        id        = this[ProfilesTable.id].toString(),
-        userId    = this[ProfilesTable.userId],
-        fullName  = this[ProfilesTable.fullName],
-        bio       = this[ProfilesTable.bio],
-        city      = this[ProfilesTable.city],
-        avatarUrl = this[ProfilesTable.avatarUrl],
-        updatedAt = this[ProfilesTable.updatedAt].toString()
+        id           = this[ProfilesTable.id].toString(),
+        userId       = this[ProfilesTable.userId],
+        fullName     = this[ProfilesTable.fullName],
+        bio          = this[ProfilesTable.bio],
+        city         = this[ProfilesTable.city],
+        avatarUrl    = this[ProfilesTable.avatarUrl],
+        availability = this[ProfilesTable.availability] ?: emptyList(),
+        updatedAt    = this[ProfilesTable.updatedAt].toString()
     )
+
 }

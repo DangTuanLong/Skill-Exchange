@@ -36,8 +36,12 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             "skillexchange_db"
-        ).fallbackToDestructiveMigrationOnDowngrade().build()
+        )
+            .fallbackToDestructiveMigration(true)
+            .fallbackToDestructiveMigrationOnDowngrade()
+            .build()
     }
+
     single { get<AppDatabase>().profileDao() }
     single { ProfileLocalDataSource(get()) }
 

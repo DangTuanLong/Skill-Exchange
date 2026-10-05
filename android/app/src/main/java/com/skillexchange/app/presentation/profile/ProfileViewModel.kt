@@ -19,12 +19,14 @@ import kotlinx.coroutines.launch
 data class ProfileUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isUploadingAvatar: Boolean = false,
     // Profile fields
     val fullName: String = "",
     val bio: String = "",
     val city: String = "",
     val avatarUrl: String = "",
     val savedProfile: Profile? = null,
+    val availability: List<com.skillexchange.app.domain.model.AvailabilityWindow> = emptyList(),
     // Skills
     val categories: List<SkillCategory> = emptyList(),
     val mySkills: List<UserSkill> = emptyList(),
@@ -46,6 +48,9 @@ sealed class ProfileIntent {
     data class BioChanged(val value: String) : ProfileIntent()
     data class CityChanged(val value: String) : ProfileIntent()
     data class AvatarUrlChanged(val value: String) : ProfileIntent()
+    data class UploadAvatar(val fileBytes: ByteArray, val fileName: String, val mimeType: String) : ProfileIntent()
+    data class AddAvailabilityWindow(val window: com.skillexchange.app.domain.model.AvailabilityWindow) : ProfileIntent()
+    data class RemoveAvailabilityWindow(val window: com.skillexchange.app.domain.model.AvailabilityWindow) : ProfileIntent()
     object SaveProfile : ProfileIntent()
     object LoadData : ProfileIntent()
     data class SelectCategory(val id: Int?) : ProfileIntent()
@@ -57,6 +62,7 @@ sealed class ProfileIntent {
     object GoToSkillStep : ProfileIntent()
     object GoToDone : ProfileIntent()
 }
+
 
 // ─── Effect ───────────────────────────────────────────────────────────
 sealed class ProfileEffect {
@@ -86,6 +92,9 @@ class ProfileViewModel(
             is ProfileIntent.BioChanged       -> _state.update { it.copy(bio = intent.value) }
             is ProfileIntent.CityChanged      -> _state.update { it.copy(city = intent.value) }
             is ProfileIntent.AvatarUrlChanged -> _state.update { it.copy(avatarUrl = intent.value) }
+            is ProfileIntent.UploadAvatar     -> uploadAvatar(intent.fileBytes, intent.fileName, intent.mimeType)
+            is ProfileIntent.AddAvailabilityWindow -> addAvailabilityWindow(intent.window)
+            is ProfileIntent.RemoveAvailabilityWindow -> removeAvailabilityWindow(intent.window)
             is ProfileIntent.SaveProfile      -> saveProfile()
             is ProfileIntent.SelectCategory   -> _state.update { it.copy(selectedCategoryId = intent.id) }
             is ProfileIntent.SelectTab        -> _state.update { it.copy(selectedTab = intent.tab, selectedSkillIdForEdit = null) }
@@ -98,6 +107,62 @@ class ProfileViewModel(
         }
     }
 
+    private fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String) {
+        if (fileBytes.size > 2 * 1024 * 1024) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Kích thước ảnh vượt quá giới hạn 2MB"))
+            }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isUploadingAvatar = true) }
+            profileRepo.uploadAvatar(fileBytes, fileName, mimeType)
+                .onSuccess { newUrl ->
+                    _state.update { it.copy(avatarUrl = newUrl, isUploadingAvatar = false) }
+                    _effect.send(ProfileEffect.ShowSnackbar("Cập nhật ảnh đại diện thành công!"))
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isUploadingAvatar = false) }
+                    val raw = e.message ?: ""
+                    val msg = when {
+                        raw.contains("413") || raw.contains("2MB") ->
+                            "Kích thước ảnh vượt quá giới hạn 2MB"
+                        raw.contains("415") || raw.contains("hỗ trợ") ->
+                            "Định dạng ảnh không được hỗ trợ (chỉ chấp nhận JPEG, PNG, WebP)"
+                        raw.contains("429") || raw.contains("quá nhiều") ->
+                            "Bạn đã tải lên quá nhiều lần. Vui lòng thử lại sau 1 phút."
+                        else -> raw.ifBlank { "Tải ảnh đại diện thất bại" }
+                    }
+                    _effect.send(ProfileEffect.ShowSnackbar(msg))
+                }
+        }
+    }
+
+    private fun addAvailabilityWindow(window: com.skillexchange.app.domain.model.AvailabilityWindow) {
+        val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+        if (!timeRegex.matches(window.from) || !timeRegex.matches(window.to)) {
+            viewModelScope.launch { _effect.send(ProfileEffect.ShowSnackbar("Định dạng giờ không hợp lệ (HH:mm)")) }
+            return
+        }
+        if (window.from >= window.to) {
+            viewModelScope.launch { _effect.send(ProfileEffect.ShowSnackbar("Giờ bắt đầu phải trước giờ kết thúc")) }
+            return
+        }
+        val overlaps = _state.value.availability.any {
+            it.day.equals(window.day, ignoreCase = true) &&
+                maxOf(it.from, window.from) < minOf(it.to, window.to)
+        }
+        if (overlaps) {
+            viewModelScope.launch { _effect.send(ProfileEffect.ShowSnackbar("Khung giờ bị trùng với lịch đã có trong ngày")) }
+            return
+        }
+        _state.update { it.copy(availability = it.availability + window) }
+    }
+
+    private fun removeAvailabilityWindow(window: com.skillexchange.app.domain.model.AvailabilityWindow) {
+        _state.update { it.copy(availability = it.availability - window) }
+    }
+
     private fun loadData() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
@@ -108,7 +173,8 @@ class ProfileViewModel(
                         _state.update { it.copy(
                             savedProfile = p, fullName = p.fullName,
                             bio = p.bio ?: "", city = p.city ?: "",
-                            avatarUrl = p.avatarUrl ?: ""
+                            avatarUrl = p.avatarUrl ?: "",
+                            availability = p.availability
                         )}
                         checkAndUpdateProfileCompletion()
                     }
@@ -140,10 +206,11 @@ class ProfileViewModel(
                 fullName = s.fullName,
                 bio = s.bio.ifBlank { null },
                 city = s.city.ifBlank { null },
-                avatarUrl = s.avatarUrl.ifBlank { null }
+                avatarUrl = s.avatarUrl.ifBlank { null },
+                availability = s.availability
             )
                 .onSuccess { profile ->
-                    _state.update { it.copy(isSaving = false, savedProfile = profile) }
+                    _state.update { it.copy(isSaving = false, savedProfile = profile, availability = profile.availability) }
                     checkAndUpdateProfileCompletion()
                     _effect.send(ProfileEffect.ShowSnackbar("Lưu hồ sơ thành công!"))
                     _effect.send(ProfileEffect.NavigateToSkillSelection)
@@ -153,6 +220,7 @@ class ProfileViewModel(
                 }
         }
     }
+
 
     private fun addSkill(skillId: Int) {
         val s = _state.value

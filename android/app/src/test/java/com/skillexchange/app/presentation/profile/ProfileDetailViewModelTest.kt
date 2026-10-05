@@ -28,9 +28,11 @@ class ProfileDetailViewModelTest {
         )
 
         override suspend fun updateProfile(
-            fullName: String, bio: String?, city: String?, avatarUrl: String?
+            fullName: String, bio: String?, city: String?, avatarUrl: String?,
+            availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
         ): Result<Profile> = error("Not used")
     }
+
 
     private val mockSkillRepository = object : ISkillRepository {
         override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(emptyList())

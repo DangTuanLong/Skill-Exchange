@@ -9,7 +9,8 @@ tmp.md
 *.env
 .env
 .env.*
-!.env.example
+.env.example
+
 local.properties
 google-services.json
 keystore.properties

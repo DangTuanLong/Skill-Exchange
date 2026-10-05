@@ -1,19 +1,24 @@
-﻿package com.skillexchange.api.models.db
+package com.skillexchange.api.models.db
 
+import com.skillexchange.api.models.profile.AvailabilityWindowDto
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.datetime
+import org.jetbrains.exposed.sql.json.jsonb
 import java.time.LocalDateTime
 
 object ProfilesTable : Table("profiles") {
-    val id        = uuid("id").autoGenerate()
-    val userId    = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) }).uniqueIndex()
-    val fullName  = varchar("full_name", 255)
-    val bio       = text("bio").nullable()
-    val city      = varchar("city", 100).nullable()
-    val avatarUrl = varchar("avatar_url", 500).nullable()
-    val updatedAt = datetime("updated_at").default(LocalDateTime.now())
+    val id           = uuid("id").autoGenerate()
+    val userId       = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) }).uniqueIndex()
+    val fullName     = varchar("full_name", 255)
+    val bio          = text("bio").nullable()
+    val city         = varchar("city", 100).nullable()
+    val avatarUrl    = varchar("avatar_url", 500).nullable()
+    val availability = jsonb<List<AvailabilityWindowDto>>("availability", Json.Default).default(emptyList())
+    val updatedAt    = datetime("updated_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }
+
 
 object SkillCategoriesTable : Table("skill_categories") {
     val id          = integer("id").autoIncrement()

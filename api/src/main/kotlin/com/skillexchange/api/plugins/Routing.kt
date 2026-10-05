@@ -18,11 +18,13 @@ fun Application.configureRouting() {
     val profileService: ProfileService by inject()
     val skillService: SkillService by inject()
     val userService: UserService by inject()
+    val avatarStorageService: com.skillexchange.api.services.IAvatarStorageService by inject()
+    val rateLimiter: com.skillexchange.api.services.InMemoryRateLimiter by inject()
 
     routing {
         healthRoutes()
         authRoutes(authService)
-        profileRoutes(profileService)
+        profileRoutes(profileService, avatarStorageService, rateLimiter)
         skillRoutes(skillService, userService)
         userRoutes(userService)
     }

@@ -7,7 +7,14 @@ import com.skillexchange.app.domain.model.UserSkill
 interface IProfileRepository {
     suspend fun getMyProfile(): Result<Profile>
     suspend fun getUserProfile(userId: String): Result<Profile>
-    suspend fun updateProfile(fullName: String, bio: String?, city: String?, avatarUrl: String?): Result<Profile>
+    suspend fun updateProfile(
+        fullName: String,
+        bio: String?,
+        city: String?,
+        avatarUrl: String?,
+        availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>? = null
+    ): Result<Profile>
+    suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String>
 }
 
 interface ISkillRepository {

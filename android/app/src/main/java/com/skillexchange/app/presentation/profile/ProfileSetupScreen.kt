@@ -16,8 +16,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +57,28 @@ fun ProfileSetupScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
     var visible by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) {
+                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    val ext = when {
+                        mimeType.contains("png") -> "png"
+                        mimeType.contains("webp") -> "webp"
+                        else -> "jpg"
+                    }
+                    viewModel.onIntent(ProfileIntent.UploadAvatar(bytes, "avatar.$ext", mimeType))
+                }
+            } catch (e: Exception) {
+                // Handled in ViewModel
+            }
+        }
+    }
 
     LaunchedEffect(Unit) { visible = true }
     LaunchedEffect(viewModel.effect) {
@@ -124,30 +153,94 @@ fun ProfileSetupScreen(
                     // Avatar display & selection
                     Box(
                         modifier = Modifier
-                            .size(88.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFEFF6FF))
-                            .border(2.dp, Brand500, CircleShape),
+                            .size(92.dp)
+                            .clickable(enabled = !state.isUploadingAvatar) {
+                                galleryLauncher.launch("image/*")
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (state.avatarUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = state.avatarUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEFF6FF))
+                                .border(2.dp, Brand500, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (state.avatarUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = state.avatarUrl,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Default Avatar",
+                                    tint = Brand500,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+
+                            if (state.isUploadingAvatar) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.4f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
+                        }
+
+                        // Badge icon camera/edit
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Brand500)
+                                .border(2.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Default Avatar",
-                                tint = Brand500,
-                                modifier = Modifier.size(48.dp)
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Tải ảnh lên",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
 
-                    Text("Chọn ảnh đại diện", fontSize = 13.sp, color = TextSecondaryLight)
+                    OutlinedButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        enabled = !state.isUploadingAvatar,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Brand500
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            if (state.isUploadingAvatar) "Đang tải ảnh lên..." else "Tải ảnh từ thiết bị",
+                            fontSize = 12.sp,
+                            color = Brand500,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Text("Hoặc chọn avatar có sẵn", fontSize = 13.sp, color = TextSecondaryLight)
 
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -209,6 +302,178 @@ fun ProfileSetupScreen(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                     )
+
+                    // ── Lịch rảnh hàng tuần (Availability Editor) ─────────────
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                tint = Brand500,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Text(
+                                "Lịch rảnh hàng tuần",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextPrimaryLight
+                            )
+                        }
+
+                        Text(
+                            "Chọn ngày và khung giờ bạn có thể trao đổi kỹ năng",
+                            fontSize = 12.sp,
+                            color = TextSecondaryLight
+                        )
+
+                        // Day chips
+                        val days = remember {
+                            listOf(
+                                "MON" to "T2", "TUE" to "T3", "WED" to "T4",
+                                "THU" to "T5", "FRI" to "T6", "SAT" to "T7", "SUN" to "CN"
+                            )
+                        }
+                        var selectedDay by remember { mutableStateOf("MON") }
+                        var fromTime by remember { mutableStateOf("18:00") }
+                        var toTime by remember { mutableStateOf("21:00") }
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(days) { (dayKey, dayLabel) ->
+                                val isSelected = selectedDay == dayKey
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) Brand500 else Color.White)
+                                        .border(
+                                            1.dp,
+                                            if (isSelected) Brand500 else Color(0xFFCBD5E1),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { selectedDay = dayKey }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = dayLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else TextPrimaryLight
+                                    )
+                                }
+                            }
+                        }
+
+                        // Time range input + Add button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = fromTime,
+                                onValueChange = { if (it.length <= 5) fromTime = it },
+                                label = { Text("Từ (HH:mm)", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
+                                )
+                            )
+                            OutlinedTextField(
+                                value = toTime,
+                                onValueChange = { if (it.length <= 5) toTime = it },
+                                label = { Text("Đến (HH:mm)", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
+                                )
+                            )
+                            FilledTonalButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    viewModel.onIntent(
+                                        ProfileIntent.AddAvailabilityWindow(
+                                            com.skillexchange.app.domain.model.AvailabilityWindow(
+                                                day = selectedDay,
+                                                from = fromTime.trim(),
+                                                to = toTime.trim()
+                                            )
+                                        )
+                                    )
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFFEFF6FF),
+                                    contentColor = Brand600
+                                )
+                            ) {
+                                Text("+ Thêm", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+
+                        // Display selected availability chips
+                        if (state.availability.isNotEmpty()) {
+                            Text(
+                                "Khung giờ đã chọn:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondaryLight
+                            )
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val dayLabelsMap = remember {
+                                    mapOf("MON" to "T2", "TUE" to "T3", "WED" to "T4", "THU" to "T5", "FRI" to "T6", "SAT" to "T7", "SUN" to "CN")
+                                }
+                                state.availability.forEach { window ->
+                                    val label = "${dayLabelsMap[window.day] ?: window.day}: ${window.from}-${window.to}"
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFEFF6FF))
+                                            .border(1.dp, Color(0xFFBAE6FD), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Brand700)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Xoá",
+                                            tint = Brand500,
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clickable {
+                                                    viewModel.onIntent(ProfileIntent.RemoveAvailabilityWindow(window))
+                                                }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
 
                     if (state.error != null) {
                         Text(

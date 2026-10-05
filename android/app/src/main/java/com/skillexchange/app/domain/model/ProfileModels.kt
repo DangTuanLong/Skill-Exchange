@@ -1,13 +1,21 @@
 package com.skillexchange.app.domain.model
 
+data class AvailabilityWindow(
+    val day: String,
+    val from: String,
+    val to: String
+)
+
 data class Profile(
     val id: String = "",
     val userId: String = "",
     val fullName: String = "",
     val bio: String? = null,
     val city: String? = null,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val availability: List<AvailabilityWindow> = emptyList()
 )
+
 
 data class SkillCategory(
     val id: Int,

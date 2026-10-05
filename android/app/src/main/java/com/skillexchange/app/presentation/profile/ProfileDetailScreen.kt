@@ -9,9 +9,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -295,7 +297,74 @@ fun ProfileDetailScreen(
                         }
                     }
 
+                    // Availability Section
+                    if (profile.availability.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(1.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = null,
+                                        tint = Brand500,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Lịch rảnh hàng tuần",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimaryLight
+                                    )
+                                }
+
+                                val dayOrder = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+                                val dayLabels = mapOf(
+                                    "MON" to "Thứ 2", "TUE" to "Thứ 3", "WED" to "Thứ 4",
+                                    "THU" to "Thứ 5", "FRI" to "Thứ 6", "SAT" to "Thứ 7", "SUN" to "Chủ nhật"
+                                )
+                                val sorted = profile.availability.sortedWith(
+                                    compareBy({ dayOrder.indexOf(it.day.uppercase()).let { idx -> if (idx >= 0) idx else 99 } }, { it.from })
+                                )
+
+                                sorted.forEach { window ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFFF8FAFC))
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = dayLabels[window.day.uppercase()] ?: window.day,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            color = Brand600
+                                        )
+                                        Text(
+                                            text = "${window.from} - ${window.to}",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = TextSecondaryLight
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
+
                 }
             } else if (state.error != null) {
                 Text(

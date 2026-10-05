@@ -61,7 +61,10 @@ class AuthViewModelTest {
             override suspend fun getMyProfile(): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = "Nguyễn Văn A"))
             override suspend fun getUserProfile(userId: String): Result<Profile> = Result.success(Profile("p1", userId, fullName = "Nguyễn Văn A"))
-            override suspend fun updateProfile(fullName: String, bio: String?, city: String?, avatarUrl: String?): Result<Profile> =
+            override suspend fun updateProfile(
+                fullName: String, bio: String?, city: String?, avatarUrl: String?,
+                availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
+            ): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = fullName))
         }
 
@@ -97,9 +100,13 @@ class AuthViewModelTest {
             override suspend fun getMyProfile(): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = ""))
             override suspend fun getUserProfile(userId: String): Result<Profile> = Result.success(Profile("p1", userId, fullName = ""))
-            override suspend fun updateProfile(fullName: String, bio: String?, city: String?, avatarUrl: String?): Result<Profile> =
+            override suspend fun updateProfile(
+                fullName: String, bio: String?, city: String?, avatarUrl: String?,
+                availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
+            ): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = fullName))
         }
+
 
         val emptySkillRepo = object : ISkillRepository {
             override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(emptyList())
