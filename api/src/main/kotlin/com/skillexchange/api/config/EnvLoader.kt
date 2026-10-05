@@ -8,14 +8,20 @@ import java.io.File
  */
 object EnvLoader {
     private val envMap: Map<String, String> by lazy {
-        val envFile = File(".env")
-        if (envFile.exists()) {
+        val envFile = when {
+            File(".env").exists() -> File(".env")
+            File("api/.env").exists() -> File("api/.env")
+            else -> null
+        }
+        if (envFile != null && envFile.exists()) {
             envFile.readLines()
                 .filter { line -> line.isNotBlank() && !line.trim().startsWith("#") && line.contains("=") }
                 .associate { line ->
                     val idx = line.indexOf('=')
                     val key = line.substring(0, idx).trim()
                     val value = line.substring(idx + 1).trim()
+                        .removeSurrounding("\"")
+                        .removeSurrounding("'")
                     key to value
                 }
         } else {

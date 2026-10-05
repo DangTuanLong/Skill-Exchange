@@ -1,5 +1,6 @@
 package com.skillexchange.api.services
 
+import com.skillexchange.api.config.EnvLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -21,16 +22,19 @@ interface IAvatarStorageService {
 }
 
 class R2AvatarStorageService(
-    private val accountId: String = System.getenv("R2_ACCOUNT_ID") ?: "",
-    private val accessKeyId: String = System.getenv("R2_ACCESS_KEY_ID") ?: "",
-    private val secretAccessKey: String = System.getenv("R2_SECRET_ACCESS_KEY") ?: "",
-    private val bucketName: String = System.getenv("R2_BUCKET_NAME") ?: "",
-    private val publicUrl: String = (System.getenv("R2_PUBLIC_URL") ?: "").trimEnd('/')
+    private val accountId: String = EnvLoader.get("R2_ACCOUNT_ID"),
+    private val accessKeyId: String = EnvLoader.get("R2_ACCESS_KEY_ID"),
+    private val secretAccessKey: String = EnvLoader.get("R2_SECRET_ACCESS_KEY"),
+    private val bucketName: String = EnvLoader.get("R2_BUCKET_NAME"),
+    private val publicUrl: String = EnvLoader.get("R2_PUBLIC_URL").trimEnd('/')
 ) : IAvatarStorageService {
 
     private val logger = LoggerFactory.getLogger(R2AvatarStorageService::class.java)
 
     private val s3Client: S3Client by lazy {
+        if (accountId.isBlank() || accessKeyId.isBlank() || secretAccessKey.isBlank() || bucketName.isBlank()) {
+            logger.error("Cloudflare R2 configuration missing! R2_ACCOUNT_ID blank: ${accountId.isBlank()}, R2_ACCESS_KEY_ID blank: ${accessKeyId.isBlank()}, R2_SECRET_ACCESS_KEY blank: ${secretAccessKey.isBlank()}, R2_BUCKET_NAME blank: ${bucketName.isBlank()}")
+        }
         val endpoint = URI.create("https://$accountId.r2.cloudflarestorage.com")
         S3Client.builder()
             .endpointOverride(endpoint)
@@ -44,6 +48,7 @@ class R2AvatarStorageService(
             .serviceConfiguration(
                 S3Configuration.builder()
                     .pathStyleAccessEnabled(true)
+                    .chunkedEncodingEnabled(false) // REQUIRED by Cloudflare R2 to prevent HTTP 403 SignatureDoesNotMatch
                     .build()
             )
             .build()
@@ -67,9 +72,11 @@ class R2AvatarStorageService(
                 .build()
 
             s3Client.putObject(putRequest, RequestBody.fromBytes(bytes))
-            "$publicUrl/$objectKey"
+
+            val baseUrl = if (publicUrl.isNotBlank()) publicUrl else "https://$accountId.r2.cloudflarestorage.com/$bucketName"
+            "$baseUrl/$objectKey"
         }.onFailure { e ->
-            logger.error("Failed to upload avatar to Cloudflare R2 for user $userId: ${e.message}", e)
+            logger.error("Failed to upload avatar to Cloudflare R2 for user $userId: [${e.javaClass.simpleName}] ${e.message}", e)
         }
     }
 

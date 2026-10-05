@@ -88,9 +88,11 @@ class ProfileRepositoryImpl(
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
         val resp = remoteDataSource.uploadAvatar(token, fileBytes, fileName, mimeType)
         val url = resp.data?.avatarUrl ?: error(resp.message ?: "Tải ảnh đại diện thất bại")
-        val current = localDataSource.getProfile()
-        if (current != null) {
-            localDataSource.saveProfile(current.copy(avatarUrl = url))
+        runCatching {
+            val current = localDataSource.getProfile()
+            if (current != null) {
+                localDataSource.saveProfile(current.copy(avatarUrl = url))
+            }
         }
         url
     }

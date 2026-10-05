@@ -7,6 +7,7 @@ import com.skillexchange.api.services.ProfileService
 import com.skillexchange.api.services.R2AvatarStorageService
 import com.skillexchange.api.services.SkillService
 import com.skillexchange.api.services.UserService
+import com.skillexchange.api.services.matching.MatchingService
 import org.koin.dsl.module
 
 val appModule = module {
@@ -14,6 +15,7 @@ val appModule = module {
     single { ProfileService() }
     single { SkillService() }
     single { UserService() }
+    single { MatchingService() }
     single<IAvatarStorageService> { R2AvatarStorageService() }
     single { InMemoryRateLimiter(maxRequests = 5, windowMillis = 60_000L) }
 }

@@ -37,8 +37,9 @@ val appModule = module {
             AppDatabase::class.java,
             "skillexchange_db"
         )
+            .addMigrations(AppDatabase.MIGRATION_1_2)
             .fallbackToDestructiveMigration(true)
-            .fallbackToDestructiveMigrationOnDowngrade()
+            .fallbackToDestructiveMigrationOnDowngrade(true)
             .build()
     }
 
