@@ -2,6 +2,7 @@ package com.skillexchange.app.presentation.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +39,7 @@ fun ProfileDetailScreen(
     userId: String,
     onNavigateBack: () -> Unit = {},
     onNavigateToBooking: (String) -> Unit = {},
+    onNavigateToSkillSelection: () -> Unit = {},
     viewModel: ProfileDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -72,37 +74,95 @@ fun ProfileDetailScreen(
         },
         bottomBar = {
             if (state.profile != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White)
-                        .padding(horizontal = 24.dp, vertical = 14.dp)
+                Surface(
+                    color = Color.White,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = { viewModel.onIntent(ProfileDetailIntent.RequestExchange) },
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(14.dp)),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(0.dp)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Handshake, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
+                        if (state.isOwnProfile) {
+                            Surface(
+                                color = Color(0xFFF1F5F9),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("Đây là hồ sơ cá nhân của bạn", color = TextSecondaryLight, fontSize = 14.sp)
+                                }
+                            }
+                        } else if (state.hasValidPair) {
+                            Button(
+                                onClick = { viewModel.onIntent(ProfileDetailIntent.RequestExchange) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Handshake, contentDescription = null, tint = Color.White)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "GỬI YÊU CẦU TRAO ĐỔI 🤝",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // Không có cặp hợp lệ: Disable CTA kèm lý do và link cập nhật kỹ năng
+                            Button(
+                                onClick = { /* disabled */ },
+                                enabled = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    disabledContainerColor = Color(0xFFE2E8F0),
+                                    disabledContentColor = TextSecondaryLight
+                                )
+                            ) {
                                 Text(
-                                    "Gửi yêu cầu trao đổi 🤝",
+                                    "GỬI YÊU CẦU TRAO ĐỔI 🤝",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = Color.White
+                                    fontSize = 14.sp
                                 )
                             }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = state.noValidPairReason ?: "Chưa có cặp kỹ năng phù hợp hai chiều",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Cập nhật kỹ năng của tôi →",
+                                fontSize = 13.sp,
+                                color = Brand500,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable { onNavigateToSkillSelection() }
+                                    .padding(vertical = 4.dp)
+                            )
                         }
                     }
                 }

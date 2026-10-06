@@ -179,7 +179,11 @@ fun MainScreen(
                 }
 
                 composable(Screen.BookingList.route) {
-                    PlaceholderScreen("Lịch hẹn (Booking)")
+                    com.skillexchange.app.presentation.booking.list.BookingListScreen(
+                        onNavigateToDetail = { exchangeId ->
+                            rootNavController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                        }
+                    )
                 }
 
                 composable(Screen.ProfileSetup.route) {

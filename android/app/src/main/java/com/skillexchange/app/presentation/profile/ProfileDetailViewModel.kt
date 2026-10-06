@@ -3,7 +3,9 @@ package com.skillexchange.app.presentation.profile
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.domain.model.Profile
+import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
@@ -18,6 +20,9 @@ data class ProfileDetailUiState(
     val isLoading: Boolean = false,
     val profile: Profile? = null,
     val skills: List<UserSkill> = emptyList(),
+    val hasValidPair: Boolean = false,
+    val isOwnProfile: Boolean = false,
+    val noValidPairReason: String? = null,
     val error: String? = null
 )
 
@@ -34,7 +39,8 @@ sealed class ProfileDetailEffect {
 class ProfileDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val profileRepository: IProfileRepository,
-    private val skillRepository: ISkillRepository
+    private val skillRepository: ISkillRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
@@ -63,21 +69,51 @@ class ProfileDetailViewModel(
     }
 
     fun loadUserProfile(userId: String) {
+        val currentUserId = tokenManager.getUserId()
+        val isOwn = currentUserId == userId
+
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
+            _state.update { it.copy(isLoading = true, error = null, isOwnProfile = isOwn) }
 
-            launch {
-                profileRepository.getUserProfile(userId)
-                    .onSuccess { p -> _state.update { it.copy(profile = p) } }
-                    .onFailure { e -> _state.update { it.copy(error = e.message ?: "Lỗi tải hồ sơ") } }
+            val profileRes = profileRepository.getUserProfile(userId)
+            val profile = profileRes.getOrNull()
+
+            val targetSkillsRes = skillRepository.getUserSkills(userId)
+            val targetSkills = targetSkillsRes.getOrDefault(emptyList())
+
+            val mySkillsRes = skillRepository.getUserSkills("me")
+            val mySkills = mySkillsRes.getOrDefault(emptyList())
+
+            val myHaves = mySkills.filter { it.type == SkillType.HAVE }
+            val myWants = mySkills.filter { it.type == SkillType.WANT }
+            val targetHaves = targetSkills.filter { it.type == SkillType.HAVE }
+            val targetWants = targetSkills.filter { it.type == SkillType.WANT }
+
+            val validTeach = myHaves.any { have ->
+                val want = targetWants.find { it.skillId == have.skillId }
+                want != null && have.proficiencyLevel >= want.proficiencyLevel
+            }
+            val validLearn = targetHaves.any { have ->
+                val want = myWants.find { it.skillId == have.skillId }
+                want != null && have.proficiencyLevel >= want.proficiencyLevel
+            }
+            val hasValidPair = !isOwn && validTeach && validLearn
+            val reason = when {
+                isOwn -> "Đây là hồ sơ cá nhân của bạn"
+                !hasValidPair -> "Chưa có cặp kỹ năng phù hợp hai chiều để trao đổi"
+                else -> null
             }
 
-            launch {
-                skillRepository.getUserSkills(userId)
-                    .onSuccess { s -> _state.update { it.copy(skills = s) } }
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    profile = profile,
+                    skills = targetSkills,
+                    hasValidPair = hasValidPair,
+                    noValidPairReason = reason,
+                    error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
+                )
             }
-
-            _state.update { it.copy(isLoading = false) }
         }
     }
 }

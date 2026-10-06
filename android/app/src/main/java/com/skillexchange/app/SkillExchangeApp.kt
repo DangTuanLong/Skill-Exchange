@@ -15,5 +15,6 @@ class SkillExchangeApp : Application() {
             androidContext(this@SkillExchangeApp)
             modules(appModule)
         }
+        registerActivityLifecycleCallbacks(com.skillexchange.app.core.notification.AppLifecycleTracker)
     }
 }

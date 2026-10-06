@@ -13,6 +13,8 @@ tmp.md
 
 local.properties
 google-services.json
+firebase-service-account.json
+*firebase*.json
 keystore.properties
 *.jks
 *.keystore

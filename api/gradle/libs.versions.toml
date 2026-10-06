@@ -1,0 +1,5 @@
+[versions]
+googleAuth = "1.54.0"
+
+[libraries]
+google-auth-oauth2-http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleAuth" }

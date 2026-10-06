@@ -71,10 +71,16 @@ class SkillRemoteDataSource(private val httpClient: HttpClient) {
     suspend fun getCategories(): SkillCategoryResponseDto =
         httpClient.get("${Constants.BASE_URL}/api/skills/categories").body()
 
-    suspend fun getUserSkills(accessToken: String): UserSkillResponseDto =
-        httpClient.get("${Constants.BASE_URL}/api/skills/user") {
+    suspend fun getUserSkills(accessToken: String, userId: String? = null): UserSkillResponseDto {
+        val url = if (userId != null && userId.isNotBlank() && userId != "me") {
+            "${Constants.BASE_URL}/api/skills/user/$userId"
+        } else {
+            "${Constants.BASE_URL}/api/skills/user"
+        }
+        return httpClient.get(url) {
             headers { append("Authorization", "Bearer $accessToken") }
         }.body()
+    }
 
     suspend fun addUserSkill(accessToken: String, dto: AddUserSkillDto): AddUserSkillResponseDto =
         httpClient.post("${Constants.BASE_URL}/api/skills/user") {

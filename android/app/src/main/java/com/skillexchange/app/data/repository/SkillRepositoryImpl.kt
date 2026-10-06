@@ -27,7 +27,7 @@ class SkillRepositoryImpl(
 
     override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> = runCatching {
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
-        remoteDataSource.getUserSkills(token).data.map {
+        remoteDataSource.getUserSkills(token, userId).data.map {
             UserSkill(
                 id = it.id ?: "",
                 skillId = it.skillId,

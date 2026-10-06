@@ -1,0 +1,28 @@
+package com.skillexchange.app.core.notification
+
+import android.app.Activity
+import android.app.Application
+import android.os.Bundle
+import java.util.concurrent.atomic.AtomicInteger
+
+object AppLifecycleTracker : Application.ActivityLifecycleCallbacks {
+
+    private val resumedActivities = AtomicInteger(0)
+
+    val isForeground: Boolean
+        get() = resumedActivities.get() > 0
+
+    override fun onActivityResumed(activity: Activity) {
+        resumedActivities.incrementAndGet()
+    }
+
+    override fun onActivityPaused(activity: Activity) {
+        resumedActivities.decrementAndGet()
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+    override fun onActivityStarted(activity: Activity) {}
+    override fun onActivityStopped(activity: Activity) {}
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+    override fun onActivityDestroyed(activity: Activity) {}
+}

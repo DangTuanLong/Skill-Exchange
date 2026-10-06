@@ -125,34 +125,50 @@ CREATE INDEX idx_user_skills_type_skill ON user_skills(type, skill_id, proficien
 CREATE INDEX idx_user_skills_user_type  ON user_skills(user_id, type);                      -- TASK-020 (matching profile)
 
 -- ============================================================
--- 5. EXCHANGE REQUESTS [PLANNED — TASK-021]
+-- 5. EXCHANGE REQUESTS [IMPLEMENTED — TASK-021]
 -- Q2: sender_completed_at + receiver_completed_at thay cho completed_at đơn.
 --     COMPLETED do application logic, không dùng trigger.
 -- ============================================================
-CREATE TYPE exchange_status AS ENUM (
-    'PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED', 'CANCELLED'
-);
+DO $$ BEGIN
+    CREATE TYPE exchange_status AS ENUM (
+        'PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED', 'CANCELLED'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TABLE exchange_requests (
+DO $$ BEGIN
+    CREATE TYPE meeting_mode AS ENUM (
+        'ONLINE', 'IN_PERSON', 'UNDECIDED'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS exchange_requests (
     id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sender_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     receiver_id           UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    skill_offered_id      INT  REFERENCES skills(id),
-    skill_wanted_id       INT  REFERENCES skills(id),
-    status                exchange_status DEFAULT 'PENDING',
+    skill_offered_id      INT  NOT NULL REFERENCES skills(id),
+    skill_wanted_id       INT  NOT NULL REFERENCES skills(id),
+    status                VARCHAR(20) NOT NULL DEFAULT 'PENDING' CONSTRAINT exchange_requests_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED', 'CANCELLED')),
+    duration_minutes      INT NOT NULL DEFAULT 60 CONSTRAINT exchange_requests_duration_check CHECK (duration_minutes IN (30, 60, 90, 120)),
+    meeting_mode          VARCHAR(20) NOT NULL DEFAULT 'UNDECIDED' CONSTRAINT exchange_requests_meeting_mode_check CHECK (meeting_mode IN ('ONLINE', 'IN_PERSON', 'UNDECIDED')),
     message               TEXT,
-    scheduled_at          TIMESTAMPTZ,
+    cancellation_reason   TEXT,
+    scheduled_at          TIMESTAMPTZ NOT NULL,
     sender_completed_at   TIMESTAMPTZ,     -- sender xác nhận hoàn thành
     receiver_completed_at TIMESTAMPTZ,     -- receiver xác nhận hoàn thành
     created_at            TIMESTAMPTZ DEFAULT NOW(),
     updated_at            TIMESTAMPTZ DEFAULT NOW(),
-    CHECK (sender_id <> receiver_id)
+    CONSTRAINT exchange_requests_diff_users CHECK (sender_id <> receiver_id)
 );
 
-CREATE INDEX idx_exchange_sender   ON exchange_requests(sender_id, status);
-CREATE INDEX idx_exchange_receiver ON exchange_requests(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_exchange_sender   ON exchange_requests(sender_id, status);
+CREATE INDEX IF NOT EXISTS idx_exchange_receiver ON exchange_requests(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_exchange_scheduled ON exchange_requests(scheduled_at);
 
-CREATE TRIGGER set_exchange_updated_at
+CREATE OR REPLACE TRIGGER set_exchange_updated_at
     BEFORE UPDATE ON exchange_requests
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
@@ -218,7 +234,7 @@ CREATE INDEX idx_notifications_user   ON notifications(user_id);
 CREATE INDEX idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
 
 -- ============================================================
--- 9. FCM TOKENS [PLANNED — TASK-023]
+-- 9. FCM TOKENS [IMPLEMENTED — TASK-023]
 -- ============================================================
 CREATE TABLE fcm_tokens (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

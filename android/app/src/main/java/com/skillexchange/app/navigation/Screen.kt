@@ -30,6 +30,9 @@ sealed class Screen(val route: String) {
     data object BookingRequest : Screen("booking_request/{receiverId}") {
         fun createRoute(receiverId: String) = "booking_request/$receiverId"
     }
+    data object BookingDetail : Screen("booking_detail/{exchangeId}") {
+        fun createRoute(exchangeId: String) = "booking_detail/$exchangeId"
+    }
     data object BookingList : Screen("booking_list")
 
     // Chat

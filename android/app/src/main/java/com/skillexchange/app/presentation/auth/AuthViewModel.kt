@@ -27,6 +27,7 @@ sealed class AuthEffect {
     data class NavigateToOtp(val email: String) : AuthEffect()
     object NavigateToHome : AuthEffect()
     object NavigateToProfileSetup : AuthEffect()
+    object NavigateToLogin : AuthEffect()
     data class ShowError(val message: String) : AuthEffect()
 }
 
@@ -41,13 +42,15 @@ sealed class AuthIntent {
     object SubmitRegister : AuthIntent()
     data class SubmitOtp(val email: String) : AuthIntent()
     object ClearError : AuthIntent()
+    object Logout : AuthIntent()
 }
 
 class AuthViewModel(
     private val authRepository: IAuthRepository,
     private val tokenManager: com.skillexchange.app.core.security.TokenManager,
     private val profileRepository: com.skillexchange.app.domain.repository.IProfileRepository? = null,
-    private val skillRepository: com.skillexchange.app.domain.repository.ISkillRepository? = null
+    private val skillRepository: com.skillexchange.app.domain.repository.ISkillRepository? = null,
+    private val fcmTokenManager: com.skillexchange.app.core.notification.FcmTokenManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthUiState())
@@ -70,6 +73,7 @@ class AuthViewModel(
             is AuthIntent.SubmitLogin         -> login()
             is AuthIntent.SubmitRegister      -> register()
             is AuthIntent.SubmitOtp           -> verifyOtp(intent.email)
+            is AuthIntent.Logout              -> logout()
         }
     }
 
@@ -84,11 +88,24 @@ class AuthViewModel(
             authRepository.login(s.email.trim(), s.password)
                 .onSuccess { session ->
                     tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
+                    try {
+                        fcmTokenManager?.syncCurrentToken()
+                    } catch (_: Exception) {}
                     checkProfileCompletionAndNavigate()
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "Đăng nhập thất bại") }
                 }
+        }
+    }
+
+    private fun logout() {
+        viewModelScope.launch {
+            try {
+                fcmTokenManager?.unregisterCurrentToken()
+            } catch (_: Exception) {}
+            tokenManager.clearSession()
+            _effect.send(AuthEffect.NavigateToLogin)
         }
     }
 
@@ -126,6 +143,9 @@ class AuthViewModel(
             authRepository.verifyOtp(email, otp)
                 .onSuccess { session ->
                     tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
+                    try {
+                        fcmTokenManager?.syncCurrentToken()
+                    } catch (_: Exception) {}
                     checkProfileCompletionAndNavigate()
                 }
                 .onFailure { e ->

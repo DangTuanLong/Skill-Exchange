@@ -66,6 +66,7 @@ class AuthViewModelTest {
                 availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
             ): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = fullName))
+            override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> = error("Not used")
         }
 
         val completeSkillRepo = object : ISkillRepository {
@@ -105,6 +106,7 @@ class AuthViewModelTest {
                 availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
             ): Result<Profile> =
                 Result.success(Profile("p1", "u1", fullName = fullName))
+            override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> = error("Not used")
         }
 
 

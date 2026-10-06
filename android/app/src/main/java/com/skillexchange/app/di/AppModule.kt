@@ -18,6 +18,9 @@ import com.skillexchange.app.domain.repository.IDiscoveryRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
 import com.skillexchange.app.presentation.auth.AuthViewModel
+import com.skillexchange.app.presentation.booking.detail.BookingDetailViewModel
+import com.skillexchange.app.presentation.booking.list.BookingListViewModel
+import com.skillexchange.app.presentation.booking.request.BookingRequestViewModel
 import com.skillexchange.app.presentation.discovery.DiscoveryViewModel
 import com.skillexchange.app.presentation.profile.ProfileDetailViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
@@ -63,4 +66,20 @@ val appModule = module {
     single { DiscoveryRemoteDataSource(get()) }
     single<IDiscoveryRepository> { DiscoveryRepositoryImpl(get()) }
     viewModelOf(::DiscoveryViewModel)
+
+    // ── Exchange / Booking ───────────────────────────────────────────
+    single { com.skillexchange.app.data.remote.exchange.ExchangeRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IExchangeRepository> {
+        com.skillexchange.app.data.repository.ExchangeRepositoryImpl(get())
+    }
+    viewModelOf(::BookingRequestViewModel)
+    viewModelOf(::BookingDetailViewModel)
+    viewModelOf(::BookingListViewModel)
+
+    // ── Device & FCM Push ─────────────────────────────────────────────
+    single { com.skillexchange.app.data.remote.device.DeviceRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IDeviceRepository> {
+        com.skillexchange.app.data.repository.DeviceRepositoryImpl(get())
+    }
+    single { com.skillexchange.app.core.notification.FcmTokenManager(get(), get()) }
 }
