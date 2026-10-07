@@ -66,6 +66,13 @@ data class AddUserSkillResponseDto(
     val message: String? = null
 )
 
+@Serializable
+data class DeleteUserSkillResponseDto(
+    val success: Boolean,
+    val data: String? = null,
+    val message: String? = null
+)
+
 class SkillRemoteDataSource(private val httpClient: HttpClient) {
 
     suspend fun getCategories(): SkillCategoryResponseDto =
@@ -89,7 +96,7 @@ class SkillRemoteDataSource(private val httpClient: HttpClient) {
             setBody(dto)
         }.body()
 
-    suspend fun removeUserSkill(accessToken: String, userSkillId: String): Map<String, Boolean> =
+    suspend fun removeUserSkill(accessToken: String, userSkillId: String): DeleteUserSkillResponseDto =
         httpClient.delete("${Constants.BASE_URL}/api/skills/user/$userSkillId") {
             headers { append("Authorization", "Bearer $accessToken") }
         }.body()

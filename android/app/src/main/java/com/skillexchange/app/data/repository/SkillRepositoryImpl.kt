@@ -57,6 +57,10 @@ class SkillRepositoryImpl(
 
     override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = runCatching {
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
-        remoteDataSource.removeUserSkill(token, userSkillId)["success"] ?: false
+        val res = remoteDataSource.removeUserSkill(token, userSkillId)
+        if (!res.success) {
+            error(res.message ?: "Không thể xóa kỹ năng")
+        }
+        true
     }
 }

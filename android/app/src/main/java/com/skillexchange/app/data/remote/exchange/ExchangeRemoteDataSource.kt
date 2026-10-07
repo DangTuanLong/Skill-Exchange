@@ -20,8 +20,8 @@ class ExchangeRemoteDataSource(private val client: HttpClient) {
             val body = response.body<ApiWrapper<T>>()
             return body.data ?: throw Exception(body.message ?: "Dữ liệu trả về rỗng")
         } else {
-            val errorBody = runCatching { response.body<ApiWrapper<Unit>>() }.getOrNull()
-            throw Exception(errorBody?.message ?: "Lỗi máy chủ (${response.status.value})")
+            val errorBody = runCatching { response.body<com.skillexchange.app.core.network.ApiErrorDto>() }.getOrNull()
+            throw com.skillexchange.app.core.network.ApiException.fromResponse(response.status.value, errorBody)
         }
     }
 

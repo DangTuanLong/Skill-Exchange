@@ -89,6 +89,22 @@ class AuthRoutesTest {
     }
 
     @Test
+    fun `POST login with invalid credentials returns 401 Unauthorized with unified ApiError`() {
+        io.mockk.coEvery { mockAuthService.login("wrong@example.com", "wrongpass") } throws RuntimeException("Invalid credentials")
+        testAuthApp { client ->
+            val response = client.post("/api/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"wrong@example.com","password":"wrongpass"}""")
+            }
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"code\":\"UNAUTHORIZED\""))
+            assertTrue(body.contains("\"status\":401"))
+            assertTrue(body.contains("\"message\":\"Email hoặc mật khẩu không đúng\""))
+        }
+    }
+
+    @Test
     fun `POST verify-otp with invalid token length returns 400 Bad Request`() = testAuthApp { client ->
         val response = client.post("/api/auth/verify-otp") {
             contentType(ContentType.Application.Json)

@@ -3,7 +3,6 @@ package com.skillexchange.api.routes
 import com.skillexchange.api.models.skill.AddUserSkillRequest
 import com.skillexchange.api.plugins.getUserId
 import com.skillexchange.api.services.SkillService
-import com.skillexchange.api.services.UserService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -14,28 +13,13 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
-fun Route.skillRoutes(skillService: SkillService, userService: UserService) {
+fun Route.skillRoutes(skillService: SkillService) {
     route("/api/skills") {
 
         // GET /api/skills/categories - public
         get("/categories") {
             val categories = skillService.getCategories()
             call.respond(HttpStatusCode.OK, ApiSuccess(data = categories))
-        }
-
-        // GET /api/skills/search - public/authenticated user search
-        get("/search") {
-            val query        = call.request.queryParameters["q"]
-            val categoryId   = call.request.queryParameters["category"]?.toIntOrNull()
-            val city         = call.request.queryParameters["city"]
-            val minLevel     = call.request.queryParameters["minProficiency"]?.toIntOrNull()
-                ?: call.request.queryParameters["minLevel"]?.toIntOrNull()
-            val type         = call.request.queryParameters["type"]
-            val limit        = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 50) ?: 20
-            val offset       = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
-
-            val results = userService.searchUsers(query, categoryId, city, minLevel, type, limit, offset)
-            call.respond(HttpStatusCode.OK, ApiSuccess(data = results))
         }
 
         // GET /api/skills?category=1

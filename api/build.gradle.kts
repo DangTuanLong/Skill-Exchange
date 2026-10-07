@@ -103,3 +103,38 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.2.10")
     testImplementation("io.mockk:mockk:1.13.12")
 }
+
+sourceSets {
+    val main = getByName("main")
+    val seed = create("seed") {
+        compileClasspath += main.output
+        runtimeClasspath += main.output
+    }
+    getByName("test") {
+        compileClasspath += seed.output
+        runtimeClasspath += seed.output
+    }
+}
+
+configurations {
+    named("seedCompileClasspath") {
+        extendsFrom(named("compileClasspath").get())
+    }
+    named("seedRuntimeClasspath") {
+        extendsFrom(named("runtimeClasspath").get())
+    }
+}
+
+tasks.register<JavaExec>("seedDemoData") {
+    group = "demo"
+    description = "Seeds 40 demo users (5 scenario + 35 random) via Supabase Admin API and Database (TASK-013)"
+    classpath = sourceSets["seed"].runtimeClasspath
+    mainClass.set("com.skillexchange.api.seed.SeedDemoDataRunnerKt")
+}
+
+tasks.register<JavaExec>("cleanDemoData") {
+    group = "demo"
+    description = "Cleans up all demo users with @seed.skillexchange.test domain (TASK-013)"
+    classpath = sourceSets["seed"].runtimeClasspath
+    mainClass.set("com.skillexchange.api.seed.CleanDemoDataRunnerKt")
+}

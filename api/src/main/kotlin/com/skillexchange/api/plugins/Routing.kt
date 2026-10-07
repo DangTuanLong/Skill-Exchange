@@ -35,7 +35,7 @@ fun Application.configureRouting() {
         healthRoutes()
         authRoutes(authService)
         profileRoutes(profileService, avatarStorageService, rateLimiter)
-        skillRoutes(skillService, userService)
+        skillRoutes(skillService)
         userRoutes(userService)
         matchingRoutes(matchingService)
         exchangeRoutes(exchangeService)

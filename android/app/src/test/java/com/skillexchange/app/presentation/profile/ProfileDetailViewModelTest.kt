@@ -126,4 +126,140 @@ class ProfileDetailViewModelTest {
         assertEquals("target_user_123", (effectReceived as ProfileDetailEffect.NavigateToBooking).receiverId)
         job.cancel()
     }
+
+    @Test
+    fun `one-way match potential detects suggestedSkills when user teaches what other needs`() = runTest {
+        // My skills: HAVE Python Lv4, but NO Tiếng Anh in WANT
+        val mySkills = mutableListOf(
+            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+        )
+        // Target skills: WANT Python Lv3 (I can teach), HAVE Tiếng Anh Lv3 (target can teach)
+        val targetSkills = mutableListOf(
+            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
+            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+        )
+
+        val customSkillRepo = object : ISkillRepository {
+            override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(emptyList())
+            override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> {
+                return if (userId == "me" || userId == "my_user_id") Result.success(mySkills)
+                else Result.success(targetSkills)
+            }
+            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> = error("Not used")
+            override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse("Chưa hợp lệ 2 chiều", state.hasValidPair)
+        assertEquals(1, state.suggestedSkills.size)
+        assertEquals("Tiếng Anh", state.suggestedSkill?.skillName)
+        assertNull("noValidPairReason ẩn đi để nhường chỗ cho banner gợi ý", state.noValidPairReason)
+    }
+
+    @Test
+    fun `AddSuggestedSkillAndMatch intent adds skill and updates state to valid pair`() = runTest {
+        val mySkills = mutableListOf(
+            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+        )
+        val targetSkills = mutableListOf(
+            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
+            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+        )
+
+        val customSkillRepo = object : ISkillRepository {
+            override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(emptyList())
+            override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> {
+                return if (userId == "me" || userId == "my_user_id") Result.success(mySkills.toList())
+                else Result.success(targetSkills.toList())
+            }
+            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> {
+                val newSkill = UserSkill(
+                    id = "my_new_want",
+                    skillId = skillId,
+                    skillName = "Tiếng Anh",
+                    categoryName = "Ngoại ngữ",
+                    type = SkillType.WANT,
+                    proficiencyLevel = proficiencyLevel
+                )
+                mySkills.add(newSkill)
+                return Result.success(newSkill)
+            }
+            override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.hasValidPair)
+        val skillToSuggest = viewModel.state.value.suggestedSkill
+        assertNotNull(skillToSuggest)
+
+        var snackbarMsg: String? = null
+        val job = launch {
+            viewModel.effect.collect { effect ->
+                if (effect is ProfileDetailEffect.ShowSnackbar) {
+                    snackbarMsg = effect.message
+                }
+            }
+        }
+
+        viewModel.onIntent(ProfileDetailIntent.AddSuggestedSkillAndMatch(skillToSuggest!!))
+        advanceUntilIdle()
+
+        val updatedState = viewModel.state.value
+        assertTrue("Sau khi 1-tap thêm WANT, cặp kỹ năng phải trở thành hợp lệ", updatedState.hasValidPair)
+        assertTrue(updatedState.suggestedSkills.isEmpty())
+        assertFalse(updatedState.isAddingSkill)
+        assertEquals("Đã thêm \"Tiếng Anh\" vào danh sách muốn học!", snackbarMsg)
+        job.cancel()
+    }
+
+    @Test
+    fun `AddSuggestedSkillAndMatch failure sends error snackbar and resets isAddingSkill`() = runTest {
+        val mySkills = mutableListOf(
+            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+        )
+        val targetSkills = mutableListOf(
+            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
+            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+        )
+
+        val customSkillRepo = object : ISkillRepository {
+            override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(emptyList())
+            override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> {
+                return if (userId == "me" || userId == "my_user_id") Result.success(mySkills.toList())
+                else Result.success(targetSkills.toList())
+            }
+            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> {
+                return Result.failure(Exception("Lỗi mạng"))
+            }
+            override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        advanceUntilIdle()
+
+        val skillToSuggest = viewModel.state.value.suggestedSkill!!
+        var snackbarMsg: String? = null
+        val job = launch {
+            viewModel.effect.collect { effect ->
+                if (effect is ProfileDetailEffect.ShowSnackbar) {
+                    snackbarMsg = effect.message
+                }
+            }
+        }
+
+        viewModel.onIntent(ProfileDetailIntent.AddSuggestedSkillAndMatch(skillToSuggest))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isAddingSkill)
+        assertEquals("Lỗi mạng", snackbarMsg)
+        job.cancel()
+    }
 }

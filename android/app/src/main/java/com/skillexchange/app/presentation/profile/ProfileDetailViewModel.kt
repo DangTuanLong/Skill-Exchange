@@ -18,17 +18,23 @@ import kotlinx.coroutines.launch
 
 data class ProfileDetailUiState(
     val isLoading: Boolean = false,
+    val isAddingSkill: Boolean = false,
     val profile: Profile? = null,
     val skills: List<UserSkill> = emptyList(),
     val hasValidPair: Boolean = false,
     val isOwnProfile: Boolean = false,
     val noValidPairReason: String? = null,
+    val suggestedSkills: List<UserSkill> = emptyList(),
     val error: String? = null
-)
+) {
+    val suggestedSkill: UserSkill?
+        get() = suggestedSkills.firstOrNull()
+}
 
 sealed class ProfileDetailIntent {
     data class LoadUserProfile(val userId: String) : ProfileDetailIntent()
     object RequestExchange : ProfileDetailIntent()
+    data class AddSuggestedSkillAndMatch(val skill: UserSkill) : ProfileDetailIntent()
 }
 
 sealed class ProfileDetailEffect {
@@ -65,6 +71,24 @@ class ProfileDetailViewModel(
                     }
                 }
             }
+            is ProfileDetailIntent.AddSuggestedSkillAndMatch -> addSuggestedSkill(intent.skill)
+        }
+    }
+
+    private fun addSuggestedSkill(skill: UserSkill) {
+        val userId = targetUserId ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(isAddingSkill = true) }
+            val targetLevel = skill.proficiencyLevel.coerceIn(1, 5)
+            skillRepository.addUserSkill(skill.skillId, "WANT", targetLevel, null)
+                .onSuccess {
+                    _effect.send(ProfileDetailEffect.ShowSnackbar("Đã thêm \"${skill.skillName}\" vào danh sách muốn học!"))
+                    loadUserProfile(userId)
+                }
+                .onFailure { err ->
+                    _state.update { it.copy(isAddingSkill = false) }
+                    _effect.send(ProfileDetailEffect.ShowSnackbar(err.message ?: "Không thể thêm kỹ năng"))
+                }
         }
     }
 
@@ -98,8 +122,19 @@ class ProfileDetailViewModel(
                 want != null && have.proficiencyLevel >= want.proficiencyLevel
             }
             val hasValidPair = !isOwn && validTeach && validLearn
+
+            // Tiềm năng 1 chiều: Mình dạy được cho đối phương, nhưng đối phương dạy kỹ năng mình chưa có trong WANT
+            val suggestedSkills = if (!isOwn && validTeach && !validLearn) {
+                targetHaves.filter { targetHave ->
+                    myWants.none { myWant -> myWant.skillId == targetHave.skillId }
+                }
+            } else {
+                emptyList()
+            }
+
             val reason = when {
                 isOwn -> "Đây là hồ sơ cá nhân của bạn"
+                !hasValidPair && suggestedSkills.isNotEmpty() -> null
                 !hasValidPair -> "Chưa có cặp kỹ năng phù hợp hai chiều để trao đổi"
                 else -> null
             }
@@ -107,10 +142,12 @@ class ProfileDetailViewModel(
             _state.update {
                 it.copy(
                     isLoading = false,
+                    isAddingSkill = false,
                     profile = profile,
                     skills = targetSkills,
                     hasValidPair = hasValidPair,
                     noValidPairReason = reason,
+                    suggestedSkills = suggestedSkills,
                     error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
                 )
             }

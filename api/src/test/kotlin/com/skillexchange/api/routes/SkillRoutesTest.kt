@@ -6,7 +6,6 @@ import com.skillexchange.api.models.skill.UserSkillDto
 import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
 import com.skillexchange.api.services.SkillService
-import com.skillexchange.api.services.UserService
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -34,7 +33,6 @@ import kotlin.test.assertTrue
 class SkillRoutesTest {
 
     private val mockSkillService = mockk<SkillService>(relaxed = true)
-    private val mockUserService = mockk<UserService>(relaxed = true)
 
     private fun createTestJwt(): String {
         return JWT.create()
@@ -58,7 +56,7 @@ class SkillRoutesTest {
             }
         }
         routing {
-            skillRoutes(mockSkillService, mockUserService)
+            skillRoutes(mockSkillService)
         }
     }
 
@@ -196,87 +194,5 @@ class SkillRoutesTest {
         }
 
         assertEquals(HttpStatusCode.Created, response.status)
-    }
-
-    @Test
-    fun `GET skills search clamps limit 0 up to 1`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), any(), any(), 1, any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response = client.get("/api/skills/search?limit=0")
-        assertEquals(HttpStatusCode.OK, response.status)
-        verify { mockUserService.searchUsers(null, null, null, null, null, 1, 0) }
-    }
-
-    @Test
-    fun `GET skills search limit 1 passes 1`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), any(), any(), 1, any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response = client.get("/api/skills/search?limit=1")
-        assertEquals(HttpStatusCode.OK, response.status)
-        verify { mockUserService.searchUsers(null, null, null, null, null, 1, 0) }
-    }
-
-    @Test
-    fun `GET skills search limit 50 passes 50`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), any(), any(), 50, any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response = client.get("/api/skills/search?limit=50")
-        assertEquals(HttpStatusCode.OK, response.status)
-        verify { mockUserService.searchUsers(null, null, null, null, null, 50, 0) }
-    }
-
-    @Test
-    fun `GET skills search clamps limit 51 down to 50`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), any(), any(), 50, any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response = client.get("/api/skills/search?limit=51")
-        assertEquals(HttpStatusCode.OK, response.status)
-        verify { mockUserService.searchUsers(null, null, null, null, null, 50, 0) }
-    }
-
-    @Test
-    fun `GET skills search clamps limit 1000 down to 50`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), any(), any(), 50, any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response = client.get("/api/skills/search?limit=1000")
-        assertEquals(HttpStatusCode.OK, response.status)
-        verify { mockUserService.searchUsers(null, null, null, null, null, 50, 0) }
-    }
-
-    @Test
-    fun `GET skills search supports minProficiency and legacy minLevel alias`() = testApplication {
-        every { mockUserService.searchUsers(any(), any(), any(), 4, any(), any(), any()) } returns emptyList()
-
-        application {
-            setupSkillTestModule()
-        }
-
-        val response1 = client.get("/api/skills/search?minProficiency=4")
-        assertEquals(HttpStatusCode.OK, response1.status)
-
-        val response2 = client.get("/api/skills/search?minLevel=4")
-        assertEquals(HttpStatusCode.OK, response2.status)
-
-        verify(exactly = 2) { mockUserService.searchUsers(null, null, null, 4, null, 20, 0) }
     }
 }

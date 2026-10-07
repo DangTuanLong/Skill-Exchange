@@ -1,5 +1,6 @@
 package com.skillexchange.app.presentation.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -126,6 +127,78 @@ fun ProfileDetailScreen(
                                     }
                                 }
                             }
+                        } else if (!state.hasValidPair && state.suggestedSkill != null) {
+                            val suggested = state.suggestedSkill!!
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = Color(0xFF16A34A),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Gợi ý kết nối 1 chạm ✨",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF15803D)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "${state.profile?.fullName ?: "Đối phương"} có thể dạy \"${suggested.skillName}\". Bạn có muốn thêm vào danh sách muốn học để kết nối ngay không?",
+                                        fontSize = 12.sp,
+                                        color = TextPrimaryLight,
+                                        lineHeight = 17.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { viewModel.onIntent(ProfileDetailIntent.AddSuggestedSkillAndMatch(suggested)) },
+                                        enabled = !state.isAddingSkill,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(42.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                                    ) {
+                                        if (state.isAddingSkill) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "+ Thêm \"${suggested.skillName}\" & Kết nối",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Quản lý kỹ năng của tôi →",
+                                fontSize = 12.sp,
+                                color = Brand500,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable { onNavigateToSkillSelection() }
+                                    .padding(vertical = 2.dp)
+                            )
                         } else {
                             // Không có cặp hợp lệ: Disable CTA kèm lý do và link cập nhật kỹ năng
                             Button(

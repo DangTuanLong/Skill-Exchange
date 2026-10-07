@@ -35,7 +35,9 @@ data class ApiWrapper<T>(
     val success: Boolean = true,
     val data: T? = null,
     val message: String? = null,
-    val code: Int? = null
+    val status: Int? = null,
+    @Serializable(with = com.skillexchange.app.core.network.LenientCodeSerializer::class)
+    val code: String? = null
 )
 
 @Serializable

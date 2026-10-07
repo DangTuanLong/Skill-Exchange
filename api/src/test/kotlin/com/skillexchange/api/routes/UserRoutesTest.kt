@@ -123,6 +123,33 @@ class UserRoutesTest {
     }
 
     @Test
+    fun `GET users search supports minProficiency and maxProficiency standard parameters`() = testApplication {
+        every {
+            mockUserService.searchUsersWithCursor(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns UserSearchResultDto(items = emptyList(), nextCursor = null)
+
+        setupUserRoutesModule()
+
+        val response = client.get("/api/users/search?minProficiency=2&maxProficiency=4")
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        verify {
+            mockUserService.searchUsersWithCursor(
+                query = null,
+                categoryIds = emptyList(),
+                city = null,
+                minProficiency = 2,
+                maxProficiency = 4,
+                type = null,
+                limit = 20,
+                lastId = null,
+                offset = 0,
+                excludeUserId = null
+            )
+        }
+    }
+
+    @Test
     fun `GET users search returns items and nextCursor`() = testApplication {
         val sampleUser = UserSearchDto(
             userId = "u-456",

@@ -251,6 +251,9 @@ class ProfileViewModel(
                     _state.update { it.copy(mySkills = updatedSkills, selectedSkillIdForEdit = nextEditId) }
                     checkAndUpdateProfileCompletion()
                 }
+                .onFailure { error ->
+                    _effect.send(ProfileEffect.ShowSnackbar(error.message ?: "Không thể xóa kỹ năng"))
+                }
         }
     }
 

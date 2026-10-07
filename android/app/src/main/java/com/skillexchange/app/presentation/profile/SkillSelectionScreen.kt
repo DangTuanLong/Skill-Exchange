@@ -261,19 +261,15 @@ private fun UserSkillChip(
                 Spacer(modifier = Modifier.width(2.dp))
             }
         }
-        Spacer(modifier = Modifier.width(6.dp))
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable { onRemove() },
-            contentAlignment = Alignment.Center
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(36.dp)
         ) {
             Icon(
                 Icons.Default.Close,
                 contentDescription = "Xóa kỹ năng",
                 tint = TextSecondaryLight,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }

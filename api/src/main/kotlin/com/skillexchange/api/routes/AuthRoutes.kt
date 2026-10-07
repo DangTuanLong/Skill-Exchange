@@ -56,18 +56,33 @@ fun Route.authRoutes(authService: AuthService) {
         post("/login") {
             val req = try { call.receive<LoginRequest>() } catch (e: Exception) {
                 return@post call.respond(HttpStatusCode.BadRequest,
-                    RouteApiError(message = "Dữ liệu không hợp lệ", code = 400))
+                    com.skillexchange.api.models.ApiError(
+                        status = 400,
+                        code = com.skillexchange.api.models.ErrorCodes.BAD_REQUEST,
+                        message = "Dữ liệu không hợp lệ"
+                    )
+                )
             }
             if (req.email.isBlank() || req.password.isBlank())
                 return@post call.respond(HttpStatusCode.BadRequest,
-                    RouteApiError(message = "Email và mật khẩu không được để trống", code = 400))
+                    com.skillexchange.api.models.ApiError(
+                        status = 400,
+                        code = com.skillexchange.api.models.ErrorCodes.BAD_REQUEST,
+                        message = "Email và mật khẩu không được để trống"
+                    )
+                )
 
             try {
                 val result = authService.login(req.email.trim(), req.password)
                 call.respond(HttpStatusCode.OK, ApiSuccess(data = result))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.Unauthorized,
-                    RouteApiError(message = e.message ?: "Sai email hoặc mật khẩu", code = 401))
+                    com.skillexchange.api.models.ApiError(
+                        status = 401,
+                        code = com.skillexchange.api.models.ErrorCodes.UNAUTHORIZED,
+                        message = "Email hoặc mật khẩu không đúng"
+                    )
+                )
             }
         }
 
