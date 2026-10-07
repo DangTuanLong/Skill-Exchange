@@ -10,6 +10,7 @@ data class BookingDetailState(
     val currentUserId: String = "",
     val showCancelDialog: Boolean = false,
     val cancelReason: String = "",
+    val hasRated: Boolean = false,
     val error: String? = null
 ) {
     val isSender: Boolean

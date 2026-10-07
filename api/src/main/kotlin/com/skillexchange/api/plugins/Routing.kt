@@ -18,7 +18,9 @@ import io.ktor.server.routing.routing
 import org.koin.ktor.ext.inject
 
 import com.skillexchange.api.routes.deviceRoutes
+import com.skillexchange.api.routes.ratingRoutes
 import com.skillexchange.api.services.device.DeviceService
+import com.skillexchange.api.services.rating.RatingService
 
 fun Application.configureRouting() {
     val authService: AuthService by inject()
@@ -28,6 +30,7 @@ fun Application.configureRouting() {
     val matchingService: MatchingService by inject()
     val exchangeService: ExchangeService by inject()
     val deviceService: DeviceService by inject()
+    val ratingService: RatingService by inject()
     val avatarStorageService: com.skillexchange.api.services.IAvatarStorageService by inject()
     val rateLimiter: com.skillexchange.api.services.InMemoryRateLimiter by inject()
 
@@ -40,5 +43,6 @@ fun Application.configureRouting() {
         matchingRoutes(matchingService)
         exchangeRoutes(exchangeService)
         deviceRoutes(deviceService)
+        ratingRoutes(ratingService)
     }
 }

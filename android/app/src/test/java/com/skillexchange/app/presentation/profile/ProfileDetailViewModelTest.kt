@@ -67,6 +67,37 @@ class ProfileDetailViewModelTest {
         override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
     }
 
+    private val mockRatingRepo = object : com.skillexchange.app.domain.repository.IRatingRepository {
+        override suspend fun createRating(exchangeId: String, score: Int, comment: String?): Result<com.skillexchange.app.domain.model.rating.Rating> = error("Not used")
+        override suspend fun getUserRatings(userId: String): Result<List<com.skillexchange.app.domain.model.rating.Rating>> = Result.success(
+            listOf(
+                com.skillexchange.app.domain.model.rating.Rating(
+                    id = "rat_1",
+                    exchangeId = "ex_1",
+                    reviewerId = "rev_1",
+                    reviewerName = "Reviewer One",
+                    reviewerAvatarUrl = null,
+                    revieweeId = userId,
+                    score = 5,
+                    comment = "Rất tốt!",
+                    createdAt = "2026-10-06T10:00:00Z"
+                )
+            )
+        )
+        override suspend fun getUserReputation(userId: String): Result<com.skillexchange.app.domain.model.rating.Reputation> = Result.success(
+            com.skillexchange.app.domain.model.rating.Reputation(
+                score = 4.8,
+                badge = "Xuất sắc",
+                totalExchanges = 16,
+                completionRate = 1.0,
+                ratingCount = 10,
+                avgRating = 4.9
+            )
+        )
+        override suspend fun getMyExchangeRating(exchangeId: String): Result<com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus> =
+            Result.success(com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus(hasRated = false, rating = null))
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -80,7 +111,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `initialization with userId loads target user profile and skills and checks valid pairs`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -92,12 +123,15 @@ class ProfileDetailViewModelTest {
         assertEquals(2, state.skills.size)
         assertTrue("Cặp kỹ năng phải hợp lệ", state.hasValidPair)
         assertNull(state.noValidPairReason)
+        assertNotNull(state.reputation)
+        assertEquals("Xuất sắc", state.reputation?.badge)
+        assertEquals(1, state.reviews.size)
     }
 
     @Test
     fun `own profile disables exchange and sets own profile reason`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "my_user_id"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -110,7 +144,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `RequestExchange intent sends NavigateToBooking effect`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -150,7 +184,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -192,7 +226,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.hasValidPair)
@@ -242,7 +276,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         val skillToSuggest = viewModel.state.value.suggestedSkill!!
@@ -261,5 +295,20 @@ class ProfileDetailViewModelTest {
         assertFalse(viewModel.state.value.isAddingSkill)
         assertEquals("Lỗi mạng", snackbarMsg)
         job.cancel()
+    }
+
+    @Test
+    fun `OpenAllReviews and DismissAllReviews toggle bottom sheet state`() = runTest {
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
+
+        viewModel.onIntent(ProfileDetailIntent.OpenAllReviews)
+        assertTrue(viewModel.state.value.showAllReviewsBottomSheet)
+
+        viewModel.onIntent(ProfileDetailIntent.DismissAllReviews)
+        assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
     }
 }

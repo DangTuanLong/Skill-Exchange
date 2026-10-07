@@ -34,10 +34,26 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun BookingDetailScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToRating: ((String) -> Unit)? = null,
     viewModel: BookingDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                if (viewModel.exchangeId.isNotBlank()) {
+                    viewModel.loadDetail(viewModel.exchangeId)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
@@ -446,18 +462,51 @@ fun BookingDetailScreen(
                                 }
 
                                 ExchangeStatus.COMPLETED -> {
-                                    // Nút đánh giá (disabled per spec)
-                                    OutlinedButton(
-                                        onClick = { /* Rating mở ở Phase 3 */ },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        enabled = false
-                                    ) {
-                                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Đánh giá ${state.otherPartyName} (Đang phát triển)")
+                                    if (state.hasRated) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(14.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF15803D),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    "Đã đánh giá",
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF15803D),
+                                                    fontSize = 15.sp
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Button(
+                                            onClick = {
+                                                state.exchange?.let { ex ->
+                                                    onNavigateToRating?.invoke(ex.id)
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                                        ) {
+                                            Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Đánh giá ${state.otherPartyName}", fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
 

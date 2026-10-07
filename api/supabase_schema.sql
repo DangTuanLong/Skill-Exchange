@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS exchange_requests (
     message               TEXT,
     cancellation_reason   TEXT,
     scheduled_at          TIMESTAMPTZ NOT NULL,
+    accepted_at           TIMESTAMPTZ,     -- thời điểm chấp nhận yêu cầu (TASK-033)
     sender_completed_at   TIMESTAMPTZ,     -- sender xác nhận hoàn thành
     receiver_completed_at TIMESTAMPTZ,     -- receiver xác nhận hoàn thành
     created_at            TIMESTAMPTZ DEFAULT NOW(),
@@ -174,22 +175,24 @@ CREATE OR REPLACE TRIGGER set_exchange_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
--- 6. RATINGS [PLANNED — TASK-033]
+-- 6. RATINGS [IMPLEMENTED — TASK-033]
+-- Không bật RLS (API là cổng duy nhất).
 -- ============================================================
-CREATE TABLE ratings (
+CREATE TABLE IF NOT EXISTS ratings (
     id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     exchange_id  UUID NOT NULL REFERENCES exchange_requests(id) ON DELETE CASCADE,
     reviewer_id  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     reviewee_id  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     score        INT  NOT NULL CHECK (score BETWEEN 1 AND 5),
-    comment      TEXT CHECK (char_length(comment) <= 200),
-    created_at   TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(exchange_id, reviewer_id),
-    CHECK (reviewer_id <> reviewee_id)
+    comment      VARCHAR(200) CHECK (char_length(comment) <= 200),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_ratings_exchange_reviewer UNIQUE(exchange_id, reviewer_id),
+    CONSTRAINT chk_ratings_different_users CHECK (reviewer_id <> reviewee_id)
 );
 
-CREATE INDEX idx_ratings_exchange ON ratings(exchange_id);
-CREATE INDEX idx_ratings_reviewee ON ratings(reviewee_id);
+CREATE INDEX IF NOT EXISTS idx_ratings_exchange ON ratings(exchange_id);
+CREATE INDEX IF NOT EXISTS idx_ratings_reviewee ON ratings(reviewee_id);
+CREATE INDEX IF NOT EXISTS idx_ratings_reviewer ON ratings(reviewer_id);
 
 -- ============================================================
 -- 7. FRIENDSHIPS [PLANNED — TASK-034]
@@ -258,7 +261,6 @@ CREATE TRIGGER set_fcm_tokens_updated_at
 ALTER TABLE profiles          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_skills       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exchange_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ratings           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fcm_tokens        ENABLE ROW LEVEL SECURITY;
@@ -280,9 +282,7 @@ CREATE POLICY "exchanges_insert" ON exchange_requests
 CREATE POLICY "exchanges_update" ON exchange_requests
     FOR UPDATE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- Ratings: public read, own write
-CREATE POLICY "ratings_select" ON ratings FOR SELECT USING (TRUE);
-CREATE POLICY "ratings_insert" ON ratings FOR INSERT WITH CHECK (auth.uid() = reviewer_id);
+-- Ratings: Không dùng RLS (API là cổng duy nhất, kiểm soát qua code — TASK-033)
 
 -- Notifications: own only
 CREATE POLICY "notifications_all" ON notifications FOR ALL USING (auth.uid() = user_id);

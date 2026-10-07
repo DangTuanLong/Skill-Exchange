@@ -15,7 +15,8 @@ import kotlinx.coroutines.launch
 class BookingDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val exchangeRepository: IExchangeRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository
 ) : ViewModel() {
 
     val exchangeId: String = savedStateHandle["exchangeId"] ?: ""
@@ -58,12 +59,23 @@ class BookingDetailViewModel(
                             currentUserId = tokenManager.getUserId() ?: it.currentUserId
                         )
                     }
+                    if (exchange.status == com.skillexchange.app.domain.model.exchange.ExchangeStatus.COMPLETED) {
+                        checkRatingStatus(targetExchangeId)
+                    }
                 }
                 .onFailure { e ->
                     val errorMsg = e.message ?: "Không thể tải chi tiết yêu cầu"
                     _state.update { it.copy(isLoading = false, error = errorMsg) }
                     _effect.send(BookingDetailEffect.ShowSnackbar(errorMsg))
                 }
+        }
+    }
+
+    private fun checkRatingStatus(targetExchangeId: String) {
+        viewModelScope.launch {
+            ratingRepository.getMyExchangeRating(targetExchangeId).onSuccess { ratingStatus ->
+                _state.update { it.copy(hasRated = ratingStatus.hasRated) }
+            }
         }
     }
 

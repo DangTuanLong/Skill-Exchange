@@ -384,4 +384,61 @@ class ExchangeStateMachineTest {
             )
         }
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. acceptedAt (TASK-033) tests
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `accept - Sets acceptedAt when transitioning from PENDING to ACCEPTED`() {
+        val result = ExchangeStateMachine.accept(
+            currentStatus = ExchangeStatus.PENDING,
+            senderId = senderId,
+            receiverId = receiverId,
+            callerUserId = receiverId,
+            senderCompletedAt = null,
+            receiverCompletedAt = null,
+            cancellationReason = null,
+            now = testTime
+        )
+
+        assertEquals(ExchangeStatus.ACCEPTED, result.newStatus)
+        assertEquals(testTime, result.acceptedAt)
+    }
+
+    @Test
+    fun `cancel - Preserves acceptedAt when cancelled after ACCEPTED`() {
+        val result = ExchangeStateMachine.cancel(
+            currentStatus = ExchangeStatus.ACCEPTED,
+            senderId = senderId,
+            receiverId = receiverId,
+            callerUserId = senderId,
+            reason = "Bận việc đột xuất",
+            senderCompletedAt = null,
+            receiverCompletedAt = null,
+            existingReason = null,
+            currentAcceptedAt = testTime
+        )
+
+        assertEquals(ExchangeStatus.CANCELLED, result.newStatus)
+        assertEquals(testTime, result.acceptedAt)
+    }
+
+    @Test
+    fun `cancel - acceptedAt remains null when cancelled while PENDING`() {
+        val result = ExchangeStateMachine.cancel(
+            currentStatus = ExchangeStatus.PENDING,
+            senderId = senderId,
+            receiverId = receiverId,
+            callerUserId = senderId,
+            reason = "Hủy yêu cầu",
+            senderCompletedAt = null,
+            receiverCompletedAt = null,
+            existingReason = null,
+            currentAcceptedAt = null
+        )
+
+        assertEquals(ExchangeStatus.CANCELLED, result.newStatus)
+        assertNull(result.acceptedAt)
+    }
 }

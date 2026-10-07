@@ -59,10 +59,22 @@ object ExchangeRequestsTable : Table("exchange_requests") {
     val message             = text("message").nullable()
     val cancellationReason  = text("cancellation_reason").nullable()
     val scheduledAt         = datetime("scheduled_at")
+    val acceptedAt          = datetime("accepted_at").nullable()
     val senderCompletedAt   = datetime("sender_completed_at").nullable()
     val receiverCompletedAt = datetime("receiver_completed_at").nullable()
     val createdAt           = datetime("created_at").default(LocalDateTime.now())
     val updatedAt           = datetime("updated_at").default(LocalDateTime.now())
+    override val primaryKey = PrimaryKey(id)
+}
+
+object RatingsTable : Table("ratings") {
+    val id         = uuid("id").autoGenerate()
+    val exchangeId = uuid("exchange_id").references(ExchangeRequestsTable.id)
+    val reviewerId = uuid("reviewer_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val revieweeId = uuid("reviewee_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val score      = integer("score")
+    val comment    = varchar("comment", 200).nullable()
+    val createdAt  = datetime("created_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }
 

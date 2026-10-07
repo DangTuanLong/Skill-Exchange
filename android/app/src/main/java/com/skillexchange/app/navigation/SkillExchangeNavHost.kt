@@ -210,7 +210,10 @@ fun SkillExchangeNavHost(
             arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
         ) {
             com.skillexchange.app.presentation.booking.detail.BookingDetailScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRating = { exchangeId ->
+                    navController.navigate(Screen.Rating.createRoute(exchangeId))
+                }
             )
         }
 
@@ -222,7 +225,13 @@ fun SkillExchangeNavHost(
         composable(
             route = Screen.Rating.route,
             arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
-        ) { PlaceholderScreen("Rating") }
+        ) { backStackEntry ->
+            val exchangeId = backStackEntry.arguments?.getString("exchangeId") ?: ""
+            com.skillexchange.app.presentation.rating.RatingScreen(
+                exchangeId = exchangeId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
 
         composable(Screen.Dashboard.route) { PlaceholderScreen("Dashboard") }
     }

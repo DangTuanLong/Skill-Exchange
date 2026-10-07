@@ -15,6 +15,9 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import com.skillexchange.app.domain.model.rating.Rating
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -325,26 +328,73 @@ fun ProfileDetailScreen(
                             }
 
                             // Reputation / Rating Badge
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(Color(0xFFFEF3C7))
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                            val rep = state.reputation
+                            if (rep == null || rep.ratingCount == 0 || rep.avgRating == null) {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color(0xFFEFF6FF),
+                                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                                ) {
                                     Text(
-                                        text = "4.9 ★ (Thành viên uy tín)",
+                                        text = "🌱 Thành viên mới",
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF92400E)
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Brand600,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Color(0xFFFEF3C7)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = "Rating",
+                                                tint = Color(0xFFD97706),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            val formattedAvg = String.format(java.util.Locale.US, "%.1f", rep.avgRating)
+                                            Text(
+                                                text = "$formattedAvg ★ (${rep.ratingCount} đánh giá)",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF92400E)
+                                            )
+                                        }
+                                    }
+
+                                    if (!rep.badge.isNullOrBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = when (rep.badge) {
+                                                "Xuất sắc" -> Color(0xFFDCFCE7)
+                                                "Đáng tin cậy" -> Color(0xFFE0E7FF)
+                                                else -> Color(0xFFF1F5F9)
+                                            }
+                                        ) {
+                                            Text(
+                                                text = rep.badge,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = when (rep.badge) {
+                                                    "Xuất sắc" -> Color(0xFF15803D)
+                                                    "Đáng tin cậy" -> Color(0xFF4338CA)
+                                                    else -> TextSecondaryLight
+                                                },
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -496,6 +546,55 @@ fun ProfileDetailScreen(
                         }
                     }
 
+                    // Reviews Section
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Đánh giá từ cộng đồng (${state.reviews.size})",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimaryLight
+                                )
+                                if (state.reviews.size > 2) {
+                                    Text(
+                                        text = "Xem tất cả →",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Brand500,
+                                        modifier = Modifier
+                                            .clickable { viewModel.onIntent(ProfileDetailIntent.OpenAllReviews) }
+                                            .padding(vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            if (state.reviews.isEmpty()) {
+                                Text(
+                                    text = "Chưa có đánh giá nào từ cộng đồng.",
+                                    fontSize = 13.sp,
+                                    color = TextSecondaryLight
+                                )
+                            } else {
+                                state.reviews.take(2).forEach { review ->
+                                    ReviewItem(review)
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
 
                 }
@@ -507,6 +606,138 @@ fun ProfileDetailScreen(
                 )
             }
         }
+    }
+
+    if (state.showAllReviewsBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.onIntent(ProfileDetailIntent.DismissAllReviews) },
+            containerColor = Color.White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Tất cả đánh giá (${state.reviews.size})",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimaryLight
+                )
+
+                if (state.reviews.isEmpty()) {
+                    Text(
+                        text = "Chưa có đánh giá nào.",
+                        fontSize = 14.sp,
+                        color = TextSecondaryLight
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 450.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(state.reviews) { review ->
+                            ReviewItem(review)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewItem(review: Rating) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF8FAFC))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE2E8F0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!review.reviewerAvatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = review.reviewerAvatarUrl,
+                            contentDescription = review.reviewerName,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = (review.reviewerName?.take(1) ?: "U").uppercase(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Brand500
+                        )
+                    }
+                }
+
+                Column {
+                    Text(
+                        text = review.reviewerName ?: "Thành viên",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = TextPrimaryLight
+                    )
+                    Text(
+                        text = formatReviewDate(review.createdAt),
+                        fontSize = 11.sp,
+                        color = TextSecondaryLight
+                    )
+                }
+            }
+
+            // Score stars
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                repeat(5) { index ->
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (index < review.score) Color(0xFFF59E0B) else Color(0xFFCBD5E1)
+                    )
+                }
+            }
+        }
+
+        if (!review.comment.isNullOrBlank()) {
+            Text(
+                text = review.comment,
+                fontSize = 13.sp,
+                color = TextPrimaryLight,
+                lineHeight = 18.sp
+            )
+        }
+    }
+}
+
+private fun formatReviewDate(raw: String): String {
+    return try {
+        if (raw.length >= 10) raw.substring(0, 10) else raw
+    } catch (_: Exception) {
+        raw
     }
 }
 

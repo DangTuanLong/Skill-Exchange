@@ -75,9 +75,19 @@ class BookingDetailViewModelTest {
         }
     }
 
+    private var mockHasRated = false
+    private val mockRatingRepo = object : com.skillexchange.app.domain.repository.IRatingRepository {
+        override suspend fun createRating(exchangeId: String, score: Int, comment: String?): Result<com.skillexchange.app.domain.model.rating.Rating> = error("Not used")
+        override suspend fun getUserRatings(userId: String): Result<List<com.skillexchange.app.domain.model.rating.Rating>> = Result.success(emptyList())
+        override suspend fun getUserReputation(userId: String): Result<com.skillexchange.app.domain.model.rating.Reputation> = error("Not used")
+        override suspend fun getMyExchangeRating(exchangeId: String): Result<com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus> =
+            Result.success(com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus(hasRated = mockHasRated, rating = null))
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        mockHasRated = false
     }
 
     @After
@@ -88,7 +98,7 @@ class BookingDetailViewModelTest {
     @Test
     fun `loadDetail sets exchange and determines receiver role correctly`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
-        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager)
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -104,7 +114,7 @@ class BookingDetailViewModelTest {
     @Test
     fun `receiver acceptRequest updates status in-place to ACCEPTED`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
-        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager)
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -124,7 +134,7 @@ class BookingDetailViewModelTest {
     @Test
     fun `receiver rejectRequest updates status in-place to REJECTED`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
-        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager)
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -137,7 +147,7 @@ class BookingDetailViewModelTest {
     @Test
     fun `cancel dialog updates reason and confirm cancel updates status to CANCELLED`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
-        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager)
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -161,7 +171,7 @@ class BookingDetailViewModelTest {
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED)
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
-        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager)
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -172,5 +182,24 @@ class BookingDetailViewModelTest {
         assertTrue(state.hasUserConfirmed)
         assertTrue(state.isWaitingForOtherToConfirm)
         assertNotNull(state.exchange?.receiverCompletedAt)
+    }
+
+    @Test
+    fun `completed exchange checks and reflects hasRated status`() = runTest {
+        currentExchange = currentExchange.copy(
+            status = ExchangeStatus.COMPLETED,
+            senderCompletedAt = "2026-10-15T11:00:00Z",
+            receiverCompletedAt = "2026-10-15T11:00:00Z"
+        )
+        mockHasRated = true
+
+        val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
+
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(ExchangeStatus.COMPLETED, state.status)
+        assertTrue(state.hasRated)
     }
 }

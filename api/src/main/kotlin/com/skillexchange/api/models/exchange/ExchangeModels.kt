@@ -54,6 +54,7 @@ data class ExchangeRequestDto(
     val message: String? = null,
     @SerialName("cancellation_reason") val cancellationReason: String? = null,
     @SerialName("scheduled_at") val scheduledAt: String,
+    @SerialName("accepted_at") val acceptedAt: String? = null,
     @SerialName("sender_completed_at") val senderCompletedAt: String? = null,
     @SerialName("receiver_completed_at") val receiverCompletedAt: String? = null,
     @SerialName("created_at") val createdAt: String,

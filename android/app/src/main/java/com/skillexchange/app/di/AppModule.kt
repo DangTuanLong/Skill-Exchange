@@ -24,6 +24,7 @@ import com.skillexchange.app.presentation.booking.request.BookingRequestViewMode
 import com.skillexchange.app.presentation.discovery.DiscoveryViewModel
 import com.skillexchange.app.presentation.profile.ProfileDetailViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
+import com.skillexchange.app.presentation.rating.RatingViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -82,4 +83,11 @@ val appModule = module {
         com.skillexchange.app.data.repository.DeviceRepositoryImpl(get())
     }
     single { com.skillexchange.app.core.notification.FcmTokenManager(get(), get()) }
+
+    // ── Rating & Reputation (TASK-033) ────────────────────────────────
+    single { com.skillexchange.app.data.remote.rating.RatingRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IRatingRepository> {
+        com.skillexchange.app.data.repository.RatingRepositoryImpl(get())
+    }
+    viewModelOf(::RatingViewModel)
 }

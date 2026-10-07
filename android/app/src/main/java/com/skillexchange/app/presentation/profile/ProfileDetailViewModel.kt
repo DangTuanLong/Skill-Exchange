@@ -25,6 +25,9 @@ data class ProfileDetailUiState(
     val isOwnProfile: Boolean = false,
     val noValidPairReason: String? = null,
     val suggestedSkills: List<UserSkill> = emptyList(),
+    val reputation: com.skillexchange.app.domain.model.rating.Reputation? = null,
+    val reviews: List<com.skillexchange.app.domain.model.rating.Rating> = emptyList(),
+    val showAllReviewsBottomSheet: Boolean = false,
     val error: String? = null
 ) {
     val suggestedSkill: UserSkill?
@@ -35,6 +38,8 @@ sealed class ProfileDetailIntent {
     data class LoadUserProfile(val userId: String) : ProfileDetailIntent()
     object RequestExchange : ProfileDetailIntent()
     data class AddSuggestedSkillAndMatch(val skill: UserSkill) : ProfileDetailIntent()
+    object OpenAllReviews : ProfileDetailIntent()
+    object DismissAllReviews : ProfileDetailIntent()
 }
 
 sealed class ProfileDetailEffect {
@@ -46,7 +51,8 @@ class ProfileDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val profileRepository: IProfileRepository,
     private val skillRepository: ISkillRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
@@ -72,6 +78,8 @@ class ProfileDetailViewModel(
                 }
             }
             is ProfileDetailIntent.AddSuggestedSkillAndMatch -> addSuggestedSkill(intent.skill)
+            ProfileDetailIntent.OpenAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = true) }
+            ProfileDetailIntent.DismissAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = false) }
         }
     }
 
@@ -107,6 +115,12 @@ class ProfileDetailViewModel(
 
             val mySkillsRes = skillRepository.getUserSkills("me")
             val mySkills = mySkillsRes.getOrDefault(emptyList())
+
+            val reputationRes = ratingRepository.getUserReputation(userId)
+            val reputation = reputationRes.getOrNull()
+
+            val reviewsRes = ratingRepository.getUserRatings(userId)
+            val reviews = reviewsRes.getOrDefault(emptyList())
 
             val myHaves = mySkills.filter { it.type == SkillType.HAVE }
             val myWants = mySkills.filter { it.type == SkillType.WANT }
@@ -148,6 +162,8 @@ class ProfileDetailViewModel(
                     hasValidPair = hasValidPair,
                     noValidPairReason = reason,
                     suggestedSkills = suggestedSkills,
+                    reputation = reputation,
+                    reviews = reviews,
                     error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
                 )
             }

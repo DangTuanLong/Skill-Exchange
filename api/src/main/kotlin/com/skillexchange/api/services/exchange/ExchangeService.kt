@@ -187,6 +187,7 @@ open class ExchangeService(
         val sCompleted = row[ExchangeRequestsTable.senderCompletedAt]
         val rCompleted = row[ExchangeRequestsTable.receiverCompletedAt]
         val reason = row[ExchangeRequestsTable.cancellationReason]
+        val currentAcceptedAt = row[ExchangeRequestsTable.acceptedAt]
 
         val transition = ExchangeStateMachine.accept(
             currentStatus = currentStatus,
@@ -195,13 +196,15 @@ open class ExchangeService(
             callerUserId = callerUserId,
             senderCompletedAt = sCompleted,
             receiverCompletedAt = rCompleted,
-            cancellationReason = reason
+            cancellationReason = reason,
+            currentAcceptedAt = currentAcceptedAt
         )
 
         if (transition.isChanged) {
             ExchangeRequestsTable.update({ ExchangeRequestsTable.id eq uuid }) {
-                it[status]    = transition.newStatus.name
-                it[updatedAt] = LocalDateTime.now()
+                it[status]     = transition.newStatus.name
+                it[acceptedAt] = transition.acceptedAt
+                it[updatedAt]  = LocalDateTime.now()
             }
         }
 
@@ -265,6 +268,7 @@ open class ExchangeService(
         val sCompleted = row[ExchangeRequestsTable.senderCompletedAt]
         val rCompleted = row[ExchangeRequestsTable.receiverCompletedAt]
         val existingReason = row[ExchangeRequestsTable.cancellationReason]
+        val currentAcceptedAt = row[ExchangeRequestsTable.acceptedAt]
 
         val transition = ExchangeStateMachine.cancel(
             currentStatus = currentStatus,
@@ -274,7 +278,8 @@ open class ExchangeService(
             reason = reason,
             senderCompletedAt = sCompleted,
             receiverCompletedAt = rCompleted,
-            existingReason = existingReason
+            existingReason = existingReason,
+            currentAcceptedAt = currentAcceptedAt
         )
 
         if (transition.isChanged) {
@@ -306,6 +311,7 @@ open class ExchangeService(
         val sCompleted = row[ExchangeRequestsTable.senderCompletedAt]
         val rCompleted = row[ExchangeRequestsTable.receiverCompletedAt]
         val reason = row[ExchangeRequestsTable.cancellationReason]
+        val currentAcceptedAt = row[ExchangeRequestsTable.acceptedAt]
 
         val transition = ExchangeStateMachine.complete(
             currentStatus = currentStatus,
@@ -315,7 +321,8 @@ open class ExchangeService(
             now = LocalDateTime.now(),
             senderCompletedAt = sCompleted,
             receiverCompletedAt = rCompleted,
-            cancellationReason = reason
+            cancellationReason = reason,
+            currentAcceptedAt = currentAcceptedAt
         )
 
         if (transition.isChanged) {
@@ -389,6 +396,7 @@ open class ExchangeService(
                 message = r[ExchangeRequestsTable.message],
                 cancellationReason = r[ExchangeRequestsTable.cancellationReason],
                 scheduledAt = r[ExchangeRequestsTable.scheduledAt].toString(),
+                acceptedAt = r[ExchangeRequestsTable.acceptedAt]?.toString(),
                 senderCompletedAt = r[ExchangeRequestsTable.senderCompletedAt]?.toString(),
                 receiverCompletedAt = r[ExchangeRequestsTable.receiverCompletedAt]?.toString(),
                 createdAt = r[ExchangeRequestsTable.createdAt].toString(),

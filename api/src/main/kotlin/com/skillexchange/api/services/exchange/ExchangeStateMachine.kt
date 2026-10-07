@@ -11,7 +11,8 @@ data class TransitionResult(
     val senderCompletedAt: LocalDateTime?,
     val receiverCompletedAt: LocalDateTime?,
     val cancellationReason: String?,
-    val isChanged: Boolean
+    val isChanged: Boolean,
+    val acceptedAt: LocalDateTime? = null
 )
 
 object ExchangeStateMachine {
@@ -27,7 +28,9 @@ object ExchangeStateMachine {
         callerUserId: String,
         senderCompletedAt: LocalDateTime?,
         receiverCompletedAt: LocalDateTime?,
-        cancellationReason: String?
+        cancellationReason: String?,
+        currentAcceptedAt: LocalDateTime? = null,
+        now: LocalDateTime = LocalDateTime.now()
     ): TransitionResult {
         validateParticipant(callerUserId, senderId, receiverId)
 
@@ -41,7 +44,8 @@ object ExchangeStateMachine {
                 senderCompletedAt = senderCompletedAt,
                 receiverCompletedAt = receiverCompletedAt,
                 cancellationReason = cancellationReason,
-                isChanged = false
+                isChanged = false,
+                acceptedAt = currentAcceptedAt
             )
         }
 
@@ -54,7 +58,8 @@ object ExchangeStateMachine {
             senderCompletedAt = senderCompletedAt,
             receiverCompletedAt = receiverCompletedAt,
             cancellationReason = cancellationReason,
-            isChanged = true
+            isChanged = true,
+            acceptedAt = currentAcceptedAt ?: now
         )
     }
 
@@ -114,7 +119,8 @@ object ExchangeStateMachine {
         reason: String?,
         senderCompletedAt: LocalDateTime?,
         receiverCompletedAt: LocalDateTime?,
-        existingReason: String?
+        existingReason: String?,
+        currentAcceptedAt: LocalDateTime? = null
     ): TransitionResult {
         validateParticipant(callerUserId, senderId, receiverId)
 
@@ -124,7 +130,8 @@ object ExchangeStateMachine {
                 senderCompletedAt = senderCompletedAt,
                 receiverCompletedAt = receiverCompletedAt,
                 cancellationReason = existingReason,
-                isChanged = false
+                isChanged = false,
+                acceptedAt = currentAcceptedAt
             )
         }
 
@@ -138,7 +145,8 @@ object ExchangeStateMachine {
                     senderCompletedAt = senderCompletedAt,
                     receiverCompletedAt = receiverCompletedAt,
                     cancellationReason = reason?.trim().takeUnless { it.isNullOrBlank() } ?: existingReason,
-                    isChanged = true
+                    isChanged = true,
+                    acceptedAt = currentAcceptedAt
                 )
             }
             ExchangeStatus.ACCEPTED -> {
@@ -148,7 +156,8 @@ object ExchangeStateMachine {
                     senderCompletedAt = senderCompletedAt,
                     receiverCompletedAt = receiverCompletedAt,
                     cancellationReason = reason?.trim().takeUnless { it.isNullOrBlank() } ?: existingReason,
-                    isChanged = true
+                    isChanged = true,
+                    acceptedAt = currentAcceptedAt
                 )
             }
             else -> {
@@ -171,7 +180,8 @@ object ExchangeStateMachine {
         now: LocalDateTime,
         senderCompletedAt: LocalDateTime?,
         receiverCompletedAt: LocalDateTime?,
-        cancellationReason: String?
+        cancellationReason: String?,
+        currentAcceptedAt: LocalDateTime? = null
     ): TransitionResult {
         validateParticipant(callerUserId, senderId, receiverId)
 
@@ -181,7 +191,8 @@ object ExchangeStateMachine {
                 senderCompletedAt = senderCompletedAt,
                 receiverCompletedAt = receiverCompletedAt,
                 cancellationReason = cancellationReason,
-                isChanged = false
+                isChanged = false,
+                acceptedAt = currentAcceptedAt
             )
         }
 
@@ -213,7 +224,8 @@ object ExchangeStateMachine {
             senderCompletedAt = newSenderCompleted,
             receiverCompletedAt = newReceiverCompleted,
             cancellationReason = cancellationReason,
-            isChanged = changed || (newStatus != currentStatus)
+            isChanged = changed || (newStatus != currentStatus),
+            acceptedAt = currentAcceptedAt
         )
     }
 
