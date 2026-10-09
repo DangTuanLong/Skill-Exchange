@@ -213,6 +213,9 @@ fun SkillExchangeNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToRating = { exchangeId ->
                     navController.navigate(Screen.Rating.createRoute(exchangeId))
+                },
+                onNavigateToChat = { chatId ->
+                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
                 }
             )
         }
@@ -220,7 +223,14 @@ fun SkillExchangeNavHost(
         composable(
             route = Screen.ChatDetail.route,
             arguments = listOf(navArgument("chatId") { type = NavType.StringType })
-        ) { PlaceholderScreen("Chat Detail") }
+        ) {
+            com.skillexchange.app.presentation.chat.detail.ChatDetailScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBookingDetail = { exchangeId ->
+                    navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                }
+            )
+        }
 
         composable(
             route = Screen.Rating.route,

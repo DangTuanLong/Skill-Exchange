@@ -24,6 +24,7 @@ import com.skillexchange.api.services.rating.RatingService
 
 fun Application.configureRouting() {
     val authService: AuthService by inject()
+    val firebaseTokenService: com.skillexchange.api.services.auth.IFirebaseTokenService by inject()
     val profileService: ProfileService by inject()
     val skillService: SkillService by inject()
     val userService: UserService by inject()
@@ -36,7 +37,7 @@ fun Application.configureRouting() {
 
     routing {
         healthRoutes()
-        authRoutes(authService)
+        authRoutes(authService, firebaseTokenService)
         profileRoutes(profileService, avatarStorageService, rateLimiter)
         skillRoutes(skillService)
         userRoutes(userService)

@@ -54,3 +54,9 @@ data class RegisterResponseDto(
     val message: String,
     val email: String
 )
+
+@Serializable
+data class FirebaseTokenResponseDto(
+    val token: String,
+    val expiresIn: Int = 3600
+)

@@ -38,8 +38,23 @@ val appModule = module {
             }
         }
     }
-    single { FcmService(httpClient = get(), deviceService = get()) }
-    single<IExchangeNotificationHook> { FcmExchangeNotificationHook(fcmService = get(), deviceService = get()) }
+    single<com.skillexchange.api.services.notification.IFcmCredentialsProvider> {
+        com.skillexchange.api.services.notification.DefaultFcmCredentialsProvider()
+    }
+    single { FcmService(httpClient = get(), deviceService = get(), credentialsProvider = get()) }
+    single<com.skillexchange.api.services.auth.IFirebaseTokenService> {
+        com.skillexchange.api.services.auth.FirebaseTokenService()
+    }
+    single<com.skillexchange.api.services.chat.IFirestoreChatService> {
+        com.skillexchange.api.services.chat.FirestoreChatService(httpClient = get(), credentialsProvider = get())
+    }
+    single<IExchangeNotificationHook> {
+        FcmExchangeNotificationHook(
+            fcmService = get(),
+            deviceService = get(),
+            firestoreChatService = get()
+        )
+    }
     single { ExchangeService(get()) }
     single<IAvatarStorageService> { R2AvatarStorageService() }
     single { InMemoryRateLimiter(maxRequests = 5, windowMillis = 60_000L) }

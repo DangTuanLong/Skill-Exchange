@@ -50,7 +50,8 @@ class AuthViewModel(
     private val tokenManager: com.skillexchange.app.core.security.TokenManager,
     private val profileRepository: com.skillexchange.app.domain.repository.IProfileRepository? = null,
     private val skillRepository: com.skillexchange.app.domain.repository.ISkillRepository? = null,
-    private val fcmTokenManager: com.skillexchange.app.core.notification.FcmTokenManager? = null
+    private val fcmTokenManager: com.skillexchange.app.core.notification.FcmTokenManager? = null,
+    private val firebaseAuthManager: com.skillexchange.app.core.auth.IFirebaseAuthManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthUiState())
@@ -91,6 +92,9 @@ class AuthViewModel(
                     try {
                         fcmTokenManager?.syncCurrentToken()
                     } catch (_: Exception) {}
+                    try {
+                        firebaseAuthManager?.ensureSignedIn()
+                    } catch (_: Exception) {}
                     checkProfileCompletionAndNavigate()
                 }
                 .onFailure { e ->
@@ -103,6 +107,9 @@ class AuthViewModel(
         viewModelScope.launch {
             try {
                 fcmTokenManager?.unregisterCurrentToken()
+            } catch (_: Exception) {}
+            try {
+                firebaseAuthManager?.signOutAndCleanup()
             } catch (_: Exception) {}
             tokenManager.clearSession()
             _effect.send(AuthEffect.NavigateToLogin)
@@ -145,6 +152,9 @@ class AuthViewModel(
                     tokenManager.saveSession(session.accessToken, session.refreshToken, session.userId)
                     try {
                         fcmTokenManager?.syncCurrentToken()
+                    } catch (_: Exception) {}
+                    try {
+                        firebaseAuthManager?.ensureSignedIn()
                     } catch (_: Exception) {}
                     checkProfileCompletionAndNavigate()
                 }

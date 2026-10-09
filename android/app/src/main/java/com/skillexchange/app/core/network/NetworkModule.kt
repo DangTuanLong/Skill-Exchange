@@ -122,10 +122,10 @@ fun provideHttpClient(context: Context, tokenManager: TokenManager): HttpClient 
                     }
                 }
 
-                // Không gắn token (và không trigger refresh) cho auth endpoints.
-                // Điều này ngăn vòng lặp: refresh call → 401 → refresh call → ...
+                // Không gắn token (và không trigger refresh) cho auth endpoints ngoại trừ firebase-token.
                 sendWithoutRequest { request ->
-                    !request.url.toString().contains("/api/auth/")
+                    val url = request.url.toString()
+                    !url.contains("/api/auth/") || url.contains("/api/auth/firebase-token")
                 }
             }
         }

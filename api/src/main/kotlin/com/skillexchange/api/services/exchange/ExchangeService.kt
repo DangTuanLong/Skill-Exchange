@@ -170,7 +170,24 @@ open class ExchangeService(
             throw ExchangeForbiddenException("Bạn không phải thành viên tham gia yêu cầu này")
         }
 
-        buildDto(row)
+        val dto = buildDto(row)
+        if (dto != null && (dto.status == ExchangeStatus.ACCEPTED.name || dto.status == ExchangeStatus.COMPLETED.name)) {
+            notificationHook.onRequestAccepted(dto)
+        }
+        dto
+    }
+
+    /**
+     * Đồng bộ phòng chat Firestore cho tất cả yêu cầu đã ACCEPTED khi máy chủ khởi động (idempotent).
+     */
+    open fun syncExistingAcceptedExchanges() = transaction {
+        val rows = ExchangeRequestsTable.selectAll()
+            .where { ExchangeRequestsTable.status eq ExchangeStatus.ACCEPTED.name }
+            .toList()
+        val dtos = buildDtos(rows)
+        dtos.forEach { dto ->
+            notificationHook.onRequestAccepted(dto)
+        }
     }
 
     /**

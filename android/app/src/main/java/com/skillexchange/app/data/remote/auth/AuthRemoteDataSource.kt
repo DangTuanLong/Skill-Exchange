@@ -22,4 +22,9 @@ class AuthRemoteDataSource(private val client: HttpClient) {
 
     suspend fun refresh(dto: RefreshRequestDto): ApiWrapper<AuthSessionDto> =
         client.post("/api/auth/refresh") { setBody(dto) }.body()
+
+    suspend fun getFirebaseToken(): ApiWrapper<FirebaseTokenResponseDto> =
+        client.post("/api/auth/firebase-token") {
+            setBody("{}")
+        }.body()
 }

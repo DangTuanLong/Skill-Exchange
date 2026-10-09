@@ -56,4 +56,12 @@ fun Application.initDatabase() {
     // Seed skill categories nếu chưa có
     val skillService: SkillService by inject()
     skillService.seedIfEmpty()
+
+    // Đồng bộ phòng chat Firestore cho các trao đổi đã chấp nhận
+    try {
+        val exchangeService: com.skillexchange.api.services.exchange.ExchangeService by inject()
+        exchangeService.syncExistingAcceptedExchanges()
+    } catch (e: Exception) {
+        // Không làm gián đoạn khởi động máy chủ nếu mạng lỗi
+    }
 }

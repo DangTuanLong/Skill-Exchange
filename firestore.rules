@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isParticipant(participants) {
+      return isAuthenticated() && request.auth.uid in participants;
+    }
+
+    match /chats/{chatId} {
+      // 1. Đọc phòng chat: chỉ 2 người trong participants được đọc
+      allow read: if isParticipant(resource.data.participants);
+
+      // 2. Tạo phòng: Cấm client tạo trực tiếp (chỉ API Admin backend tạo qua service account khi request ACCEPTED)
+      allow create: if false;
+
+      // 3. Cập nhật metadata phòng chat:
+      // - Chỉ thành viên mới được cập nhật
+      // - Client chỉ được cập nhật các trường: lastMessage, lastMessageAt, lastSenderId, unreadCount, updatedAt
+      // - Cấm tuyệt đối sửa participants, status, exchangeId, createdAt
+      allow update: if isParticipant(resource.data.participants)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['lastMessage', 'lastMessageAt', 'lastSenderId', 'unreadCount', 'updatedAt'])
+                    && request.resource.data.participants == resource.data.participants
+                    && request.resource.data.status == resource.data.status
+                    && request.resource.data.exchangeId == resource.data.exchangeId;
+
+      // 4. Cấm xóa phòng chat
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // 1. Đọc tin nhắn: thành viên của phòng chat cha được đọc tin nhắn trong phòng
+        allow read: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
+
+        // 2. Tạo tin nhắn mới:
+        // - Người dùng phải đăng nhập
+        // - participants của message phải bằng đúng participants của phòng chat cha
+        // - senderId phải đúng bằng uid của người gọi
+        // - type bắt buộc là 'TEXT' (ở task này chỉ hỗ trợ text)
+        // - content là chuỗi có độ dài từ 1 đến 1000 ký tự
+        // - Trạng thái phòng chat cha phải là 'ACCEPTED' (chặn gửi tin nhắn sau khi COMPLETED hoặc CANCELLED)
+        allow create: if isAuthenticated()
+                      && request.resource.data.participants == get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+                      && request.auth.uid in request.resource.data.participants
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.resource.data.type == 'TEXT'
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() > 0
+                      && request.resource.data.content.size() <= 1000
+                      && get(/databases/$(database)/documents/chats/$(chatId)).data.status == 'ACCEPTED';
+
+        // 3. Cập nhật tin nhắn (đánh dấu đã đọc readAt):
+        // - Phải là người tham gia
+        // - Chỉ được thay đổi duy nhất trường 'readAt'
+        // - Không cho đặt readAt thay người khác: chỉ người nhận (senderId != auth.uid) mới được đánh dấu readAt
+        // - Bảo toàn senderId, content, participants
+        allow update: if isAuthenticated()
+                      && request.auth.uid in resource.data.participants
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+                      && resource.data.senderId != request.auth.uid
+                      && request.resource.data.senderId == resource.data.senderId
+                      && request.resource.data.content == resource.data.content
+                      && request.resource.data.participants == resource.data.participants;
+
+        // 4. Cấm xóa tin nhắn
+        allow delete: if false;
+      }
+    }
+  }
+}

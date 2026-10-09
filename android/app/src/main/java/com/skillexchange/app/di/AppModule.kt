@@ -25,6 +25,8 @@ import com.skillexchange.app.presentation.discovery.DiscoveryViewModel
 import com.skillexchange.app.presentation.profile.ProfileDetailViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
 import com.skillexchange.app.presentation.rating.RatingViewModel
+import com.skillexchange.app.presentation.chat.list.ChatListViewModel
+import com.skillexchange.app.presentation.chat.detail.ChatDetailViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -90,4 +92,17 @@ val appModule = module {
         com.skillexchange.app.data.repository.RatingRepositoryImpl(get())
     }
     viewModelOf(::RatingViewModel)
+
+    // ── Chat & Firebase Auth (TASK-030) ──────────────────────────────
+    single<com.skillexchange.app.core.auth.IFirebaseAuthManager> {
+        com.skillexchange.app.core.auth.FirebaseAuthManager(authRemoteDataSource = get())
+    }
+    single<com.skillexchange.app.domain.repository.IChatRepository> {
+        com.skillexchange.app.data.repository.ChatRepositoryImpl(
+            firebaseAuthManager = get(),
+            tokenManager = get()
+        )
+    }
+    viewModelOf(::ChatListViewModel)
+    viewModelOf(::ChatDetailViewModel)
 }

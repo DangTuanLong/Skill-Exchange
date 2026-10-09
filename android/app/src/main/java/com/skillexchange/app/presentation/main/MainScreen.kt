@@ -175,7 +175,11 @@ fun MainScreen(
                 }
 
                 composable(Screen.ChatList.route) {
-                    PlaceholderScreen("Tin nhắn (Chat)")
+                    com.skillexchange.app.presentation.chat.list.ChatListScreen(
+                        onNavigateToChat = { chatId ->
+                            rootNavController.navigate(Screen.ChatDetail.createRoute(chatId))
+                        }
+                    )
                 }
 
                 composable(Screen.BookingList.route) {

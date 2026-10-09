@@ -30,7 +30,8 @@ class NoOpExchangeNotificationHook : IExchangeNotificationHook
  */
 class FcmExchangeNotificationHook(
     private val fcmService: FcmService,
-    private val deviceService: DeviceService
+    private val deviceService: DeviceService,
+    private val firestoreChatService: com.skillexchange.api.services.chat.IFirestoreChatService? = null
 ) : IExchangeNotificationHook {
 
     private val logger = LoggerFactory.getLogger(FcmExchangeNotificationHook::class.java)
@@ -66,4 +67,32 @@ class FcmExchangeNotificationHook(
             logger.error("Lỗi khi kích hoạt hook gửi FCM cho exchange ${exchange.id}: ${e.message}")
         }
     }
+
+    override fun onRequestAccepted(exchange: ExchangeRequestDto) {
+        try {
+            // TASK-030: Tạo phòng chat trên Firestore khi request chuyển ACCEPTED (idempotent: exchange.id)
+            firestoreChatService?.createChatRoomAsync(exchange)
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi kích hoạt hook tạo phòng chat Firestore cho exchange ${exchange.id}: ${e.message}")
+        }
+    }
+
+    override fun onRequestCancelled(exchange: ExchangeRequestDto, cancelledBy: String) {
+        try {
+            // TASK-030: Cập nhật status phòng chat sang CANCELLED
+            firestoreChatService?.updateChatStatusAsync(exchange.id, "CANCELLED")
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi kích hoạt hook cập nhật CANCELLED phòng chat Firestore cho exchange ${exchange.id}: ${e.message}")
+        }
+    }
+
+    override fun onRequestCompleted(exchange: ExchangeRequestDto) {
+        try {
+            // TASK-030: Cập nhật status phòng chat sang COMPLETED
+            firestoreChatService?.updateChatStatusAsync(exchange.id, "COMPLETED")
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi kích hoạt hook cập nhật COMPLETED phòng chat Firestore cho exchange ${exchange.id}: ${e.message}")
+        }
+    }
 }
+

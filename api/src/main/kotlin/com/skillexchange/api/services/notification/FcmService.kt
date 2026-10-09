@@ -59,12 +59,21 @@ class DefaultFcmCredentialsProvider : IFcmCredentialsProvider {
         val path = System.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
         val json = System.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") ?: System.getenv("FIREBASE_SERVICE_ACCOUNT")
 
+        val candidateFiles = listOfNotNull(
+            path?.takeIf { it.isNotBlank() }?.let { File(it) },
+            File("api/firebase-service-account.json"),
+            File("firebase-service-account.json"),
+            File("../firebase-service-account.json"),
+            File("../api/firebase-service-account.json")
+        )
+        val existingFile = candidateFiles.firstOrNull { it.exists() }
+
         val stream: InputStream? = when {
-            !path.isNullOrBlank() && File(path).exists() -> {
+            existingFile != null -> {
                 try {
-                    FileInputStream(path)
+                    FileInputStream(existingFile)
                 } catch (e: Exception) {
-                    logger.error("Không thể đọc file credentials từ FIREBASE_SERVICE_ACCOUNT_PATH: ${e.message}")
+                    logger.error("Không thể đọc file credentials từ ${existingFile.path}: ${e.message}")
                     null
                 }
             }
@@ -72,7 +81,7 @@ class DefaultFcmCredentialsProvider : IFcmCredentialsProvider {
                 ByteArrayInputStream(json.toByteArray(Charsets.UTF_8))
             }
             else -> {
-                logger.warn("Chưa cấu hình FIREBASE_SERVICE_ACCOUNT_PATH hoặc FIREBASE_SERVICE_ACCOUNT_JSON. Push notification sẽ ở chế độ no-op.")
+                logger.warn("Chưa cấu hình FIREBASE_SERVICE_ACCOUNT_PATH hoặc FIREBASE_SERVICE_ACCOUNT_JSON. Push notification và Firestore sẽ ở chế độ no-op.")
                 null
             }
         }
@@ -80,7 +89,10 @@ class DefaultFcmCredentialsProvider : IFcmCredentialsProvider {
         return try {
             stream?.use {
                 GoogleCredentials.fromStream(it)
-                    .createScoped(listOf("https://www.googleapis.com/auth/firebase.messaging"))
+                    .createScoped(listOf(
+                        "https://www.googleapis.com/auth/firebase.messaging",
+                        "https://www.googleapis.com/auth/datastore"
+                    ))
             }
         } catch (e: Exception) {
             logger.error("Lỗi khi khởi tạo GoogleCredentials: ${e.message}")

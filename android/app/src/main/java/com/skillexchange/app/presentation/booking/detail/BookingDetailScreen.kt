@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter
 fun BookingDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToRating: ((String) -> Unit)? = null,
+    onNavigateToChat: ((String) -> Unit)? = null,
     viewModel: BookingDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -391,18 +392,22 @@ fun BookingDetailScreen(
                                 }
 
                                 ExchangeStatus.ACCEPTED -> {
-                                    // Nhắn tin (disabled per spec)
+                                    // Nhắn tin (TASK-030)
                                     OutlinedButton(
-                                        onClick = { /* Chat mở ở Phase 3 */ },
+                                        onClick = {
+                                            state.exchange?.let { ex ->
+                                                onNavigateToChat?.invoke(ex.id)
+                                            }
+                                        },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(48.dp),
                                         shape = RoundedCornerShape(12.dp),
-                                        enabled = false
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
                                     ) {
                                         Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Nhắn tin (Đang phát triển)")
+                                        Text("Nhắn tin trao đổi", fontWeight = FontWeight.SemiBold)
                                     }
 
                                     // Xác nhận hoàn thành
