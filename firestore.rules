@@ -10,6 +10,40 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid in participants;
     }
 
+    // Xác thực tệp đính kèm IMAGE/FILE:
+    // - fileUrl phải có giao thức https, thuộc R2 và chứa chats/{chatId}/
+    // - fileName <= 100 ký tự
+    // - fileSize hợp lệ: IMAGE <= 5MB (5242880 bytes), FILE <= 10MB (10485760 bytes)
+    function isValidAttachment(data, chatId) {
+      return ('fileUrl' in data)
+             && data.fileUrl is string
+             && data.fileUrl.matches('^https://.*r2.*chats/' + chatId + '/.+')
+             && ('fileName' in data)
+             && data.fileName is string
+             && data.fileName.size() > 0
+             && data.fileName.size() <= 100
+             && ('fileSize' in data)
+             && data.fileSize is int
+             && data.fileSize > 0
+             && (
+               (data.type == 'IMAGE' && data.fileSize <= 5242880)
+               || (data.type == 'FILE' && data.fileSize <= 10485760)
+             );
+    }
+
+    // Xác thực tin nhắn dạng TEXT:
+    // - content từ 1 đến 1000 ký tự
+    // - Tuyệt đối không được chứa các trường tệp đính kèm
+    function isValidText(data) {
+      return data.type == 'TEXT'
+             && data.content is string
+             && data.content.size() > 0
+             && data.content.size() <= 1000
+             && !('fileUrl' in data)
+             && !('fileName' in data)
+             && !('fileSize' in data);
+    }
+
     match /chats/{chatId} {
       // 1. Đọc phòng chat: chỉ 2 người trong participants được đọc
       allow read: if isParticipant(resource.data.participants);
@@ -24,32 +58,52 @@ service cloud.firestore {
       allow update: if isParticipant(resource.data.participants)
                     && request.resource.data.diff(resource.data).affectedKeys()
                         .hasOnly(['lastMessage', 'lastMessageAt', 'lastSenderId', 'unreadCount', 'updatedAt'])
-                    && request.resource.data.participants == resource.data.participants
+                    && request.resource.data.participants.toSet() == resource.data.participants.toSet()
                     && request.resource.data.status == resource.data.status
-                    && request.resource.data.exchangeId == resource.data.exchangeId;
+                    && (!('exchangeId' in resource.data) || request.resource.data.exchangeId == resource.data.exchangeId);
 
       // 4. Cấm xóa phòng chat
       allow delete: if false;
+
+      // 5. Typing indicator (/chats/{chatId}/typing/{userId}) - TASK-031
+      match /typing/{userId} {
+        // Thành viên phòng chat được đọc trạng thái typing
+        allow read: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
+
+        // Chỉ user sở hữu mới được ghi doc của chính mình, chỉ cho phép các trường isTyping và updatedAt
+        allow write: if isAuthenticated()
+                     && request.auth.uid == userId
+                     && isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
+                     && request.resource.data.keys().hasOnly(['isTyping', 'updatedAt'])
+                     && request.resource.data.isTyping is bool
+                     && request.resource.data.updatedAt is timestamp;
+      }
 
       match /messages/{messageId} {
         // 1. Đọc tin nhắn: thành viên của phòng chat cha được đọc tin nhắn trong phòng
         allow read: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
 
-        // 2. Tạo tin nhắn mới:
+        // 2. Tạo tin nhắn mới (TEXT, IMAGE, FILE) - TASK-030 & TASK-031
         // - Người dùng phải đăng nhập
-        // - participants của message phải bằng đúng participants của phòng chat cha
+        // - participants của message phải bằng đúng participants của phòng chat cha (không phân biệt thứ tự)
         // - senderId phải đúng bằng uid của người gọi
-        // - type bắt buộc là 'TEXT' (ở task này chỉ hỗ trợ text)
-        // - content là chuỗi có độ dài từ 1 đến 1000 ký tự
+        // - type thuộc TEXT, IMAGE, FILE với quy tắc xác thực tương ứng
         // - Trạng thái phòng chat cha phải là 'ACCEPTED' (chặn gửi tin nhắn sau khi COMPLETED hoặc CANCELLED)
         allow create: if isAuthenticated()
-                      && request.resource.data.participants == get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+                      && request.resource.data.participants.toSet() == get(/databases/$(database)/documents/chats/$(chatId)).data.participants.toSet()
                       && request.auth.uid in request.resource.data.participants
                       && request.resource.data.senderId == request.auth.uid
-                      && request.resource.data.type == 'TEXT'
-                      && request.resource.data.content is string
-                      && request.resource.data.content.size() > 0
-                      && request.resource.data.content.size() <= 1000
+                      && request.resource.data.type in ['TEXT', 'IMAGE', 'FILE']
+                      && (
+                        isValidText(request.resource.data)
+                        || (
+                          request.resource.data.type in ['IMAGE', 'FILE']
+                          && request.resource.data.content is string
+                          && request.resource.data.content.size() > 0
+                          && request.resource.data.content.size() <= 2048
+                          && isValidAttachment(request.resource.data, chatId)
+                        )
+                      )
                       && get(/databases/$(database)/documents/chats/$(chatId)).data.status == 'ACCEPTED';
 
         // 3. Cập nhật tin nhắn (đánh dấu đã đọc readAt):
@@ -63,7 +117,7 @@ service cloud.firestore {
                       && resource.data.senderId != request.auth.uid
                       && request.resource.data.senderId == resource.data.senderId
                       && request.resource.data.content == resource.data.content
-                      && request.resource.data.participants == resource.data.participants;
+                      && request.resource.data.participants.toSet() == resource.data.participants.toSet();
 
         // 4. Cấm xóa tin nhắn
         allow delete: if false;

@@ -57,6 +57,9 @@ val appModule = module {
     }
     single { ExchangeService(get()) }
     single<IAvatarStorageService> { R2AvatarStorageService() }
+    single<com.skillexchange.api.services.chat.IChatAttachmentStorageService> {
+        com.skillexchange.api.services.chat.R2ChatAttachmentStorageService()
+    }
     single { InMemoryRateLimiter(maxRequests = 5, windowMillis = 60_000L) }
     single { com.skillexchange.api.services.rating.RatingService() }
 }

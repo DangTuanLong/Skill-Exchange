@@ -9,7 +9,11 @@ import com.skillexchange.app.domain.model.chat.ChatMessage
 import com.skillexchange.app.domain.model.chat.ChatRoom
 import com.skillexchange.app.domain.repository.IChatRepository
 import com.skillexchange.app.domain.repository.IExchangeRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +32,8 @@ data class ChatDetailState(
     val fallbackOtherName: String? = null,
     val fallbackOtherAvatar: String? = null,
     val fallbackSkillOffered: String? = null,
-    val fallbackSkillWanted: String? = null
+    val fallbackSkillWanted: String? = null,
+    val isOtherUserTyping: Boolean = false
 ) {
     val isReadOnly: Boolean get() = room?.isReadOnly ?: false
 
@@ -55,6 +60,12 @@ data class ChatDetailState(
 sealed interface ChatDetailIntent {
     data class InputTextChanged(val text: String) : ChatDetailIntent
     data object SendMessage : ChatDetailIntent
+    data class SendAttachment(
+        val fileBytes: ByteArray,
+        val fileName: String,
+        val mimeType: String,
+        val isImage: Boolean
+    ) : ChatDetailIntent
     data class ResendMessage(val messageId: String) : ChatDetailIntent
     data object NavigateToBookingDetail : ChatDetailIntent
     data object Retry : ChatDetailIntent
@@ -83,14 +94,31 @@ class ChatDetailViewModel(
     val state: StateFlow<ChatDetailState> = _state.asStateFlow()
 
     private val _effect = Channel<ChatDetailEffect>(Channel.BUFFERED)
-    val effect = _effect.receiveAsFlow()
+    val effect = _receiveEffect()
+
+    private fun _receiveEffect() = _effect.receiveAsFlow()
 
     // Quản lý các tin nhắn local đang gửi hoặc thất bại
     private val optimisticMessages = mutableMapOf<String, ChatMessage>()
     private val failedMessageIds = mutableSetOf<String>()
 
+    // Bộ nhớ đệm tệp đính kèm khi gửi để phục vụ thử lại (resend)
+    private data class PendingAttachment(
+        val fileBytes: ByteArray,
+        val fileName: String,
+        val mimeType: String,
+        val isImage: Boolean,
+        var uploadedUrl: String? = null
+    )
+    private val pendingAttachments = mutableMapOf<String, PendingAttachment>()
+
     // Chống vòng lặp mark-read: tập hợp ID đã gửi lệnh markAsRead
     private val pendingMarkReadIds = mutableSetOf<String>()
+
+    // Quản lý typing indicator: chỉ ghi khi chuyển trạng thái (2 writes per burst), debounce 2s
+    private var isCurrentlyTypingLocally = false
+    private var typingDebounceJob: Job? = null
+    private var observeTypingJob: Job? = null
 
     init {
         val uid = tokenManager.getUserId() ?: ""
@@ -121,10 +149,14 @@ class ChatDetailViewModel(
             is ChatDetailIntent.InputTextChanged -> {
                 if (intent.text.length <= 1000) {
                     _state.update { it.copy(inputText = intent.text) }
+                    handleTypingTransition(intent.text.isNotBlank())
                 }
             }
             is ChatDetailIntent.SendMessage -> {
                 sendMessage()
+            }
+            is ChatDetailIntent.SendAttachment -> {
+                sendAttachment(intent.fileBytes, intent.fileName, intent.mimeType, intent.isImage)
             }
             is ChatDetailIntent.ResendMessage -> {
                 resendMessage(intent.messageId)
@@ -143,6 +175,33 @@ class ChatDetailViewModel(
         }
     }
 
+    private fun handleTypingTransition(hasText: Boolean) {
+        if (hasText) {
+            if (!isCurrentlyTypingLocally) {
+                isCurrentlyTypingLocally = true
+                viewModelScope.launch {
+                    chatRepository.setTypingStatus(chatId, true)
+                }
+            }
+            typingDebounceJob?.cancel()
+            typingDebounceJob = viewModelScope.launch {
+                delay(2000L)
+                if (isCurrentlyTypingLocally) {
+                    isCurrentlyTypingLocally = false
+                    chatRepository.setTypingStatus(chatId, false)
+                }
+            }
+        } else {
+            if (isCurrentlyTypingLocally) {
+                typingDebounceJob?.cancel()
+                isCurrentlyTypingLocally = false
+                viewModelScope.launch {
+                    chatRepository.setTypingStatus(chatId, false)
+                }
+            }
+        }
+    }
+
     private fun observeRoom() {
         viewModelScope.launch {
             chatRepository.getChatRoom(chatId)
@@ -151,7 +210,25 @@ class ChatDetailViewModel(
                 }
                 .collect { room ->
                     _state.update { it.copy(room = room) }
+                    if (room != null) {
+                        observeOtherUserTypingIfNeeded(room)
+                    }
                 }
+        }
+    }
+
+    private fun observeOtherUserTypingIfNeeded(room: ChatRoom) {
+        if (observeTypingJob != null) return
+        val uid = _state.value.currentUserId
+        val otherUserId = room.participants.firstOrNull { it != uid }
+            ?: if (room.senderId == uid) room.receiverId else room.senderId
+        if (otherUserId.isNotBlank()) {
+            observeTypingJob = viewModelScope.launch {
+                chatRepository.observeOtherUserTyping(chatId, otherUserId)
+                    .collect { isTyping ->
+                        _state.update { it.copy(isOtherUserTyping = isTyping) }
+                    }
+            }
         }
     }
 
@@ -173,6 +250,7 @@ class ChatDetailViewModel(
                     // Xoá các tin optimistic nếu đã có trên Firestore snapshot
                     firestoreMessages.forEach { msg ->
                         optimisticMessages.remove(msg.id)
+                        pendingAttachments.remove(msg.id)
                         if (!msg.isPending) {
                             failedMessageIds.remove(msg.id)
                         }
@@ -214,6 +292,15 @@ class ChatDetailViewModel(
     private fun sendMessage() {
         val content = _state.value.inputText.trim()
         if (content.isBlank()) return
+
+        // Chấm dứt trạng thái typing ngay khi bấm gửi
+        if (isCurrentlyTypingLocally) {
+            typingDebounceJob?.cancel()
+            isCurrentlyTypingLocally = false
+            viewModelScope.launch {
+                chatRepository.setTypingStatus(chatId, false)
+            }
+        }
 
         // 1. Kiểm tra phòng chat trong bộ nhớ (không gọi mạng roomRef.get())
         val currentRoom = _state.value.room
@@ -268,6 +355,131 @@ class ChatDetailViewModel(
         dispatchSend(messageId, content, participants)
     }
 
+    private fun sendAttachment(fileBytes: ByteArray, fileName: String, mimeType: String, isImage: Boolean) {
+        val currentRoom = _state.value.room
+        if (currentRoom == null) {
+            viewModelScope.launch {
+                _effect.send(ChatDetailEffect.ShowSnackbar("Phòng chat đang khởi tạo, vui lòng chờ trong giây lát"))
+            }
+            return
+        }
+
+        if (currentRoom.status != "ACCEPTED") {
+            viewModelScope.launch {
+                _effect.send(ChatDetailEffect.ShowSnackbar("Lịch trao đổi đã kết thúc, không thể gửi tệp"))
+            }
+            return
+        }
+
+        val maxAllowedSize = if (isImage) 5L * 1024 * 1024 else 10L * 1024 * 1024
+        if (fileBytes.size > maxAllowedSize) {
+            val limitStr = if (isImage) "5MB" else "10MB"
+            viewModelScope.launch {
+                _effect.send(ChatDetailEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn cho phép ($limitStr)"))
+            }
+            return
+        }
+
+        val participants = currentRoom.participants.takeIf { it.isNotEmpty() }
+            ?: listOf(currentRoom.senderId, currentRoom.receiverId)
+
+        val messageId = chatRepository.generateNewMessageId(chatId)
+        val sendTime = System.currentTimeMillis()
+        val type = if (isImage) "IMAGE" else "FILE"
+        val content = if (isImage) "[Hình ảnh]" else "[Tệp] $fileName"
+
+        val localMsg = ChatMessage(
+            id = messageId,
+            chatId = chatId,
+            senderId = _state.value.currentUserId,
+            content = content,
+            type = type,
+            createdAt = sendTime,
+            readAt = null,
+            participants = participants,
+            isPending = true,
+            isFailed = false,
+            fileName = fileName,
+            fileSize = fileBytes.size.toLong()
+        )
+
+        optimisticMessages[messageId] = localMsg
+        pendingAttachments[messageId] = PendingAttachment(fileBytes, fileName, mimeType, isImage)
+
+        _state.update {
+            it.copy(
+                messages = (it.messages + localMsg).distinctBy { m -> m.id }.sortedBy { m -> m.createdAt }
+            )
+        }
+
+        viewModelScope.launch {
+            _effect.send(ChatDetailEffect.ScrollToBottom)
+        }
+
+        dispatchAttachmentSend(messageId, fileBytes, fileName, mimeType, isImage, participants)
+    }
+
+    private fun dispatchAttachmentSend(
+        messageId: String,
+        fileBytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        isImage: Boolean,
+        participants: List<String>
+    ) {
+        viewModelScope.launch {
+            val pending = pendingAttachments[messageId]
+            val uploadedUrl: String
+            if (pending?.uploadedUrl != null) {
+                uploadedUrl = pending.uploadedUrl!!
+            } else {
+                val uploadResult = chatRepository.uploadAttachment(chatId, fileBytes, fileName, mimeType)
+                if (uploadResult.isFailure) {
+                    val err = uploadResult.exceptionOrNull()?.message ?: "Tải tệp lên thất bại"
+                    markMessageFailed(messageId, err)
+                    return@launch
+                }
+                uploadedUrl = uploadResult.getOrThrow().url
+                pending?.uploadedUrl = uploadedUrl
+            }
+
+            val type = if (isImage) "IMAGE" else "FILE"
+            val content = if (isImage) "[Hình ảnh]" else "[Tệp] $fileName"
+
+            val sendResult = chatRepository.sendMessage(
+                chatId = chatId,
+                content = content,
+                participants = participants,
+                messageId = messageId,
+                type = type,
+                fileUrl = uploadedUrl,
+                fileName = fileName,
+                fileSize = fileBytes.size.toLong()
+            )
+
+            sendResult.onSuccess {
+                failedMessageIds.remove(messageId)
+                pendingAttachments.remove(messageId)
+            }.onFailure { e ->
+                markMessageFailed(messageId, e.message ?: "Lỗi khi lưu tin nhắn")
+            }
+        }
+    }
+
+    private suspend fun markMessageFailed(messageId: String, errorMsg: String) {
+        failedMessageIds.add(messageId)
+        optimisticMessages.remove(messageId)
+
+        _state.update { state ->
+            state.copy(
+                messages = state.messages.map {
+                    if (it.id == messageId) it.copy(isFailed = true, isPending = false) else it
+                }
+            )
+        }
+        _effect.send(ChatDetailEffect.ShowSnackbar("Gửi thất bại: $errorMsg"))
+    }
+
     private fun resendMessage(messageId: String) {
         val targetMsg = _state.value.messages.firstOrNull { it.id == messageId } ?: return
         val currentRoom = _state.value.room ?: return
@@ -282,7 +494,19 @@ class ChatDetailViewModel(
             state.copy(messages = state.messages.map { if (it.id == messageId) updated else it })
         }
 
-        dispatchSend(messageId, targetMsg.content, participants)
+        val pending = pendingAttachments[messageId]
+        if (pending != null) {
+            dispatchAttachmentSend(
+                messageId,
+                pending.fileBytes,
+                pending.fileName,
+                pending.mimeType,
+                pending.isImage,
+                participants
+            )
+        } else {
+            dispatchSend(messageId, targetMsg.content, participants)
+        }
     }
 
     private fun dispatchSend(messageId: String, content: String, participants: List<String>) {
@@ -299,17 +523,18 @@ class ChatDetailViewModel(
                 failedMessageIds.remove(messageId)
             }.onFailure { e ->
                 Log.e(TAG, "Lỗi khi gửi tin nhắn $messageId: ${e.message}")
-                failedMessageIds.add(messageId)
-                optimisticMessages.remove(messageId)
+                markMessageFailed(messageId, e.message ?: "Lỗi kết nối")
+            }
+        }
+    }
 
-                _state.update { state ->
-                    state.copy(
-                        messages = state.messages.map {
-                            if (it.id == messageId) it.copy(isFailed = true, isPending = false) else it
-                        }
-                    )
-                }
-                _effect.send(ChatDetailEffect.ShowSnackbar("Gửi thất bại: ${e.message ?: "Lỗi kết nối"}"))
+    override fun onCleared() {
+        super.onCleared()
+        typingDebounceJob?.cancel()
+        if (isCurrentlyTypingLocally) {
+            isCurrentlyTypingLocally = false
+            CoroutineScope(Dispatchers.IO).launch {
+                chatRepository.setTypingStatus(chatId, false)
             }
         }
     }

@@ -3,6 +3,7 @@ package com.skillexchange.app.core.auth
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.data.remote.auth.AuthRemoteDataSource
 import kotlinx.coroutines.tasks.await
 
@@ -13,6 +14,7 @@ interface IFirebaseAuthManager {
 
 open class FirebaseAuthManager(
     private val authRemoteDataSource: AuthRemoteDataSource,
+    private val tokenManager: TokenManager? = null,
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) : IFirebaseAuthManager {
@@ -22,9 +24,15 @@ open class FirebaseAuthManager(
     }
 
     override suspend fun ensureSignedIn(): Result<String> = runCatching {
+        val currentAppUserId = tokenManager?.getUserId()
         val currentUser = firebaseAuth.currentUser
+
         if (currentUser != null) {
-            return@runCatching currentUser.uid
+            if (currentAppUserId == null || currentUser.uid == currentAppUserId) {
+                return@runCatching currentUser.uid
+            }
+            Log.w(TAG, "Firebase user UID (${currentUser.uid}) lệch với app user UID ($currentAppUserId). Đang đăng xuất session cũ...")
+            firebaseAuth.signOut()
         }
 
         val tokenResp = authRemoteDataSource.getFirebaseToken()

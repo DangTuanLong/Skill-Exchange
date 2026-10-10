@@ -1,6 +1,7 @@
 package com.skillexchange.api.plugins
 
 import com.skillexchange.api.routes.authRoutes
+import com.skillexchange.api.routes.chatRoutes
 import com.skillexchange.api.routes.exchangeRoutes
 import com.skillexchange.api.routes.healthRoutes
 import com.skillexchange.api.routes.matchingRoutes
@@ -33,6 +34,7 @@ fun Application.configureRouting() {
     val deviceService: DeviceService by inject()
     val ratingService: RatingService by inject()
     val avatarStorageService: com.skillexchange.api.services.IAvatarStorageService by inject()
+    val chatAttachmentStorageService: com.skillexchange.api.services.chat.IChatAttachmentStorageService by inject()
     val rateLimiter: com.skillexchange.api.services.InMemoryRateLimiter by inject()
 
     routing {
@@ -45,5 +47,6 @@ fun Application.configureRouting() {
         exchangeRoutes(exchangeService)
         deviceRoutes(deviceService)
         ratingRoutes(ratingService)
+        chatRoutes(chatAttachmentStorageService, exchangeService)
     }
 }

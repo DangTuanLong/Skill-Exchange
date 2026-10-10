@@ -10,7 +10,10 @@ data class ChatMessage(
     val readAt: Long? = null,
     val participants: List<String> = emptyList(),
     val isPending: Boolean = false,
-    val isFailed: Boolean = false
+    val isFailed: Boolean = false,
+    val fileUrl: String? = null,
+    val fileName: String? = null,
+    val fileSize: Long? = null
 ) {
     fun isFromMe(currentUserId: String): Boolean = senderId == currentUserId
     val isRead: Boolean get() = readAt != null

@@ -80,8 +80,30 @@ class ChatListViewModelTest {
             chatId: String,
             content: String,
             participants: List<String>,
-            messageId: String
+            messageId: String,
+            type: String,
+            fileUrl: String?,
+            fileName: String?,
+            fileSize: Long?
         ): Result<String> = Result.success("dummy_msg_id")
+
+        override suspend fun uploadAttachment(
+            chatId: String,
+            fileBytes: ByteArray,
+            fileName: String,
+            mimeType: String
+        ): Result<com.skillexchange.app.data.remote.chat.ChatAttachmentDataDto> =
+            Result.success(
+                com.skillexchange.app.data.remote.chat.ChatAttachmentDataDto(
+                    url = "https://example.com/file",
+                    type = "IMAGE",
+                    fileName = fileName,
+                    fileSize = fileBytes.size.toLong()
+                )
+            )
+
+        override suspend fun setTypingStatus(chatId: String, isTyping: Boolean): Result<Unit> = Result.success(Unit)
+        override fun observeOtherUserTyping(chatId: String, otherUserId: String): Flow<Boolean> = flowOf(false)
         override suspend fun markMessagesAsRead(chatId: String, messageIds: List<String>): Result<Unit> = Result.success(Unit)
     }
 

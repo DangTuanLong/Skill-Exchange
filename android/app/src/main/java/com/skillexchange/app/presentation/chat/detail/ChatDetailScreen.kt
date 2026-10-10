@@ -1,9 +1,20 @@
 package com.skillexchange.app.presentation.chat.detail
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -27,12 +39,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -41,7 +55,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -63,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +89,7 @@ import com.skillexchange.app.core.ui.theme.TextSecondaryLight
 import com.skillexchange.app.domain.model.chat.ChatMessage
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -87,6 +102,7 @@ fun ChatDetailScreen(
     onNavigateToBookingDetail: (String) -> Unit,
     viewModel: ChatDetailViewModel = koinViewModel()
 ) {
+    val context = LocalContext.current
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -96,6 +112,18 @@ fun ChatDetailScreen(
 
     val isScrolledUp by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 1 }
+    }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { handleImageSelected(context, it, viewModel) }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { handlePdfSelected(context, it, viewModel) }
     }
 
     LaunchedEffect(Unit) {
@@ -207,6 +235,33 @@ fun ChatDetailScreen(
                     .navigationBarsPadding()
                     .imePadding()
             ) {
+                // Typing Indicator
+                AnimatedVisibility(
+                    visible = state.isOtherUserTyping,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp,
+                            color = Brand500
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${state.getDisplayName(state.currentUserId)} đang soạn tin...",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B),
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+                }
+
                 if (state.isReadOnly) {
                     Surface(
                         color = Color(0xFFF1F5F9),
@@ -228,9 +283,41 @@ fun ChatDetailScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        IconButton(
+                            onClick = {
+                                imagePickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Gửi hình ảnh",
+                                tint = Brand500,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                filePickerLauncher.launch("application/pdf")
+                            },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = "Gửi tệp PDF",
+                                tint = Brand500,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(2.dp))
+
                         OutlinedTextField(
                             value = state.inputText,
                             onValueChange = { viewModel.onIntent(ChatDetailIntent.InputTextChanged(it)) },
@@ -246,13 +333,13 @@ fun ChatDetailScreen(
                             modifier = Modifier.weight(1f)
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
 
                         IconButton(
                             onClick = { viewModel.onIntent(ChatDetailIntent.SendMessage) },
                             enabled = state.inputText.isNotBlank(),
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
                                 .background(
                                     if (state.inputText.isNotBlank()) Brand500 else Color(0xFFE2E8F0)
@@ -262,7 +349,7 @@ fun ChatDetailScreen(
                                 imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Gửi tin nhắn",
                                 tint = if (state.inputText.isNotBlank()) Color.White else Color(0xFF94A3B8),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -397,6 +484,7 @@ private fun MessageBubble(
     isFromMe: Boolean,
     onResend: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt))
 
     Column(
@@ -421,13 +509,109 @@ private fun MessageBubble(
                 },
                 modifier = Modifier.widthIn(max = 280.dp)
             ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Text(
-                        text = message.content,
-                        fontSize = 15.sp,
-                        color = if (isFromMe) Color.White else TextPrimaryLight,
-                        lineHeight = 20.sp
-                    )
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    when (message.type) {
+                        "IMAGE" -> {
+                            if (!message.fileUrl.isNullOrBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 220.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFE2E8F0))
+                                        .clickable {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.fileUrl))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Không thể mở ảnh", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                ) {
+                                    AsyncImage(
+                                        model = message.fileUrl,
+                                        contentDescription = "Hình ảnh đính kèm",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = if (isFromMe) Color.White else Brand500
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Đang tải ảnh...",
+                                        fontSize = 13.sp,
+                                        color = if (isFromMe) Color.White else TextPrimaryLight
+                                    )
+                                }
+                            }
+                        }
+                        "FILE" -> {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isFromMe) Color(0x33FFFFFF) else Color.White,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !message.fileUrl.isNullOrBlank()) {
+                                        message.fileUrl?.let { url ->
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Không tìm thấy ứng dụng mở tệp PDF", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PictureAsPdf,
+                                        contentDescription = "PDF",
+                                        tint = if (isFromMe) Color.White else Color(0xFFEF4444),
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = message.fileName ?: "Tệp đính kèm.pdf",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (isFromMe) Color.White else TextPrimaryLight
+                                        )
+                                        val sizeText = message.fileSize?.let { formatFileSize(it) } ?: ""
+                                        if (sizeText.isNotBlank()) {
+                                            Text(
+                                                text = sizeText,
+                                                fontSize = 11.sp,
+                                                color = if (isFromMe) Color(0xFFE0E7FF) else TextSecondaryLight
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            Text(
+                                text = message.content,
+                                fontSize = 15.sp,
+                                color = if (isFromMe) Color.White else TextPrimaryLight,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -503,6 +687,71 @@ private fun MessageBubble(
                 )
             }
         }
+    }
+}
+
+private fun handleImageSelected(context: Context, uri: Uri, viewModel: ChatDetailViewModel) {
+    try {
+        var fileName = "image_${System.currentTimeMillis()}.jpg"
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIndex >= 0) {
+                fileName = cursor.getString(nameIndex) ?: fileName
+            }
+        }
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return
+        val bitmap = BitmapFactory.decodeStream(inputStream)
+        inputStream.close()
+        if (bitmap != null) {
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+            val compressedBytes = outputStream.toByteArray()
+            val cleanFileName = if (fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".jpeg", ignoreCase = true)) fileName else "$fileName.jpg"
+            viewModel.onIntent(
+                ChatDetailIntent.SendAttachment(
+                    fileBytes = compressedBytes,
+                    fileName = cleanFileName.take(100),
+                    mimeType = "image/jpeg",
+                    isImage = true
+                )
+            )
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("ChatDetailScreen", "Lỗi nén hình ảnh: ${e.message}")
+    }
+}
+
+private fun handlePdfSelected(context: Context, uri: Uri, viewModel: ChatDetailViewModel) {
+    try {
+        var fileName = "document_${System.currentTimeMillis()}.pdf"
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIndex >= 0) {
+                fileName = cursor.getString(nameIndex) ?: fileName
+            }
+        }
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return
+        val bytes = inputStream.readBytes()
+        inputStream.close()
+        val cleanFileName = if (fileName.endsWith(".pdf", ignoreCase = true)) fileName else "$fileName.pdf"
+        viewModel.onIntent(
+            ChatDetailIntent.SendAttachment(
+                fileBytes = bytes,
+                fileName = cleanFileName.take(100),
+                mimeType = "application/pdf",
+                isImage = false
+            )
+        )
+    } catch (e: Exception) {
+        android.util.Log.e("ChatDetailScreen", "Lỗi đọc tệp PDF: ${e.message}")
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+        else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
     }
 }
 

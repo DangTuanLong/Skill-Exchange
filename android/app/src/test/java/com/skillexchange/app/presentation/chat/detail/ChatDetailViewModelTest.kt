@@ -2,6 +2,7 @@ package com.skillexchange.app.presentation.chat.detail
 
 import androidx.lifecycle.SavedStateHandle
 import com.skillexchange.app.core.security.TokenManager
+import com.skillexchange.app.data.remote.chat.ChatAttachmentDataDto
 import com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto
 import com.skillexchange.app.domain.model.chat.ChatMessage
 import com.skillexchange.app.domain.model.chat.ChatRoom
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -74,6 +76,20 @@ class ChatDetailViewModelTest {
     private var sentMessageContent: String? = null
     private var lastSentMessageId: String? = null
     private var lastSentParticipants: List<String>? = null
+    private var lastSentType: String? = null
+    private var lastSentFileUrl: String? = null
+    private var lastSentFileName: String? = null
+    private var lastSentFileSize: Long? = null
+    private val typingStatusHistory = mutableListOf<Boolean>()
+    private val otherUserTypingFlow = MutableSharedFlow<Boolean>(replay = 1)
+    private var uploadAttachmentResult: Result<ChatAttachmentDataDto> = Result.success(
+        ChatAttachmentDataDto(
+            url = "https://pub-r2.skillexchange.dev/chats/chat_123/test.jpg",
+            type = "IMAGE",
+            fileName = "test.jpg",
+            fileSize = 1024L
+        )
+    )
     private var generatedMessageIdCounter = 0
     private var sendMessageResult: Result<String> = Result.success("msg_generated_1")
 
@@ -91,13 +107,36 @@ class ChatDetailViewModelTest {
             chatId: String,
             content: String,
             participants: List<String>,
-            messageId: String
+            messageId: String,
+            type: String,
+            fileUrl: String?,
+            fileName: String?,
+            fileSize: Long?
         ): Result<String> {
             sentMessageContent = content
             lastSentMessageId = messageId
             lastSentParticipants = participants
+            lastSentType = type
+            lastSentFileUrl = fileUrl
+            lastSentFileName = fileName
+            lastSentFileSize = fileSize
             return sendMessageResult
         }
+
+        override suspend fun uploadAttachment(
+            chatId: String,
+            fileBytes: ByteArray,
+            fileName: String,
+            mimeType: String
+        ): Result<ChatAttachmentDataDto> = uploadAttachmentResult
+
+        override suspend fun setTypingStatus(chatId: String, isTyping: Boolean): Result<Unit> {
+            typingStatusHistory.add(isTyping)
+            return Result.success(Unit)
+        }
+
+        override fun observeOtherUserTyping(chatId: String, otherUserId: String): Flow<Boolean> =
+            otherUserTypingFlow.asSharedFlow()
 
         override suspend fun markMessagesAsRead(chatId: String, messageIds: List<String>): Result<Unit> {
             markedAsReadIds.addAll(messageIds)
@@ -133,6 +172,19 @@ class ChatDetailViewModelTest {
         sentMessageContent = null
         lastSentMessageId = null
         lastSentParticipants = null
+        lastSentType = null
+        lastSentFileUrl = null
+        lastSentFileName = null
+        lastSentFileSize = null
+        typingStatusHistory.clear()
+        uploadAttachmentResult = Result.success(
+            ChatAttachmentDataDto(
+                url = "https://pub-r2.skillexchange.dev/chats/chat_123/test.jpg",
+                type = "IMAGE",
+                fileName = "test.jpg",
+                fileSize = 1024L
+            )
+        )
         generatedMessageIdCounter = 0
         sendMessageResult = Result.success("msg_generated_1")
         exchangeRequestResult = Result.failure(NoSuchElementException())
@@ -389,6 +441,143 @@ class ChatDetailViewModelTest {
         assertNotNull(effectReceived)
         assertTrue(effectReceived is ChatDetailEffect.NavigateToBooking)
         assertEquals("chat_123", (effectReceived as ChatDetailEffect.NavigateToBooking).exchangeId)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `typing status triggers setTypingStatus true on start typing and does not repeat per keystroke`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("A"))
+        testScheduler.runCurrent()
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("Ab"))
+        testScheduler.runCurrent()
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("Abc"))
+        testScheduler.runCurrent()
+
+        // Phải chỉ ghi true đúng 1 lần khi bắt đầu gõ, không ghi lặp lại mỗi ký tự
+        assertEquals(listOf(true), typingStatusHistory)
+
+        // Sau 2s không gõ nữa -> chuyển sang false
+        testScheduler.advanceTimeBy(2001L)
+        testScheduler.runCurrent()
+        assertEquals(listOf(true, false), typingStatusHistory)
+    }
+
+    @Test
+    fun `typing status triggers false after 2s debounce or when text is cleared`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        // Bắt đầu gõ
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("Xin chào"))
+        testScheduler.runCurrent()
+        assertEquals(listOf(true), typingStatusHistory)
+
+        // Chưa đủ 2s (1000ms) -> vẫn là [true]
+        testScheduler.advanceTimeBy(1000L)
+        testScheduler.runCurrent()
+        assertEquals(listOf(true), typingStatusHistory)
+
+        // Đủ 2s debounce -> chuyển trạng thái sang false
+        testScheduler.advanceTimeBy(1001L)
+        testScheduler.runCurrent()
+        assertEquals(listOf(true, false), typingStatusHistory)
+
+        // Gõ tiếp rồi xóa trắng ngay -> lập tức chuyển sang false
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("H"))
+        testScheduler.runCurrent()
+        assertEquals(listOf(true, false, true), typingStatusHistory)
+
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged(""))
+        testScheduler.runCurrent()
+        assertEquals(listOf(true, false, true, false), typingStatusHistory)
+    }
+
+    @Test
+    fun `observing other user typing updates isOtherUserTyping in state`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        roomFlow.emit(sampleRoom)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isOtherUserTyping)
+
+        // Đối tác bắt đầu gõ
+        otherUserTypingFlow.emit(true)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.isOtherUserTyping)
+
+        // Đối tác dừng gõ
+        otherUserTypingFlow.emit(false)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.isOtherUserTyping)
+    }
+
+    @Test
+    fun `SendAttachment adds optimistic message, uploads to R2 and sends with attachment metadata`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+        roomFlow.emit(sampleRoom)
+        messagesFlow.emit(sampleMessages)
+        advanceUntilIdle()
+
+        val fakeBytes = ByteArray(100) { 1 }
+        viewModel.onIntent(
+            ChatDetailIntent.SendAttachment(
+                fileBytes = fakeBytes,
+                fileName = "avatar.jpg",
+                mimeType = "image/jpeg",
+                isImage = true
+            )
+        )
+
+        // Optimistic UI
+        val optimisticMsg = viewModel.state.value.messages.find { it.type == "IMAGE" }
+        assertNotNull(optimisticMsg)
+        assertEquals("[Hình ảnh]", optimisticMsg!!.content)
+        assertTrue(optimisticMsg.isPending)
+        assertFalse(optimisticMsg.isFailed)
+
+        advanceUntilIdle()
+
+        // Đã gọi upload và sendMessage lên server
+        assertEquals("IMAGE", lastSentType)
+        assertEquals("https://pub-r2.skillexchange.dev/chats/chat_123/test.jpg", lastSentFileUrl)
+        assertEquals("avatar.jpg", lastSentFileName)
+        assertEquals(100L, lastSentFileSize)
+    }
+
+    @Test
+    fun `SendAttachment rejects file exceeding size limit`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+        roomFlow.emit(sampleRoom)
+        advanceUntilIdle()
+
+        var effectReceived: ChatDetailEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        // 6MB > 5MB cho ảnh
+        val oversizedImage = ByteArray(6 * 1024 * 1024)
+        viewModel.onIntent(
+            ChatDetailIntent.SendAttachment(
+                fileBytes = oversizedImage,
+                fileName = "huge.jpg",
+                mimeType = "image/jpeg",
+                isImage = true
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(null, lastSentType)
+        assertTrue(effectReceived is ChatDetailEffect.ShowSnackbar)
+        assertTrue((effectReceived as ChatDetailEffect.ShowSnackbar).message.contains("5MB"))
 
         job.cancel()
     }

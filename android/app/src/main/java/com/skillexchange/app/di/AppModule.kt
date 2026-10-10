@@ -93,14 +93,19 @@ val appModule = module {
     }
     viewModelOf(::RatingViewModel)
 
-    // ── Chat & Firebase Auth (TASK-030) ──────────────────────────────
+    // ── Chat & Firebase Auth (TASK-030 & TASK-031) ────────────────────
+    single { com.skillexchange.app.data.remote.chat.ChatRemoteDataSource(get()) }
     single<com.skillexchange.app.core.auth.IFirebaseAuthManager> {
-        com.skillexchange.app.core.auth.FirebaseAuthManager(authRemoteDataSource = get())
+        com.skillexchange.app.core.auth.FirebaseAuthManager(
+            authRemoteDataSource = get(),
+            tokenManager = get()
+        )
     }
     single<com.skillexchange.app.domain.repository.IChatRepository> {
         com.skillexchange.app.data.repository.ChatRepositoryImpl(
             firebaseAuthManager = get(),
-            tokenManager = get()
+            tokenManager = get(),
+            chatRemoteDataSource = get()
         )
     }
     viewModelOf(::ChatListViewModel)

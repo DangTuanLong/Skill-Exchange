@@ -5,8 +5,11 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
+import com.skillexchange.app.BuildConfig
 import com.skillexchange.app.core.auth.IFirebaseAuthManager
 import com.skillexchange.app.core.security.TokenManager
+import com.skillexchange.app.data.remote.chat.ChatAttachmentDataDto
+import com.skillexchange.app.data.remote.chat.ChatRemoteDataSource
 import com.skillexchange.app.domain.model.chat.ChatMessage
 import com.skillexchange.app.domain.model.chat.ChatRoom
 import com.skillexchange.app.domain.repository.IChatRepository
@@ -14,12 +17,20 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 class ChatRepositoryImpl(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
     private val firebaseAuthManager: IFirebaseAuthManager,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val chatRemoteDataSource: ChatRemoteDataSource? = null
 ) : IChatRepository {
+
+    init {
+        if (BuildConfig.DEBUG) {
+            FirebaseFirestore.setLoggingEnabled(true)
+        }
+    }
 
     override fun getChatRoomsFlow(): Flow<List<ChatRoom>> = callbackFlow {
         val currentUserId = tokenManager.getUserId()
@@ -103,11 +114,21 @@ class ChatRepositoryImpl(
         chatId: String,
         content: String,
         participants: List<String>,
-        messageId: String
+        messageId: String,
+        type: String,
+        fileUrl: String?,
+        fileName: String?,
+        fileSize: Long?
     ): Result<String> = runCatching {
         val trimmed = content.trim()
-        require(trimmed.isNotEmpty()) { "Nội dung tin nhắn không được để trống" }
-        require(trimmed.length <= 1000) { "Tin nhắn không được vượt quá 1000 ký tự" }
+        if (type == "TEXT") {
+            require(trimmed.isNotEmpty()) { "Nội dung tin nhắn không được để trống" }
+            require(trimmed.length <= 1000) { "Tin nhắn không được vượt quá 1000 ký tự" }
+        } else {
+            require(!fileUrl.isNullOrBlank()) { "URL tệp đính kèm không được để trống" }
+            require(!fileName.isNullOrBlank() && fileName.length <= 100) { "Tên tệp không hợp lệ" }
+            require(fileSize != null && fileSize > 0) { "Kích thước tệp không hợp lệ" }
+        }
         require(participants.isNotEmpty()) { "Danh sách thành viên không được rỗng" }
 
         val currentUserId = tokenManager.getUserId()
@@ -122,29 +143,114 @@ class ChatRepositoryImpl(
         val roomRef = firestore.collection("chats").document(chatId)
         val newMsgRef = roomRef.collection("messages").document(finalMsgId)
 
+        val lastMessagePreview = when (type) {
+            "IMAGE" -> "[Hình ảnh]"
+            "FILE" -> "[Tệp] $fileName"
+            else -> trimmed
+        }
+
         val messageData = hashMapOf<String, Any?>(
             "participants" to participants,
             "senderId" to currentUserId,
-            "content" to trimmed,
-            "type" to "TEXT",
+            "content" to (if (type == "TEXT") trimmed else lastMessagePreview),
+            "type" to type,
             "createdAt" to FieldValue.serverTimestamp(),
             "readAt" to null
         )
 
+        if (type != "TEXT") {
+            messageData["fileUrl"] = fileUrl
+            messageData["fileName"] = fileName
+            messageData["fileSize"] = fileSize
+        }
+
         val roomUpdates = hashMapOf<String, Any>(
-            "lastMessage" to trimmed,
+            "lastMessage" to lastMessagePreview,
             "lastMessageAt" to FieldValue.serverTimestamp(),
             "lastSenderId" to currentUserId,
             "unreadCount" to FieldValue.increment(1),
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        firestore.runBatch { batch ->
-            batch.set(newMsgRef, messageData)
-            batch.update(roomRef, roomUpdates)
-        }.await()
+        withTimeout(15_000L) {
+            firestore.runBatch { batch ->
+                batch.set(newMsgRef, messageData)
+                batch.update(roomRef, roomUpdates)
+            }.await()
+        }
 
         finalMsgId
+    }
+
+    override suspend fun uploadAttachment(
+        chatId: String,
+        fileBytes: ByteArray,
+        fileName: String,
+        mimeType: String
+    ): Result<ChatAttachmentDataDto> = runCatching {
+        val token = tokenManager.getAccessToken()
+            ?: throw IllegalStateException("Chưa đăng nhập, không tìm thấy access token")
+        val dataSource = chatRemoteDataSource
+            ?: throw IllegalStateException("ChatRemoteDataSource chưa được cấu hình")
+        val response = dataSource.uploadAttachment(
+            accessToken = token,
+            chatId = chatId,
+            fileBytes = fileBytes,
+            fileName = fileName,
+            mimeType = mimeType
+        )
+        if (!response.success || response.data == null) {
+            throw IllegalStateException(response.message ?: "Tải lên tệp đính kèm thất bại")
+        }
+        response.data
+    }
+
+    override suspend fun setTypingStatus(chatId: String, isTyping: Boolean): Result<Unit> = runCatching {
+        val currentUserId = tokenManager.getUserId() ?: return@runCatching
+        firebaseAuthManager.ensureSignedIn().getOrThrow()
+
+        val typingDoc = firestore.collection("chats")
+            .document(chatId)
+            .collection("typing")
+            .document(currentUserId)
+
+        val data = hashMapOf<String, Any>(
+            "isTyping" to isTyping,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        typingDoc.set(data).await()
+    }
+
+    override fun observeOtherUserTyping(chatId: String, otherUserId: String): Flow<Boolean> = callbackFlow {
+        val authResult = firebaseAuthManager.ensureSignedIn()
+        if (authResult.isFailure) {
+            trySend(false)
+            close()
+            return@callbackFlow
+        }
+
+        val registration = firestore.collection("chats")
+            .document(chatId)
+            .collection("typing")
+            .document(otherUserId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(false)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    val isTyping = snapshot.getBoolean("isTyping") ?: false
+                    val updatedAt = snapshot.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
+                    val now = System.currentTimeMillis()
+                    // Người nhận chỉ coi là đang gõ khi updatedAt trong 5 giây gần nhất
+                    val isValid = isTyping && (now - updatedAt <= 5_000L)
+                    trySend(isValid)
+                } else {
+                    trySend(false)
+                }
+            }
+
+        awaitClose { registration.remove() }
     }
 
     override suspend fun markMessagesAsRead(chatId: String, messageIds: List<String>): Result<Unit> = runCatching {
@@ -198,6 +304,9 @@ class ChatRepositoryImpl(
         val type = getString("type") ?: "TEXT"
         val createdAt = getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
         val readAt = getTimestamp("readAt")?.toDate()?.time
+        val fileUrl = getString("fileUrl")
+        val fileName = getString("fileName")
+        val fileSize = getLong("fileSize")
 
         @Suppress("UNCHECKED_CAST")
         val participants = (get("participants") as? List<String>) ?: emptyList()
@@ -213,7 +322,10 @@ class ChatRepositoryImpl(
             readAt = readAt,
             participants = participants,
             isPending = isPending,
-            isFailed = false
+            isFailed = false,
+            fileUrl = fileUrl,
+            fileName = fileName,
+            fileSize = fileSize
         )
     }
 }
