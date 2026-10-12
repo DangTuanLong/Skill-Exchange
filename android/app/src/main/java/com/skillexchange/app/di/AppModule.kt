@@ -29,6 +29,7 @@ import com.skillexchange.app.presentation.chat.list.ChatListViewModel
 import com.skillexchange.app.presentation.chat.detail.ChatDetailViewModel
 import com.skillexchange.app.presentation.notification.NotificationViewModel
 import com.skillexchange.app.presentation.friend.FriendListViewModel
+import com.skillexchange.app.presentation.profile.myprofile.MyProfileViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -126,4 +127,5 @@ val appModule = module {
         com.skillexchange.app.data.repository.FriendRepositoryImpl(get())
     }
     viewModelOf(::FriendListViewModel)
+    viewModelOf(::MyProfileViewModel)
 }

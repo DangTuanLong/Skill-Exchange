@@ -161,6 +161,9 @@ fun SkillExchangeNavHost(
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.ProfileSetup.route) { inclusive = true }
                     }
+                },
+                onNavigateToFriends = {
+                    navController.navigate(Screen.FriendList.route)
                 }
             )
         }

@@ -34,6 +34,7 @@ import com.skillexchange.app.navigation.Screen
 import com.skillexchange.app.presentation.discovery.DiscoveryScreen
 import com.skillexchange.app.presentation.home.HomeScreen
 import com.skillexchange.app.presentation.profile.ProfileSetupScreen
+import com.skillexchange.app.presentation.profile.myprofile.MyProfileScreen
 
 sealed class BottomNavItem(
     val route: String,
@@ -70,7 +71,7 @@ sealed class BottomNavItem(
     )
 
     object Profile : BottomNavItem(
-        route = Screen.ProfileSetup.route,
+        route = Screen.MyProfile.route,
         title = "Hồ sơ",
         selectedIcon = Icons.Default.Person,
         unselectedIcon = Icons.Outlined.Person
@@ -157,7 +158,7 @@ fun MainScreen(
                             }
                         },
                         onNavigateToProfileSetup = {
-                            bottomNavController.navigate(Screen.ProfileSetup.route) {
+                            bottomNavController.navigate(Screen.MyProfile.route) {
                                 popUpTo(bottomNavController.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
@@ -193,16 +194,21 @@ fun MainScreen(
                     )
                 }
 
-                composable(Screen.ProfileSetup.route) {
-                    ProfileSetupScreen(
-                        onNavigateToSkillSelection = {
-                            rootNavController.navigate(Screen.SkillSelection.route)
+                composable(Screen.MyProfile.route) {
+                    MyProfileScreen(
+                        onNavigateToEditProfile = {
+                            rootNavController.navigate(Screen.ProfileSetup.route)
                         },
-                        onNavigateToHome = {
-                            bottomNavController.navigate(Screen.Home.route)
+                        onNavigateToManageSkills = {
+                            rootNavController.navigate(Screen.SkillSelection.route)
                         },
                         onNavigateToFriends = {
                             rootNavController.navigate(Screen.FriendList.route)
+                        },
+                        onNavigateToLogin = {
+                            rootNavController.navigate(Screen.Login.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
                     )
                 }
