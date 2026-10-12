@@ -175,6 +175,15 @@ fun SkillExchangeNavHost(
             )
         }
 
+        composable(Screen.FriendList.route) {
+            com.skillexchange.app.presentation.friend.FriendListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = { userId ->
+                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                }
+            )
+        }
+
         composable(
             route = Screen.ProfileDetail.route,
             arguments = listOf(navArgument("userId") { type = NavType.StringType })

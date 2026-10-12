@@ -65,5 +65,6 @@ val appModule = module {
     }
     single { InMemoryRateLimiter(maxRequests = 5, windowMillis = 60_000L) }
     single { com.skillexchange.api.services.rating.RatingService() }
+    single { com.skillexchange.api.services.friendship.FriendshipService(notificationService = get()) }
 }
 

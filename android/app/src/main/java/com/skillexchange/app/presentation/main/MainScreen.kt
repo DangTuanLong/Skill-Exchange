@@ -200,6 +200,9 @@ fun MainScreen(
                         },
                         onNavigateToHome = {
                             bottomNavController.navigate(Screen.Home.route)
+                        },
+                        onNavigateToFriends = {
+                            rootNavController.navigate(Screen.FriendList.route)
                         }
                     )
                 }

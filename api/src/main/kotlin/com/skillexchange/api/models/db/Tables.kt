@@ -100,3 +100,13 @@ object NotificationsTable : Table("notifications") {
     val createdAt  = datetime("created_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }
+
+object FriendshipsTable : Table("friendships") {
+    val id        = uuid("id").autoGenerate()
+    val userId    = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val friendId  = uuid("friend_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val status    = varchar("status", 20).default("PENDING")
+    val createdAt = datetime("created_at").default(LocalDateTime.now())
+    val updatedAt = datetime("updated_at").default(LocalDateTime.now())
+    override val primaryKey = PrimaryKey(id)
+}

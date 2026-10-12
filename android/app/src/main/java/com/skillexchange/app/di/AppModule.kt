@@ -28,6 +28,7 @@ import com.skillexchange.app.presentation.rating.RatingViewModel
 import com.skillexchange.app.presentation.chat.list.ChatListViewModel
 import com.skillexchange.app.presentation.chat.detail.ChatDetailViewModel
 import com.skillexchange.app.presentation.notification.NotificationViewModel
+import com.skillexchange.app.presentation.friend.FriendListViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -118,4 +119,11 @@ val appModule = module {
         com.skillexchange.app.data.repository.NotificationRepositoryImpl(get())
     }
     viewModelOf(::NotificationViewModel)
+
+    // ── Friendships & Friends (TASK-034) ──────────────────────────────
+    single { com.skillexchange.app.data.remote.friend.FriendRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IFriendRepository> {
+        com.skillexchange.app.data.repository.FriendRepositoryImpl(get())
+    }
+    viewModelOf(::FriendListViewModel)
 }

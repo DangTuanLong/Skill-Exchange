@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 
 import androidx.compose.material3.*
@@ -51,6 +52,7 @@ import org.koin.androidx.compose.koinViewModel
 fun ProfileSetupScreen(
     onNavigateToSkillSelection: () -> Unit = {},
     onNavigateToHome: () -> Unit = {},
+    onNavigateToFriends: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -484,6 +486,23 @@ fun ProfileSetupScreen(
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
+
+                    // Friends & Invitations Shortcut
+                    OutlinedButton(
+                        onClick = onNavigateToFriends,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Brand300)
+                    ) {
+                        Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Bạn bè & Lời mời kết bạn 👥", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Save + Continue button
                     Box(
