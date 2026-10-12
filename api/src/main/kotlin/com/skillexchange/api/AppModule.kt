@@ -48,11 +48,14 @@ val appModule = module {
     single<com.skillexchange.api.services.chat.IFirestoreChatService> {
         com.skillexchange.api.services.chat.FirestoreChatService(httpClient = get(), credentialsProvider = get())
     }
+    single { com.skillexchange.api.services.notification.NotificationService(fcmService = get(), deviceService = get()) }
+    single { com.skillexchange.api.services.notification.ReminderSchedulerService(notificationService = get()) }
     single<IExchangeNotificationHook> {
         FcmExchangeNotificationHook(
             fcmService = get(),
             deviceService = get(),
-            firestoreChatService = get()
+            firestoreChatService = get(),
+            notificationService = get()
         )
     }
     single { ExchangeService(get()) }

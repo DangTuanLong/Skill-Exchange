@@ -11,6 +11,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.koin.ktor.ext.inject
@@ -64,4 +65,19 @@ fun Application.initDatabase() {
     } catch (e: Exception) {
         // Không làm gián đoạn khởi động máy chủ nếu mạng lỗi
     }
+
+    // Quét bù nhắc nhở khi khởi động (chạy bất đồng bộ trên IO dispatcher, không làm chậm hay crash máy chủ)
+    try {
+        val reminderSchedulerService: com.skillexchange.api.services.notification.ReminderSchedulerService by inject()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                reminderSchedulerService.processReminders()
+            } catch (e: Throwable) {
+                // Không gián đoạn máy chủ
+            }
+        }
+    } catch (e: Throwable) {
+        // Fallback an toàn
+    }
 }
+

@@ -87,3 +87,16 @@ object FcmTokensTable : Table("fcm_tokens") {
     val updatedAt  = datetime("updated_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }
+
+object NotificationsTable : Table("notifications") {
+    val id         = uuid("id").autoGenerate()
+    val userId     = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val type       = varchar("type", 50)
+    val title      = varchar("title", 200)
+    val body       = text("body")
+    val entityId   = varchar("entity_id", 100).nullable()
+    val data       = text("data").default("{}")
+    val isRead     = bool("is_read").default(false)
+    val createdAt  = datetime("created_at").default(LocalDateTime.now())
+    override val primaryKey = PrimaryKey(id)
+}

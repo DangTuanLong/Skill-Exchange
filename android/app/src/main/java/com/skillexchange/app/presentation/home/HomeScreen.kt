@@ -30,7 +30,8 @@ import com.skillexchange.app.core.ui.theme.*
 @Composable
 fun HomeScreen(
     onNavigateToDiscovery: () -> Unit = {},
-    onNavigateToProfileSetup: () -> Unit = {}
+    onNavigateToProfileSetup: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -81,14 +82,15 @@ fun HomeScreen(
                     }
 
                     IconButton(
-                        onClick = { },
+                        onClick = onNavigateToNotifications,
                         modifier = Modifier
+                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.2f))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notifications",
+                            contentDescription = "Thông báo",
                             tint = Color.White
                         )
                     }

@@ -214,27 +214,52 @@ CREATE INDEX idx_friendships_user   ON friendships(user_id);
 CREATE INDEX idx_friendships_friend ON friendships(friend_id);
 
 -- ============================================================
--- 8. NOTIFICATIONS [PLANNED — TASK-032]
+-- 8. NOTIFICATIONS [IMPLEMENTED — TASK-032]
 -- ============================================================
-CREATE TYPE notification_type AS ENUM (
-    'EXCHANGE_REQUEST', 'EXCHANGE_ACCEPTED', 'EXCHANGE_REJECTED',
-    'EXCHANGE_COMPLETED', 'NEW_MESSAGE', 'NEW_RATING',
-    'FRIEND_REQUEST', 'FRIEND_ACCEPTED'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_type') THEN
+        CREATE TYPE notification_type AS ENUM (
+            'NEW_MESSAGE',
+            'NEW_REQUEST',
+            'REQUEST_ACCEPTED',
+            'REQUEST_REJECTED',
+            'APPOINTMENT_REMINDER',
+            'RATING_REMINDER',
+            'FRIEND_REQUEST',
+            'FRIEND_ACCEPTED'
+        );
+    ELSE
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'NEW_MESSAGE';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'NEW_REQUEST';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'REQUEST_ACCEPTED';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'REQUEST_REJECTED';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'APPOINTMENT_REMINDER';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RATING_REMINDER';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'FRIEND_REQUEST';
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'FRIEND_ACCEPTED';
+    END IF;
+END$$;
 
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     type       notification_type NOT NULL,
     title      VARCHAR(200) NOT NULL,
-    body       TEXT,
+    body       TEXT NOT NULL,
+    entity_id  VARCHAR(100),
     data       JSONB DEFAULT '{}'::JSONB,
     is_read    BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_notifications_user   ON notifications(user_id);
-CREATE INDEX idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_notifications_user   ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
+
+-- Chống trùng lặp nhắc nhở (DEC-018)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_reminders
+ON notifications (user_id, type, entity_id)
+WHERE type IN ('APPOINTMENT_REMINDER', 'RATING_REMINDER');
 
 -- ============================================================
 -- 9. FCM TOKENS [IMPLEMENTED — TASK-023]

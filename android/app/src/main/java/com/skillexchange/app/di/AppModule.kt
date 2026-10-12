@@ -27,6 +27,7 @@ import com.skillexchange.app.presentation.profile.ProfileViewModel
 import com.skillexchange.app.presentation.rating.RatingViewModel
 import com.skillexchange.app.presentation.chat.list.ChatListViewModel
 import com.skillexchange.app.presentation.chat.detail.ChatDetailViewModel
+import com.skillexchange.app.presentation.notification.NotificationViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -110,4 +111,11 @@ val appModule = module {
     }
     viewModelOf(::ChatListViewModel)
     viewModelOf(::ChatDetailViewModel)
+
+    // ── Notification Center (TASK-032) ────────────────────────────────
+    single { com.skillexchange.app.data.remote.notification.NotificationRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.INotificationRepository> {
+        com.skillexchange.app.data.repository.NotificationRepositoryImpl(get())
+    }
+    viewModelOf(::NotificationViewModel)
 }

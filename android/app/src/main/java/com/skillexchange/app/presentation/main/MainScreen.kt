@@ -162,6 +162,9 @@ fun MainScreen(
                                 launchSingleTop = true
                                 restoreState = true
                             }
+                        },
+                        onNavigateToNotifications = {
+                            rootNavController.navigate(Screen.Notifications.route)
                         }
                     )
                 }

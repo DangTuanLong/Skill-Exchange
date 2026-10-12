@@ -59,8 +59,12 @@ fun SkillExchangeNavHost(
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
-                if (notif.type == "NEW_REQUEST" && notif.entityId != null && tokenManager.isLoggedIn()) {
-                    navController.navigate(Screen.BookingDetail.createRoute(notif.entityId))
+                if (tokenManager.isLoggedIn() && notif.entityId != null) {
+                    when (notif.type) {
+                        "NEW_MESSAGE" -> navController.navigate(Screen.ChatDetail.createRoute(notif.entityId))
+                        "RATING_REMINDER" -> navController.navigate(Screen.Rating.createRoute(notif.entityId))
+                        else -> navController.navigate(Screen.BookingDetail.createRoute(notif.entityId))
+                    }
                 }
             }
         }
@@ -232,14 +236,26 @@ fun SkillExchangeNavHost(
             )
         }
 
-        composable(
-            route = Screen.Rating.route,
+        composable(Screen.Rating.route,
             arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
         ) { backStackEntry ->
             val exchangeId = backStackEntry.arguments?.getString("exchangeId") ?: ""
             com.skillexchange.app.presentation.rating.RatingScreen(
                 exchangeId = exchangeId,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Notifications.route) {
+            com.skillexchange.app.presentation.notification.NotificationScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEntity = { type, entityId ->
+                    when (type) {
+                        "NEW_MESSAGE" -> navController.navigate(Screen.ChatDetail.createRoute(entityId))
+                        "RATING_REMINDER" -> navController.navigate(Screen.Rating.createRoute(entityId))
+                        else -> navController.navigate(Screen.BookingDetail.createRoute(entityId))
+                    }
+                }
             )
         }
 
