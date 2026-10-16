@@ -28,3 +28,11 @@ data class ExtractSkillsResponse(
     val success: Boolean = true,
     val data: List<ExtractedSkillDto>
 )
+
+@Serializable
+data class NlpApiErrorDto(
+    val success: Boolean = false,
+    val status: Int? = null,
+    val code: String? = null,
+    val message: String
+)

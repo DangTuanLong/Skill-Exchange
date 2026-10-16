@@ -17,6 +17,11 @@ object ErrorCodes {
     const val INTERNAL = "INTERNAL"
     const val BAD_REQUEST = "BAD_REQUEST"
     const val QUERY_TIMEOUT = "QUERY_TIMEOUT"
+    const val TEXT_TOO_LONG = "TEXT_TOO_LONG"
+    const val INVALID_ENCODING = "INVALID_ENCODING"
+    const val EMPTY_FILE = "EMPTY_FILE"
+    const val UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
+    const val SERVER_BUSY = "SERVER_BUSY"
 
     fun fromStatus(status: Int): String = when (status) {
         400 -> BAD_REQUEST

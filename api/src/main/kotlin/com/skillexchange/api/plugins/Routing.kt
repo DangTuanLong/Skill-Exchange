@@ -45,6 +45,7 @@ fun Application.configureRouting() {
     val reminderSchedulerService: ReminderSchedulerService by inject()
     val skillExtractionService: com.skillexchange.api.services.nlp.SkillExtractionService by inject()
     val nlpRateLimiter: com.skillexchange.api.services.nlp.NlpRateLimiter by inject()
+    val documentRateLimiter: com.skillexchange.api.services.nlp.DocumentRateLimiter by inject()
     val skillGraphService: com.skillexchange.api.services.graph.SkillGraphService by inject()
     val graphRateLimiter: com.skillexchange.api.services.graph.GraphRateLimiter by inject()
 
@@ -60,7 +61,7 @@ fun Application.configureRouting() {
         ratingRoutes(ratingService)
         chatRoutes(chatAttachmentStorageService, exchangeService)
         notificationRoutes(notificationService, reminderSchedulerService)
-        nlpRoutes(skillExtractionService, nlpRateLimiter)
+        nlpRoutes(skillExtractionService, nlpRateLimiter, documentRateLimiter)
         graphRoutes(skillGraphService, graphRateLimiter)
     }
 }

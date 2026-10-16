@@ -8,6 +8,7 @@ import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -368,6 +369,9 @@ class ProfileViewModelTest {
                     )
                 ))
             }
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(emptyList())
+            }
         }
 
         val viewModel = ProfileViewModel(
@@ -422,6 +426,9 @@ class ProfileViewModelTest {
                     )
                 ))
             }
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(emptyList())
+            }
         }
 
         mockSkillRepository.skillsList.clear()
@@ -453,6 +460,227 @@ class ProfileViewModelTest {
         assertNotNull(added)
         assertEquals(SkillType.HAVE, added!!.type)
         assertEquals(4, added.proficiencyLevel)
+    }
+
+    // ─── Document Upload Tests (TASK-043 Mức 1) ──────────────────────────
+
+    @Test
+    fun `RequestDocumentUpload sets showDocumentPrivacyDialog to true`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
+        viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
+    }
+
+    @Test
+    fun `DismissDocumentPrivacyDialog sets showDocumentPrivacyDialog to false`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
+
+        viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
+    }
+
+    @Test
+    fun `ConfirmDocumentPrivacyDialog hides dialog and emits OpenDocumentPicker effect`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
+
+        viewModel.onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
+        assertEquals(ProfileEffect.OpenDocumentPicker, effectReceived)
+        job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument rejects zip file client-side`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        val zipBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+        viewModel.onIntent(ProfileIntent.UploadDocument(zipBytes, "archive.zip"))
+        advanceUntilIdle()
+
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("ZIP"))
+        job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument rejects unsupported file extensions`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        viewModel.onIntent(ProfileIntent.UploadDocument(byteArrayOf(1, 2, 3), "data.csv"))
+        advanceUntilIdle()
+
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains(".txt và .md"))
+        job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument rejects oversized files over 2MB`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        val oversizedBytes = ByteArray(2 * 1024 * 1024 + 10) { 1 }
+        viewModel.onIntent(ProfileIntent.UploadDocument(oversizedBytes, "large.txt"))
+        advanceUntilIdle()
+
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("2MB"))
+        job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument rejects empty file`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        viewModel.onIntent(ProfileIntent.UploadDocument(ByteArray(0), "empty.txt"))
+        advanceUntilIdle()
+
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("không có nội dung"))
+        job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument success opens bottom sheet with default level 2 and filters existing HAVE skills`() = runTest {
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> =
+                Result.success(emptyList())
+
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(listOf(
+                    com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                        skillId = 10,
+                        skillName = "Kotlin",
+                        categoryId = 1,
+                        categoryName = "Lập trình",
+                        confidence = 1.0,
+                        matchType = "EXACT",
+                        matchedTerm = "Kotlin"
+                    ),
+                    com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                        skillId = 20,
+                        skillName = "Python",
+                        categoryId = 1,
+                        categoryName = "Lập trình",
+                        confidence = 1.0,
+                        matchType = "EXACT",
+                        matchedTerm = "Python"
+                    )
+                ))
+            }
+        }
+
+        // Đã có sẵn kỹ năng 10 trong HAVE
+        mockSkillRepository.skillsList.clear()
+        mockSkillRepository.skillsList.add(
+            UserSkill("us10", 10, "Kotlin", "Lập trình", SkillType.HAVE, 4)
+        )
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        val validBytes = "Kỹ năng: Kotlin, Python".toByteArray(Charsets.UTF_8)
+        viewModel.onIntent(ProfileIntent.UploadDocument(validBytes, "cv.txt"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.isExtractingDocument)
+        assertTrue(state.showSkillExtractionSheet)
+        assertEquals(2, state.extractedSkills.size)
+
+        // Kỹ năng 10 đã có: isAlreadyAdded = true, isSelected = false
+        val skill10 = state.extractedSkills.find { it.skill.skillId == 10 }!!
+        assertTrue(skill10.isAlreadyAdded)
+        assertFalse(skill10.isSelected)
+
+        // Kỹ năng 20 chưa có: isAlreadyAdded = false, isSelected = true, level = 2
+        val skill20 = state.extractedSkills.find { it.skill.skillId == 20 }!!
+        assertFalse(skill20.isAlreadyAdded)
+        assertTrue(skill20.isSelected)
+        assertEquals(2, skill20.level)
+    }
+
+    @Test
+    fun `UploadDocument server failure displays error in snackbar`() = runTest {
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> =
+                Result.success(emptyList())
+
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.failure(Exception("Nội dung văn bản vượt quá giới hạn 10.000 ký tự"))
+            }
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        viewModel.onIntent(ProfileIntent.UploadDocument(ByteArray(50) { 65 }, "too_long.md"))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isExtractingDocument)
+        assertFalse(viewModel.state.value.showSkillExtractionSheet)
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("10.000 ký tự"))
+        job.cancel()
     }
 }
 

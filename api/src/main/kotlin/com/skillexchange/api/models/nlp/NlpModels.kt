@@ -8,6 +8,12 @@ data class ExtractSkillsRequest(
 )
 
 @Serializable
+data class ExtractSkillsDocumentRequest(
+    val text: String,
+    val fileName: String = "document.txt"
+)
+
+@Serializable
 data class ExtractedSkillDto(
     val skillId: Int,
     val skillName: String,

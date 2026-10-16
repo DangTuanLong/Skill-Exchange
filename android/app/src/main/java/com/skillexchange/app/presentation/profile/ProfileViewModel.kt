@@ -38,10 +38,12 @@ data class ProfileUiState(
     val error: String? = null,
     val successMessage: String? = null,
     val step: ProfileStep = ProfileStep.PROFILE_INFO,
-    // NLP Skill Extraction (TASK-040)
+    // NLP Skill Extraction (TASK-040 & TASK-043)
     val isExtractingSkills: Boolean = false,
     val showSkillExtractionSheet: Boolean = false,
-    val extractedSkills: List<ExtractedSkillItem> = emptyList()
+    val extractedSkills: List<ExtractedSkillItem> = emptyList(),
+    val showDocumentPrivacyDialog: Boolean = false,
+    val isExtractingDocument: Boolean = false
 )
 
 data class ExtractedSkillItem(
@@ -78,6 +80,11 @@ sealed class ProfileIntent {
     data class ToggleExtractedSkillSelection(val skillId: Int) : ProfileIntent()
     data class SetExtractedSkillLevel(val skillId: Int, val level: Int) : ProfileIntent()
     object ConfirmAddExtractedSkills : ProfileIntent()
+    // Document Upload Extraction Intents (TASK-043)
+    object RequestDocumentUpload : ProfileIntent()
+    object DismissDocumentPrivacyDialog : ProfileIntent()
+    object ConfirmDocumentPrivacyDialog : ProfileIntent()
+    data class UploadDocument(val fileBytes: ByteArray, val fileName: String) : ProfileIntent()
 }
 
 
@@ -85,6 +92,7 @@ sealed class ProfileIntent {
 sealed class ProfileEffect {
     object NavigateToHome : ProfileEffect()
     object NavigateToSkillSelection : ProfileEffect()
+    object OpenDocumentPicker : ProfileEffect()
     data class ShowSnackbar(val message: String) : ProfileEffect()
 }
 
@@ -127,6 +135,13 @@ class ProfileViewModel(
             is ProfileIntent.ToggleExtractedSkillSelection -> toggleExtractedSkillSelection(intent.skillId)
             is ProfileIntent.SetExtractedSkillLevel -> setExtractedSkillLevel(intent.skillId, intent.level)
             is ProfileIntent.ConfirmAddExtractedSkills -> confirmAddExtractedSkills()
+            is ProfileIntent.RequestDocumentUpload -> _state.update { it.copy(showDocumentPrivacyDialog = true) }
+            is ProfileIntent.DismissDocumentPrivacyDialog -> _state.update { it.copy(showDocumentPrivacyDialog = false) }
+            is ProfileIntent.ConfirmDocumentPrivacyDialog -> {
+                _state.update { it.copy(showDocumentPrivacyDialog = false) }
+                viewModelScope.launch { _effect.send(ProfileEffect.OpenDocumentPicker) }
+            }
+            is ProfileIntent.UploadDocument -> uploadDocument(intent.fileBytes, intent.fileName)
         }
     }
 
@@ -410,6 +425,73 @@ class ProfileViewModel(
             _state.update { it.copy(isLoading = false) }
             checkAndUpdateProfileCompletion()
             _effect.send(ProfileEffect.ShowSnackbar("Đã thêm $successCount kỹ năng vào danh sách Kỹ năng có sẵn (HAVE)!"))
+        }
+    }
+
+    private fun uploadDocument(fileBytes: ByteArray, fileName: String) {
+        val lowerName = fileName.lowercase()
+        if (lowerName.endsWith(".zip")) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt và .md."))
+            }
+            return
+        }
+        if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md")) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt và .md."))
+            }
+            return
+        }
+        if (fileBytes.size > 2 * 1024 * 1024) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn 2MB."))
+            }
+            return
+        }
+        if (fileBytes.isEmpty()) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Tệp không có nội dung văn bản."))
+            }
+            return
+        }
+
+        val nlp = nlpRepo
+        if (nlp == null) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Dịch vụ gợi ý kỹ năng chưa sẵn sàng"))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(isExtractingDocument = true) }
+            nlp.extractSkillsFromDocument(fileBytes, fileName)
+                .onSuccess { extracted ->
+                    _state.update { it.copy(isExtractingDocument = false) }
+                    if (extracted.isEmpty()) {
+                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong tài liệu."))
+                    } else {
+                        val currentHaveSkillIds = _state.value.mySkills
+                            .filter { it.type.name == "HAVE" }
+                            .map { it.skillId }
+                            .toSet()
+
+                        val items = extracted.map { dto ->
+                            val alreadyHas = currentHaveSkillIds.contains(dto.skillId)
+                            ExtractedSkillItem(
+                                skill = dto,
+                                isSelected = !alreadyHas,
+                                level = 2, // mặc định mức thấp 2/5
+                                isAlreadyAdded = alreadyHas
+                            )
+                        }
+                        _state.update { it.copy(extractedSkills = items, showSkillExtractionSheet = true) }
+                    }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isExtractingDocument = false) }
+                    _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi xử lý tài liệu"))
+                }
         }
     }
 }

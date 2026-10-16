@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -82,12 +83,35 @@ fun ProfileSetupScreen(
         }
     }
 
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) {
+                    var fileName = "document.txt"
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1 && cursor.moveToFirst()) {
+                            fileName = cursor.getString(nameIndex)
+                        }
+                    }
+                    viewModel.onIntent(ProfileIntent.UploadDocument(bytes, fileName))
+                }
+            } catch (e: Exception) {
+                // Handled in ViewModel
+            }
+        }
+    }
+
     LaunchedEffect(Unit) { visible = true }
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
                 is ProfileEffect.NavigateToSkillSelection -> onNavigateToSkillSelection()
                 is ProfileEffect.NavigateToHome           -> onNavigateToHome()
+                is ProfileEffect.OpenDocumentPicker       -> documentPickerLauncher.launch("*/*")
                 is ProfileEffect.ShowSnackbar             -> snackbarHostState.showSnackbar(effect.message)
             }
         }
@@ -290,8 +314,39 @@ fun ProfileSetupScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
+                        OutlinedButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
+                            },
+                            enabled = !state.isExtractingDocument,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (!state.isExtractingDocument) Brand500 else Color(0xFFCBD5E1)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            if (state.isExtractingDocument) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Brand500
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đang tải...", fontSize = 13.sp, color = Brand500)
+                            } else {
+                                Text(
+                                    "Tải tài liệu 📄",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Brand500
+                                )
+                            }
+                        }
+
                         OutlinedButton(
                             onClick = {
                                 focusManager.clearFocus()
@@ -315,7 +370,7 @@ fun ProfileSetupScreen(
                                 Text("Đang phân tích...", fontSize = 13.sp, color = Brand500)
                             } else {
                                 Text(
-                                    "Gợi ý kỹ năng 🤖",
+                                    "Gợi ý từ Bio 🤖",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
@@ -760,5 +815,43 @@ fun ProfileSetupScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    if (state.showDocumentPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog) },
+            title = {
+                Text(
+                    text = "🔒 Bảo mật & Quyền riêng tư",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = TextPrimaryLight
+                )
+            },
+            text = {
+                Text(
+                    text = "Tệp của bạn sẽ được gửi lên máy chủ để đọc trong bộ nhớ và trích xuất từ khóa kỹ năng. Hệ thống cam kết không lưu trữ tệp, không ghi log nội dung cá nhân và dữ liệu sẽ tự động hủy ngay sau khi xử lý.",
+                    fontSize = 14.sp,
+                    color = TextSecondaryLight,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Tiếp tục chọn tệp", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog) }
+                ) {
+                    Text("Hủy", color = Color(0xFF64748B))
+                }
+            }
+        )
     }
 }
