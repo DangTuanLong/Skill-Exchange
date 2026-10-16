@@ -36,7 +36,7 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8FAFF))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
     ) {
@@ -147,7 +147,7 @@ fun HomeScreen(
                 text = "Thao tác nhanh",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimaryLight
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Row(
@@ -160,7 +160,7 @@ fun HomeScreen(
                         .weight(1f)
                         .clickable { onNavigateToDiscovery() },
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(2.dp)
                 ) {
                     Column(
@@ -171,7 +171,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFEFF6FF)),
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.Search, contentDescription = null, tint = Brand500)
@@ -180,12 +180,12 @@ fun HomeScreen(
                             text = "Tìm kiếm đối tác",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = TextPrimaryLight
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Khám phá bạn học theo kỹ năng & vị trí",
                             fontSize = 12.sp,
-                            color = TextSecondaryLight
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -196,7 +196,7 @@ fun HomeScreen(
                         .weight(1f)
                         .clickable { onNavigateToProfileSetup() },
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(2.dp)
                 ) {
                     Column(
@@ -207,7 +207,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFF0FDF4)),
+                                .background(Color(0xFF16A34A).copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF16A34A))
@@ -216,12 +216,12 @@ fun HomeScreen(
                             text = "Cập nhật hồ sơ",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = TextPrimaryLight
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Thiết lập kỹ năng bạn có & muốn học",
                             fontSize = 12.sp,
-                            color = TextSecondaryLight
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -244,7 +244,7 @@ fun HomeScreen(
                     text = "Danh mục kỹ năng",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimaryLight
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 TextButton(onClick = { onNavigateToDiscovery() }) {
                     Text("Xem tất cả →", color = Brand500, fontSize = 13.sp)
@@ -267,7 +267,7 @@ fun HomeScreen(
                             .width(110.dp)
                             .clickable { onNavigateToDiscovery() },
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(1.dp)
                     ) {
                         Column(
@@ -290,7 +290,7 @@ fun HomeScreen(
                                 text = name,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = TextPrimaryLight
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }

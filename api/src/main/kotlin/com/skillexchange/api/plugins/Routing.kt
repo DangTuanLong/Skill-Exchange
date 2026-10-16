@@ -23,10 +23,12 @@ import com.skillexchange.api.routes.graphRoutes
 import com.skillexchange.api.routes.nlpRoutes
 import com.skillexchange.api.routes.notificationRoutes
 import com.skillexchange.api.routes.ratingRoutes
+import com.skillexchange.api.routes.statsRoutes
 import com.skillexchange.api.services.device.DeviceService
 import com.skillexchange.api.services.notification.NotificationService
 import com.skillexchange.api.services.notification.ReminderSchedulerService
 import com.skillexchange.api.services.rating.RatingService
+import com.skillexchange.api.services.stats.StatsService
 
 fun Application.configureRouting() {
     val authService: AuthService by inject()
@@ -48,6 +50,7 @@ fun Application.configureRouting() {
     val documentRateLimiter: com.skillexchange.api.services.nlp.DocumentRateLimiter by inject()
     val skillGraphService: com.skillexchange.api.services.graph.SkillGraphService by inject()
     val graphRateLimiter: com.skillexchange.api.services.graph.GraphRateLimiter by inject()
+    val statsService: StatsService by inject()
 
     routing {
         healthRoutes()
@@ -63,5 +66,6 @@ fun Application.configureRouting() {
         notificationRoutes(notificationService, reminderSchedulerService)
         nlpRoutes(skillExtractionService, nlpRateLimiter, documentRateLimiter)
         graphRoutes(skillGraphService, graphRateLimiter)
+        statsRoutes(statsService)
     }
 }

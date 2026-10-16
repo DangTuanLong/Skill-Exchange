@@ -70,5 +70,6 @@ val appModule = module {
     single { com.skillexchange.api.services.nlp.DocumentRateLimiter() }
     single { com.skillexchange.api.services.graph.SkillGraphService() }
     single { com.skillexchange.api.services.graph.GraphRateLimiter() }
+    single { com.skillexchange.api.services.stats.StatsService() }
 }
 

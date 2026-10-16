@@ -268,7 +268,14 @@ fun SkillExchangeNavHost(
             )
         }
 
-        composable(Screen.Dashboard.route) { PlaceholderScreen("Dashboard") }
+        composable(Screen.Dashboard.route) {
+            com.skillexchange.app.presentation.dashboard.DashboardScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = { userId ->
+                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                }
+            )
+        }
 
         composable(Screen.SkillGraph.route) {
             com.skillexchange.app.presentation.graph.SkillGraphScreen(

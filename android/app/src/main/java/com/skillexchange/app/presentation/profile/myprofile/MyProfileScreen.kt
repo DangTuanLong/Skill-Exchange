@@ -37,6 +37,7 @@ fun MyProfileScreen(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToManageSkills: () -> Unit = {},
     onNavigateToLogin: () -> Unit = {},
+    onNavigateToDashboard: () -> Unit = {},
     viewModel: MyProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -444,11 +445,13 @@ fun MyProfileScreen(
                     }
                 }
 
-                // ── 5. Chỗ chờ cho Thống kê (Phase 5) ──────────────────────────────
+                // ── 5. Thống kê hoạt động (Dashboard) ──────────────────────────────
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToDashboard() },
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(1.dp)
                 ) {
                     Column(
@@ -463,20 +466,20 @@ fun MyProfileScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Thống kê hoạt động",
+                                text = "Thống kê & Bảng điều khiển",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimaryLight
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFF1F5F9)
+                                color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Text(
-                                    text = "Phase 5 • Sắp ra mắt",
+                                    text = "Xem chi tiết ↗",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = TextSecondaryLight,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
@@ -506,9 +509,9 @@ fun MyProfileScreen(
                         }
 
                         Text(
-                            text = "Bảng điều khiển trực quan, radar kỹ năng và bảng xếp hạng cộng đồng sẽ có mặt trong bản cập nhật tới.",
+                            text = "Xem biểu đồ radar kỹ năng 6 trục, phân tích 6 tháng gần nhất, gợi ý mở rộng kết nối và top 10 bảng xếp hạng.",
                             fontSize = 12.sp,
-                            color = TextSecondaryLight,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp
                         )
                     }

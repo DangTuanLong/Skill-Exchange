@@ -209,6 +209,9 @@ fun MainScreen(
                             rootNavController.navigate(Screen.Login.route) {
                                 popUpTo(0) { inclusive = true }
                             }
+                        },
+                        onNavigateToDashboard = {
+                            rootNavController.navigate(Screen.Dashboard.route)
                         }
                     )
                 }

@@ -30,6 +30,7 @@ import com.skillexchange.app.presentation.chat.detail.ChatDetailViewModel
 import com.skillexchange.app.presentation.notification.NotificationViewModel
 import com.skillexchange.app.presentation.profile.myprofile.MyProfileViewModel
 import com.skillexchange.app.presentation.graph.SkillGraphViewModel
+import com.skillexchange.app.presentation.dashboard.DashboardViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -133,4 +134,11 @@ val appModule = module {
         com.skillexchange.app.data.repository.GraphRepositoryImpl(get(), get())
     }
     viewModelOf(::SkillGraphViewModel)
+
+    // ── Dashboard & Statistics (TASK-050) ─────────────────────────────
+    single { com.skillexchange.app.data.remote.stats.StatsRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IStatsRepository> {
+        com.skillexchange.app.data.repository.StatsRepositoryImpl(get(), get())
+    }
+    viewModelOf(::DashboardViewModel)
 }
