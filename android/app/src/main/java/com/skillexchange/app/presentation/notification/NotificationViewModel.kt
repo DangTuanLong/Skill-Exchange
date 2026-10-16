@@ -17,9 +17,10 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 class NotificationViewModel(
-    private val notificationRepository: INotificationRepository,
-    private val nowProvider: () -> LocalDate = { LocalDate.now() }
+    private val notificationRepository: INotificationRepository
 ) : ViewModel() {
+
+    internal var nowProvider: () -> LocalDate = { LocalDate.now() }
 
     private val _state = MutableStateFlow(NotificationState())
     val state: StateFlow<NotificationState> = _state.asStateFlow()

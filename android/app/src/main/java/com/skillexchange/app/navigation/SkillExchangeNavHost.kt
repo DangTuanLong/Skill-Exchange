@@ -158,12 +158,11 @@ fun SkillExchangeNavHost(
                     navController.navigate(Screen.SkillSelection.route)
                 },
                 onNavigateToHome = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                    if (!navController.popBackStack(Screen.Home.route, false)) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                        }
                     }
-                },
-                onNavigateToFriends = {
-                    navController.navigate(Screen.FriendList.route)
                 }
             )
         }
@@ -171,18 +170,16 @@ fun SkillExchangeNavHost(
         composable(Screen.SkillSelection.route) {
             SkillSelectionScreen(
                 onNavigateToHome = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                    if (!navController.popBackStack(Screen.Home.route, false)) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.SkillSelection.route) { inclusive = true }
+                        }
                     }
-                }
-            )
-        }
-
-        composable(Screen.FriendList.route) {
-            com.skillexchange.app.presentation.friend.FriendListScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToProfile = { userId ->
-                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                },
+                onNavigateToProfileSetup = {
+                    if (!navController.popBackStack(Screen.ProfileSetup.route, false)) {
+                        navController.navigate(Screen.ProfileSetup.route)
+                    }
                 }
             )
         }

@@ -20,10 +20,9 @@ sealed class Screen(val route: String) {
     data object Profile : Screen("profile")
     data object MyProfile : Screen("my_profile")
 
-    // Profile & Friends
+    // Profile & Skills
     data object ProfileSetup : Screen("profile_setup")
     data object SkillSelection : Screen("skill_selection")
-    data object FriendList : Screen("friend_list")
     data object ProfileDetail : Screen("profile_detail/{userId}") {
         fun createRoute(userId: String) = "profile_detail/$userId"
     }

@@ -202,9 +202,6 @@ fun MainScreen(
                         onNavigateToManageSkills = {
                             rootNavController.navigate(Screen.SkillSelection.route)
                         },
-                        onNavigateToFriends = {
-                            rootNavController.navigate(Screen.FriendList.route)
-                        },
                         onNavigateToLogin = {
                             rootNavController.navigate(Screen.Login.route) {
                                 popUpTo(0) { inclusive = true }

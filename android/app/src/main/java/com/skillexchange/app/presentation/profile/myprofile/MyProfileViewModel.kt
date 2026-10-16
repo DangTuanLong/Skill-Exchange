@@ -3,7 +3,6 @@ package com.skillexchange.app.presentation.profile.myprofile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.skillexchange.app.core.security.TokenManager
-import com.skillexchange.app.domain.repository.IFriendRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.IRatingRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
@@ -18,7 +17,6 @@ class MyProfileViewModel(
     private val profileRepository: IProfileRepository,
     private val skillRepository: ISkillRepository,
     private val ratingRepository: IRatingRepository,
-    private val friendRepository: IFriendRepository,
     private val tokenManager: TokenManager
 ) : ViewModel() {
 
@@ -41,9 +39,6 @@ class MyProfileViewModel(
             }
             MyProfileIntent.ManageSkills -> {
                 viewModelScope.launch { _effect.send(MyProfileEffect.NavigateToManageSkills) }
-            }
-            MyProfileIntent.ViewFriends -> {
-                viewModelScope.launch { _effect.send(MyProfileEffect.NavigateToFriends) }
             }
             MyProfileIntent.Logout -> logout()
         }
@@ -72,17 +67,12 @@ class MyProfileViewModel(
                 ratingRepository.getUserReputation(uid).getOrNull()
             }
 
-            val friends = friendRepository.getFriends().getOrDefault(emptyList())
-            val pending = friendRepository.getPendingRequests().getOrDefault(emptyList())
-
             _state.update {
                 it.copy(
                     isLoading = false,
                     profile = profile,
                     skills = skills,
                     reputation = reputation,
-                    friendsCount = friends.size,
-                    pendingInvitationsCount = pending.size,
                     error = null
                 )
             }

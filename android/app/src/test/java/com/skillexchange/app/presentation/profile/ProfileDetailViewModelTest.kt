@@ -6,9 +6,6 @@ import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
-import com.skillexchange.app.domain.model.friend.FriendshipRelation
-import com.skillexchange.app.domain.model.friend.FriendshipStatusType
-import com.skillexchange.app.domain.repository.IFriendRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
 import kotlinx.coroutines.Dispatchers
@@ -101,34 +98,6 @@ class ProfileDetailViewModelTest {
             Result.success(com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus(hasRated = false, rating = null))
     }
 
-    private var friendshipStatusResult: Result<FriendshipRelation> = Result.success(FriendshipRelation(FriendshipStatusType.NONE))
-    var lastSentFriendId: String? = null
-    var lastAcceptedFriendshipId: String? = null
-    var lastRejectedFriendshipId: String? = null
-    var lastRemovedFriendshipId: String? = null
-
-    private val mockFriendRepo = object : IFriendRepository {
-        override suspend fun sendFriendRequest(friendId: String): Result<Unit> {
-            lastSentFriendId = friendId
-            return Result.success(Unit)
-        }
-        override suspend fun acceptFriendRequest(friendshipId: String): Result<Unit> {
-            lastAcceptedFriendshipId = friendshipId
-            return Result.success(Unit)
-        }
-        override suspend fun rejectFriendRequest(friendshipId: String): Result<Unit> {
-            lastRejectedFriendshipId = friendshipId
-            return Result.success(Unit)
-        }
-        override suspend fun removeFriendship(friendshipId: String): Result<Unit> {
-            lastRemovedFriendshipId = friendshipId
-            return Result.success(Unit)
-        }
-        override suspend fun getFriends(): Result<List<com.skillexchange.app.domain.model.friend.Friend>> = Result.success(emptyList())
-        override suspend fun getPendingRequests(): Result<List<com.skillexchange.app.domain.model.friend.Friend>> = Result.success(emptyList())
-        override suspend fun getFriendshipStatus(userId: String): Result<FriendshipRelation> = friendshipStatusResult
-    }
-
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -142,7 +111,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `initialization with userId loads target user profile and skills and checks valid pairs`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -162,7 +131,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `own profile disables exchange and sets own profile reason`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "my_user_id"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -175,7 +144,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `RequestExchange intent sends NavigateToBooking effect`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
 
         advanceUntilIdle()
 
@@ -215,7 +184,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -257,7 +226,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.hasValidPair)
@@ -307,7 +276,7 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         val skillToSuggest = viewModel.state.value.suggestedSkill!!
@@ -331,7 +300,7 @@ class ProfileDetailViewModelTest {
     @Test
     fun `OpenAllReviews and DismissAllReviews toggle bottom sheet state`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
@@ -341,69 +310,5 @@ class ProfileDetailViewModelTest {
 
         viewModel.onIntent(ProfileDetailIntent.DismissAllReviews)
         assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
-    }
-
-    @Test
-    fun `SendFriendRequest intent calls repository and updates status`() = runTest {
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.NONE))
-        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
-        advanceUntilIdle()
-
-        // After send, subsequent status call will return PENDING_SENT
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.PENDING_SENT, "fs_123"))
-        viewModel.onIntent(ProfileDetailIntent.SendFriendRequest)
-        advanceUntilIdle()
-
-        assertEquals("target_user_123", lastSentFriendId)
-        assertEquals(FriendshipStatusType.PENDING_SENT, viewModel.state.value.friendshipRelation.status)
-        assertEquals("fs_123", viewModel.state.value.friendshipRelation.friendshipId)
-    }
-
-    @Test
-    fun `AcceptFriendRequest intent calls repository and updates status`() = runTest {
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.PENDING_RECEIVED, "fs_pending_1"))
-        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
-        advanceUntilIdle()
-
-        assertEquals(FriendshipStatusType.PENDING_RECEIVED, viewModel.state.value.friendshipRelation.status)
-
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.ACCEPTED, "fs_pending_1"))
-        viewModel.onIntent(ProfileDetailIntent.AcceptFriendRequest)
-        advanceUntilIdle()
-
-        assertEquals("fs_pending_1", lastAcceptedFriendshipId)
-        assertEquals(FriendshipStatusType.ACCEPTED, viewModel.state.value.friendshipRelation.status)
-    }
-
-    @Test
-    fun `RejectFriendRequest intent calls repository and updates status`() = runTest {
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.PENDING_RECEIVED, "fs_pending_2"))
-        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
-        advanceUntilIdle()
-
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.REJECTED, "fs_pending_2"))
-        viewModel.onIntent(ProfileDetailIntent.RejectFriendRequest)
-        advanceUntilIdle()
-
-        assertEquals("fs_pending_2", lastRejectedFriendshipId)
-        assertEquals(FriendshipStatusType.REJECTED, viewModel.state.value.friendshipRelation.status)
-    }
-
-    @Test
-    fun `RemoveFriendship intent calls repository and clears relation`() = runTest {
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.ACCEPTED, "fs_accepted_1"))
-        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockFriendRepo)
-        advanceUntilIdle()
-
-        friendshipStatusResult = Result.success(FriendshipRelation(FriendshipStatusType.NONE, null))
-        viewModel.onIntent(ProfileDetailIntent.RemoveFriendship)
-        advanceUntilIdle()
-
-        assertEquals("fs_accepted_1", lastRemovedFriendshipId)
-        assertEquals(FriendshipStatusType.NONE, viewModel.state.value.friendshipRelation.status)
     }
 }

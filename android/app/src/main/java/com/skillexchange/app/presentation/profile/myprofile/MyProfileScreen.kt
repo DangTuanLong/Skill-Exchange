@@ -36,7 +36,6 @@ import org.koin.androidx.compose.koinViewModel
 fun MyProfileScreen(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToManageSkills: () -> Unit = {},
-    onNavigateToFriends: () -> Unit = {},
     onNavigateToLogin: () -> Unit = {},
     viewModel: MyProfileViewModel = koinViewModel()
 ) {
@@ -50,7 +49,6 @@ fun MyProfileScreen(
             when (effect) {
                 MyProfileEffect.NavigateToEditProfile -> onNavigateToEditProfile()
                 MyProfileEffect.NavigateToManageSkills -> onNavigateToManageSkills()
-                MyProfileEffect.NavigateToFriends -> onNavigateToFriends()
                 MyProfileEffect.NavigateToLogin -> onNavigateToLogin()
                 is MyProfileEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
             }
@@ -284,84 +282,7 @@ fun MyProfileScreen(
                     }
                 }
 
-                // ── 2. Bạn bè & Lời mời Card ──────────────────────────────────────
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.onIntent(MyProfileIntent.ViewFriends) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEFF6FF)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.People,
-                                    contentDescription = "Bạn bè",
-                                    tint = Brand500,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Bạn bè & Kết nối",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    text = "${state.friendsCount} bạn bè",
-                                    fontSize = 13.sp,
-                                    color = TextSecondaryLight
-                                )
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (state.pendingInvitationsCount > 0) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color(0xFFFEF3C7)
-                                ) {
-                                    Text(
-                                        text = "${state.pendingInvitationsCount} lời mời mới",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFD97706),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                                contentDescription = "Xem danh sách bạn bè",
-                                tint = TextSecondaryLight,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                // ── 3. Tóm tắt Kỹ năng HAVE & WANT kèm "Quản lý kỹ năng" ───────────
+                // ── 2. Tóm tắt Kỹ năng HAVE & WANT kèm "Quản lý kỹ năng" ───────────
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),

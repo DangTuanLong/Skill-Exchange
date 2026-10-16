@@ -102,9 +102,10 @@ class NotificationViewModelTest {
 
     private fun createViewModel(): NotificationViewModel {
         return NotificationViewModel(
-            notificationRepository = fakeRepository,
+            notificationRepository = fakeRepository
+        ).apply {
             nowProvider = { fixedToday }
-        )
+        }
     }
 
     @Test

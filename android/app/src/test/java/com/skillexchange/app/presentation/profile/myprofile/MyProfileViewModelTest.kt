@@ -6,13 +6,9 @@ import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
-import com.skillexchange.app.domain.model.friend.Friend
-import com.skillexchange.app.domain.model.friend.FriendshipRelation
-import com.skillexchange.app.domain.model.friend.FriendshipStatusType
 import com.skillexchange.app.domain.model.rating.Rating
 import com.skillexchange.app.domain.model.rating.Reputation
 import com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus
-import com.skillexchange.app.domain.repository.IFriendRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.IRatingRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
@@ -67,37 +63,9 @@ class MyProfileViewModelTest {
         avgRating = 4.9
     )
 
-    private val fakeFriends = listOf(
-        Friend(
-            friendshipId = "fs_1",
-            userId = "friend_1",
-            fullName = "Bạn A",
-            avatarUrl = null,
-            city = "Đà Nẵng",
-            bio = null,
-            status = "ACCEPTED",
-            createdAt = "2026-10-12T00:00:00Z"
-        )
-    )
-
-    private val fakeInvitations = listOf(
-        Friend(
-            friendshipId = "fs_2",
-            userId = "inviter_1",
-            fullName = "Người mời B",
-            avatarUrl = null,
-            city = "Hà Nội",
-            bio = null,
-            status = "PENDING",
-            createdAt = "2026-10-12T01:00:00Z"
-        )
-    )
-
     private var profileResult: Result<Profile> = Result.success(fakeProfile)
     private var skillsResult: Result<List<UserSkill>> = Result.success(fakeSkills)
     private var reputationResult: Result<Reputation> = Result.success(fakeReputation)
-    private var friendsResult: Result<List<Friend>> = Result.success(fakeFriends)
-    private var pendingResult: Result<List<Friend>> = Result.success(fakeInvitations)
 
     private val mockProfileRepo = object : IProfileRepository {
         override suspend fun getMyProfile(): Result<Profile> = profileResult
@@ -123,20 +91,12 @@ class MyProfileViewModelTest {
         override suspend fun getMyExchangeRating(exchangeId: String): Result<UserExchangeRatingStatus> = error("Not used")
     }
 
-    private val mockFriendRepo = object : IFriendRepository {
-        override suspend fun sendFriendRequest(friendId: String): Result<Unit> = Result.success(Unit)
-        override suspend fun acceptFriendRequest(friendshipId: String): Result<Unit> = Result.success(Unit)
-        override suspend fun rejectFriendRequest(friendshipId: String): Result<Unit> = Result.success(Unit)
-        override suspend fun removeFriendship(friendshipId: String): Result<Unit> = Result.success(Unit)
-        override suspend fun getFriends(): Result<List<Friend>> = friendsResult
-        override suspend fun getPendingRequests(): Result<List<Friend>> = pendingResult
-        override suspend fun getFriendshipStatus(userId: String): Result<FriendshipRelation> =
-            Result.success(FriendshipRelation(FriendshipStatusType.NONE))
-    }
-
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        profileResult = Result.success(fakeProfile)
+        skillsResult = Result.success(fakeSkills)
+        reputationResult = Result.success(fakeReputation)
         tokenManager.saveUserId("my_user_id")
         tokenManager.saveAccessToken("valid_token")
         tokenManager.saveRefreshToken("valid_refresh_token")
@@ -148,8 +108,8 @@ class MyProfileViewModelTest {
     }
 
     @Test
-    fun `initialization loads my profile, skills, reputation, and friends counts successfully`() = runTest {
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
+    fun `initialization loads my profile, skills, and reputation successfully`() = runTest {
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -167,14 +127,12 @@ class MyProfileViewModelTest {
         assertEquals("Tiếng Nhật", state.wantSkills.first().skillName)
 
         assertEquals("Xuất sắc", state.reputation?.badge)
-        assertEquals(1, state.friendsCount)
-        assertEquals(1, state.pendingInvitationsCount)
     }
 
     @Test
     fun `initialization failure on getMyProfile sets error state`() = runTest {
         profileResult = Result.failure(RuntimeException("Lỗi tải hồ sơ cá nhân"))
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -185,7 +143,7 @@ class MyProfileViewModelTest {
 
     @Test
     fun `EditProfile intent emits NavigateToEditProfile effect`() = runTest {
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
         advanceUntilIdle()
 
         var effectReceived: MyProfileEffect? = null
@@ -202,7 +160,7 @@ class MyProfileViewModelTest {
 
     @Test
     fun `ManageSkills intent emits NavigateToManageSkills effect`() = runTest {
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
         advanceUntilIdle()
 
         var effectReceived: MyProfileEffect? = null
@@ -218,25 +176,8 @@ class MyProfileViewModelTest {
     }
 
     @Test
-    fun `ViewFriends intent emits NavigateToFriends effect`() = runTest {
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
-        advanceUntilIdle()
-
-        var effectReceived: MyProfileEffect? = null
-        val job = launch {
-            effectReceived = viewModel.effect.first()
-        }
-
-        viewModel.onIntent(MyProfileIntent.ViewFriends)
-        advanceUntilIdle()
-
-        assertTrue(effectReceived is MyProfileEffect.NavigateToFriends)
-        job.cancel()
-    }
-
-    @Test
     fun `Logout intent clears session and emits NavigateToLogin effect`() = runTest {
-        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, mockFriendRepo, tokenManager)
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
         advanceUntilIdle()
 
         assertTrue(tokenManager.isLoggedIn())

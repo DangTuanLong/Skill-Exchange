@@ -195,44 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_ratings_reviewee ON ratings(reviewee_id);
 CREATE INDEX IF NOT EXISTS idx_ratings_reviewer ON ratings(reviewer_id);
 
 -- ============================================================
--- 7. FRIENDSHIPS [IMPLEMENTED — TASK-034]
--- Cặp duy nhất bất kể chiều (LEAST, GREATEST). Không tự kết bạn.
--- Không bật RLS (API là cổng duy nhất).
--- ============================================================
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'friendship_status') THEN
-        CREATE TYPE friendship_status AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
-    ELSE
-        ALTER TYPE friendship_status ADD VALUE IF NOT EXISTS 'PENDING';
-        ALTER TYPE friendship_status ADD VALUE IF NOT EXISTS 'ACCEPTED';
-        ALTER TYPE friendship_status ADD VALUE IF NOT EXISTS 'REJECTED';
-    END IF;
-END$$;
-
-CREATE TABLE IF NOT EXISTS friendships (
-    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    friend_id  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    status     friendship_status NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_friendships_no_self_friend CHECK (user_id <> friend_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_friendships_unique_pair 
-ON friendships (LEAST(user_id, friend_id), GREATEST(user_id, friend_id));
-
-CREATE INDEX IF NOT EXISTS idx_friendships_user_status ON friendships(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_friendships_friend_status ON friendships(friend_id, status);
-
-CREATE OR REPLACE TRIGGER set_friendships_updated_at
-    BEFORE UPDATE ON friendships
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================================
--- 8. NOTIFICATIONS [IMPLEMENTED — TASK-032]
+-- 7. NOTIFICATIONS [IMPLEMENTED — TASK-032]
 -- ============================================================
 DO $$
 BEGIN
@@ -243,9 +206,7 @@ BEGIN
             'REQUEST_ACCEPTED',
             'REQUEST_REJECTED',
             'APPOINTMENT_REMINDER',
-            'RATING_REMINDER',
-            'FRIEND_REQUEST',
-            'FRIEND_ACCEPTED'
+            'RATING_REMINDER'
         );
     ELSE
         ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'NEW_MESSAGE';
@@ -254,8 +215,6 @@ BEGIN
         ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'REQUEST_REJECTED';
         ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'APPOINTMENT_REMINDER';
         ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RATING_REMINDER';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'FRIEND_REQUEST';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'FRIEND_ACCEPTED';
     END IF;
 END$$;
 

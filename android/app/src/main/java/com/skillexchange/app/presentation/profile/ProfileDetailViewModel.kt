@@ -12,9 +12,6 @@ import com.skillexchange.app.domain.repository.ISkillRepository
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.skillexchange.app.domain.model.friend.FriendshipRelation
-import com.skillexchange.app.domain.model.friend.FriendshipStatusType
-import com.skillexchange.app.domain.repository.IFriendRepository
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -31,8 +28,6 @@ data class ProfileDetailUiState(
     val reputation: com.skillexchange.app.domain.model.rating.Reputation? = null,
     val reviews: List<com.skillexchange.app.domain.model.rating.Rating> = emptyList(),
     val showAllReviewsBottomSheet: Boolean = false,
-    val friendshipRelation: FriendshipRelation = FriendshipRelation(FriendshipStatusType.NONE),
-    val isFriendActionLoading: Boolean = false,
     val error: String? = null
 ) {
     val suggestedSkill: UserSkill?
@@ -45,10 +40,6 @@ sealed class ProfileDetailIntent {
     data class AddSuggestedSkillAndMatch(val skill: UserSkill) : ProfileDetailIntent()
     object OpenAllReviews : ProfileDetailIntent()
     object DismissAllReviews : ProfileDetailIntent()
-    object SendFriendRequest : ProfileDetailIntent()
-    object AcceptFriendRequest : ProfileDetailIntent()
-    object RejectFriendRequest : ProfileDetailIntent()
-    object RemoveFriendship : ProfileDetailIntent()
 }
 
 sealed class ProfileDetailEffect {
@@ -61,8 +52,7 @@ class ProfileDetailViewModel(
     private val profileRepository: IProfileRepository,
     private val skillRepository: ISkillRepository,
     private val tokenManager: TokenManager,
-    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository,
-    private val friendRepository: IFriendRepository
+    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
@@ -90,81 +80,6 @@ class ProfileDetailViewModel(
             is ProfileDetailIntent.AddSuggestedSkillAndMatch -> addSuggestedSkill(intent.skill)
             ProfileDetailIntent.OpenAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = true) }
             ProfileDetailIntent.DismissAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = false) }
-            ProfileDetailIntent.SendFriendRequest -> sendFriendRequest()
-            ProfileDetailIntent.AcceptFriendRequest -> acceptFriendRequest()
-            ProfileDetailIntent.RejectFriendRequest -> rejectFriendRequest()
-            ProfileDetailIntent.RemoveFriendship -> removeFriendship()
-        }
-    }
-
-    private fun sendFriendRequest() {
-        val uid = targetUserId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isFriendActionLoading = true) }
-            friendRepository.sendFriendRequest(uid)
-                .onSuccess {
-                    _effect.send(ProfileDetailEffect.ShowSnackbar("Đã gửi lời mời kết bạn!"))
-                    val updatedRel = friendRepository.getFriendshipStatus(uid).getOrNull()
-                    _state.update { it.copy(isFriendActionLoading = false, friendshipRelation = updatedRel ?: it.friendshipRelation) }
-                }
-                .onFailure { err ->
-                    _state.update { it.copy(isFriendActionLoading = false) }
-                    _effect.send(ProfileDetailEffect.ShowSnackbar(err.message ?: "Không thể gửi lời mời kết bạn"))
-                }
-        }
-    }
-
-    private fun acceptFriendRequest() {
-        val fId = _state.value.friendshipRelation.friendshipId ?: return
-        val uid = targetUserId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isFriendActionLoading = true) }
-            friendRepository.acceptFriendRequest(fId)
-                .onSuccess {
-                    _effect.send(ProfileDetailEffect.ShowSnackbar("Đã chấp nhận lời mời kết bạn!"))
-                    val updatedRel = friendRepository.getFriendshipStatus(uid).getOrNull()
-                    _state.update { it.copy(isFriendActionLoading = false, friendshipRelation = updatedRel ?: it.friendshipRelation) }
-                }
-                .onFailure { err ->
-                    _state.update { it.copy(isFriendActionLoading = false) }
-                    _effect.send(ProfileDetailEffect.ShowSnackbar(err.message ?: "Không thể chấp nhận lời mời"))
-                }
-        }
-    }
-
-    private fun rejectFriendRequest() {
-        val fId = _state.value.friendshipRelation.friendshipId ?: return
-        val uid = targetUserId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isFriendActionLoading = true) }
-            friendRepository.rejectFriendRequest(fId)
-                .onSuccess {
-                    _effect.send(ProfileDetailEffect.ShowSnackbar("Đã từ chối lời mời kết bạn."))
-                    val updatedRel = friendRepository.getFriendshipStatus(uid).getOrNull()
-                    _state.update { it.copy(isFriendActionLoading = false, friendshipRelation = updatedRel ?: it.friendshipRelation) }
-                }
-                .onFailure { err ->
-                    _state.update { it.copy(isFriendActionLoading = false) }
-                    _effect.send(ProfileDetailEffect.ShowSnackbar(err.message ?: "Không thể từ chối lời mời"))
-                }
-        }
-    }
-
-    private fun removeFriendship() {
-        val fId = _state.value.friendshipRelation.friendshipId ?: return
-        val uid = targetUserId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isFriendActionLoading = true) }
-            friendRepository.removeFriendship(fId)
-                .onSuccess {
-                    _effect.send(ProfileDetailEffect.ShowSnackbar("Đã hủy quan hệ bạn bè."))
-                    val updatedRel = friendRepository.getFriendshipStatus(uid).getOrNull()
-                    _state.update { it.copy(isFriendActionLoading = false, friendshipRelation = updatedRel ?: it.friendshipRelation) }
-                }
-                .onFailure { err ->
-                    _state.update { it.copy(isFriendActionLoading = false) }
-                    _effect.send(ProfileDetailEffect.ShowSnackbar(err.message ?: "Không thể hủy kết bạn"))
-                }
         }
     }
 
@@ -206,12 +121,6 @@ class ProfileDetailViewModel(
 
             val reviewsRes = ratingRepository.getUserRatings(userId)
             val reviews = reviewsRes.getOrDefault(emptyList())
-
-            val friendshipRelation = if (!isOwn) {
-                friendRepository.getFriendshipStatus(userId).getOrDefault(FriendshipRelation(FriendshipStatusType.NONE))
-            } else {
-                FriendshipRelation(FriendshipStatusType.NONE)
-            }
 
             val myHaves = mySkills.filter { it.type == SkillType.HAVE }
             val myWants = mySkills.filter { it.type == SkillType.WANT }
@@ -255,7 +164,6 @@ class ProfileDetailViewModel(
                     suggestedSkills = suggestedSkills,
                     reputation = reputation,
                     reviews = reviews,
-                    friendshipRelation = friendshipRelation,
                     error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
                 )
             }

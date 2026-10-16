@@ -2,10 +2,44 @@ package com.skillexchange.api.models.db
 
 import com.skillexchange.api.models.profile.AvailabilityWindowDto
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.ColumnType
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.datetime
 import org.jetbrains.exposed.sql.json.jsonb
+import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
+import org.postgresql.util.PGobject
 import java.time.LocalDateTime
+
+class PostgresEnumColumnType(private val typeName: String) : ColumnType<String>() {
+    override fun sqlType(): String = typeName
+    override fun valueFromDB(value: Any): String = value.toString()
+    override fun setParameter(stmt: PreparedStatementApi, index: Int, value: Any?) {
+        val obj = PGobject().apply {
+            type = typeName
+            this.value = value as? String
+        }
+        stmt.set(index, obj)
+    }
+}
+
+fun Table.postgresEnum(name: String, typeName: String): Column<String> =
+    registerColumn(name, PostgresEnumColumnType(typeName))
+
+class PostgresJsonbColumnType : ColumnType<String>() {
+    override fun sqlType(): String = "jsonb"
+    override fun valueFromDB(value: Any): String = value.toString()
+    override fun setParameter(stmt: PreparedStatementApi, index: Int, value: Any?) {
+        val obj = PGobject().apply {
+            type = "jsonb"
+            this.value = value as? String ?: "{}"
+        }
+        stmt.set(index, obj)
+    }
+}
+
+fun Table.postgresJsonb(name: String): Column<String> =
+    registerColumn(name, PostgresJsonbColumnType())
 
 object ProfilesTable : Table("profiles") {
     val id           = uuid("id").autoGenerate()
@@ -91,22 +125,12 @@ object FcmTokensTable : Table("fcm_tokens") {
 object NotificationsTable : Table("notifications") {
     val id         = uuid("id").autoGenerate()
     val userId     = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
-    val type       = varchar("type", 50)
+    val type       = postgresEnum("type", "notification_type")
     val title      = varchar("title", 200)
     val body       = text("body")
     val entityId   = varchar("entity_id", 100).nullable()
-    val data       = text("data").default("{}")
+    val data       = postgresJsonb("data").default("{}")
     val isRead     = bool("is_read").default(false)
     val createdAt  = datetime("created_at").default(LocalDateTime.now())
-    override val primaryKey = PrimaryKey(id)
-}
-
-object FriendshipsTable : Table("friendships") {
-    val id        = uuid("id").autoGenerate()
-    val userId    = uuid("user_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
-    val friendId  = uuid("friend_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
-    val status    = varchar("status", 20).default("PENDING")
-    val createdAt = datetime("created_at").default(LocalDateTime.now())
-    val updatedAt = datetime("updated_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }

@@ -11,8 +11,6 @@ data class MyProfileUiState(
     val profile: Profile? = null,
     val reputation: Reputation? = null,
     val skills: List<UserSkill> = emptyList(),
-    val friendsCount: Int = 0,
-    val pendingInvitationsCount: Int = 0,
     val error: String? = null
 ) {
     val haveSkills: List<UserSkill>
@@ -30,14 +28,12 @@ sealed class MyProfileIntent {
     object Refresh : MyProfileIntent()
     object EditProfile : MyProfileIntent()
     object ManageSkills : MyProfileIntent()
-    object ViewFriends : MyProfileIntent()
     object Logout : MyProfileIntent()
 }
 
 sealed class MyProfileEffect {
     object NavigateToEditProfile : MyProfileEffect()
     object NavigateToManageSkills : MyProfileEffect()
-    object NavigateToFriends : MyProfileEffect()
     object NavigateToLogin : MyProfileEffect()
     data class ShowSnackbar(val message: String) : MyProfileEffect()
 }

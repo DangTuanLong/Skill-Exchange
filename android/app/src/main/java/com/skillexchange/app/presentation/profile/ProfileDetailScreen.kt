@@ -16,15 +16,10 @@ import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.PersonRemove
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.skillexchange.app.domain.model.rating.Rating
-import com.skillexchange.app.domain.model.friend.FriendshipStatusType
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,66 +85,6 @@ fun ProfileDetailScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
-                            when (state.friendshipRelation.status) {
-                                FriendshipStatusType.NONE -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Kết bạn") },
-                                        leadingIcon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.SendFriendRequest)
-                                        }
-                                    )
-                                }
-                                FriendshipStatusType.PENDING_SENT -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Hủy lời mời kết bạn") },
-                                        leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.RemoveFriendship)
-                                        }
-                                    )
-                                }
-                                FriendshipStatusType.PENDING_RECEIVED -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Chấp nhận kết bạn") },
-                                        leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.AcceptFriendRequest)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Từ chối lời mời") },
-                                        leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.RejectFriendRequest)
-                                        }
-                                    )
-                                }
-                                FriendshipStatusType.ACCEPTED -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Hủy kết bạn", color = Color(0xFFEF4444)) },
-                                        leadingIcon = { Icon(Icons.Default.PersonRemove, contentDescription = null, tint = Color(0xFFEF4444)) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.RemoveFriendship)
-                                        }
-                                    )
-                                }
-                                FriendshipStatusType.REJECTED -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Gửi lại lời mời kết bạn") },
-                                        leadingIcon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.onIntent(ProfileDetailIntent.SendFriendRequest)
-                                        }
-                                    )
-                                }
-                            }
                             DropdownMenuItem(
                                 text = { Text("Báo cáo người dùng") },
                                 leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null) },

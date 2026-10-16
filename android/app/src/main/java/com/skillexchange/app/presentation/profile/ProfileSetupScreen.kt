@@ -52,7 +52,6 @@ import org.koin.androidx.compose.koinViewModel
 fun ProfileSetupScreen(
     onNavigateToSkillSelection: () -> Unit = {},
     onNavigateToHome: () -> Unit = {},
-    onNavigateToFriends: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -118,24 +117,15 @@ fun ProfileSetupScreen(
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "Tạo hồ sơ của bạn",
-                        fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimaryLight
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Bước 1/2: Thông tin cá nhân",
-                        fontSize = 14.sp, color = Brand500, fontWeight = FontWeight.SemiBold
+                        "Thông tin cá nhân",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimaryLight
                     )
                 }
             }
@@ -485,23 +475,6 @@ fun ProfileSetupScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Friends & Invitations Shortcut
-                    OutlinedButton(
-                        onClick = onNavigateToFriends,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Brand300)
-                    ) {
-                        Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Bạn bè & Lời mời kết bạn 👥", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    }
-
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Save + Continue button
@@ -537,7 +510,7 @@ fun ProfileSetupScreen(
                                 )
                             } else {
                                 Text(
-                                    "Lưu & Tiếp theo →",
+                                    "Quản lý kỹ năng",
                                     fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White
                                 )
                             }
@@ -548,7 +521,7 @@ fun ProfileSetupScreen(
                         onClick = onNavigateToHome,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Bỏ qua, thiết lập sau", color = TextSecondaryLight, fontSize = 14.sp)
+                        Text("Trở về trang chủ", color = TextSecondaryLight, fontSize = 14.sp)
                     }
                 }
             }

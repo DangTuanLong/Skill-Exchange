@@ -31,6 +31,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun SkillSelectionScreen(
     onNavigateToHome: () -> Unit,
+    onNavigateToProfileSetup: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -53,17 +54,55 @@ fun SkillSelectionScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFFF8FAFF),
         bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp, vertical = 16.dp)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid)))
-                    .clickable { onNavigateToHome() },
-                contentAlignment = Alignment.Center
+            Surface(
+                color = Color(0xFFF8FAFF),
+                shadowElevation = 8.dp
             ) {
-                Text("Hoàn thành →", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = onNavigateToProfileSetup,
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
+                        ) {
+                            Text(
+                                "Quản lý hồ sơ",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onNavigateToHome,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Trở về trang chủ",
+                            color = TextSecondaryLight,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             }
         }
     ) { paddingValues ->
