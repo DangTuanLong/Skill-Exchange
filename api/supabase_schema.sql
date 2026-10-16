@@ -123,6 +123,7 @@ CREATE INDEX idx_user_skills_user       ON user_skills(user_id);
 CREATE INDEX idx_user_skills_skill      ON user_skills(skill_id, type);
 CREATE INDEX idx_user_skills_type_skill ON user_skills(type, skill_id, proficiency_level); -- TASK-020 (matching filter)
 CREATE INDEX idx_user_skills_user_type  ON user_skills(user_id, type);                      -- TASK-020 (matching profile)
+CREATE INDEX IF NOT EXISTS idx_user_skills_graph_cte ON user_skills(type, skill_id, proficiency_level, user_id); -- TASK-042 (graph cycle CTE)
 
 -- ============================================================
 -- 5. EXCHANGE REQUESTS [IMPLEMENTED — TASK-021]

@@ -174,6 +174,9 @@ fun MainScreen(
                     DiscoveryScreen(
                         onNavigateToProfileDetail = { userId ->
                             rootNavController.navigate(Screen.ProfileDetail.createRoute(userId))
+                        },
+                        onNavigateToSkillGraph = {
+                            rootNavController.navigate(Screen.SkillGraph.route)
                         }
                     )
                 }

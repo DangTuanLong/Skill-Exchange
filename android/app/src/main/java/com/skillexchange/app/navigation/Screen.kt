@@ -47,6 +47,7 @@ sealed class Screen(val route: String) {
         fun createRoute(exchangeId: String) = "rating/$exchangeId"
     }
 
-    // Dashboard
+    // Dashboard & Graph
     data object Dashboard : Screen("dashboard")
+    data object SkillGraph : Screen("skill_graph")
 }

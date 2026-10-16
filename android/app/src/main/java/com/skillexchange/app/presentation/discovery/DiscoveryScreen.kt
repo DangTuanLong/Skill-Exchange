@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +44,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun DiscoveryScreen(
     onNavigateToProfileDetail: (String) -> Unit = {},
+    onNavigateToSkillGraph: () -> Unit = {},
     viewModel: DiscoveryViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -259,6 +261,53 @@ fun DiscoveryScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateToSkillGraph() },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .background(Brand500, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("🔄", fontSize = 20.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Trao đổi vòng tròn",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = "Khám phá các chu trình trao đổi gián tiếp (A ➔ B ➔ C ➔ A)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "Xem sơ đồ",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+
                         items(state.usersList, key = { it.userId }) { user ->
                             UserCardItem(
                                 user = user,

@@ -19,6 +19,7 @@ import io.ktor.server.routing.routing
 import org.koin.ktor.ext.inject
 
 import com.skillexchange.api.routes.deviceRoutes
+import com.skillexchange.api.routes.graphRoutes
 import com.skillexchange.api.routes.nlpRoutes
 import com.skillexchange.api.routes.notificationRoutes
 import com.skillexchange.api.routes.ratingRoutes
@@ -44,6 +45,8 @@ fun Application.configureRouting() {
     val reminderSchedulerService: ReminderSchedulerService by inject()
     val skillExtractionService: com.skillexchange.api.services.nlp.SkillExtractionService by inject()
     val nlpRateLimiter: com.skillexchange.api.services.nlp.NlpRateLimiter by inject()
+    val skillGraphService: com.skillexchange.api.services.graph.SkillGraphService by inject()
+    val graphRateLimiter: com.skillexchange.api.services.graph.GraphRateLimiter by inject()
 
     routing {
         healthRoutes()
@@ -58,5 +61,6 @@ fun Application.configureRouting() {
         chatRoutes(chatAttachmentStorageService, exchangeService)
         notificationRoutes(notificationService, reminderSchedulerService)
         nlpRoutes(skillExtractionService, nlpRateLimiter)
+        graphRoutes(skillGraphService, graphRateLimiter)
     }
 }

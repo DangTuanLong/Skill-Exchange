@@ -16,6 +16,7 @@ object ErrorCodes {
     const val RATE_LIMITED = "RATE_LIMITED"
     const val INTERNAL = "INTERNAL"
     const val BAD_REQUEST = "BAD_REQUEST"
+    const val QUERY_TIMEOUT = "QUERY_TIMEOUT"
 
     fun fromStatus(status: Int): String = when (status) {
         400 -> BAD_REQUEST

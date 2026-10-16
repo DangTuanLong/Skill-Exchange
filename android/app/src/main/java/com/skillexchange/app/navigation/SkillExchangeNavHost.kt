@@ -269,6 +269,18 @@ fun SkillExchangeNavHost(
         }
 
         composable(Screen.Dashboard.route) { PlaceholderScreen("Dashboard") }
+
+        composable(Screen.SkillGraph.route) {
+            com.skillexchange.app.presentation.graph.SkillGraphScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = { userId ->
+                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                },
+                onNavigateToBooking = { receiverId ->
+                    navController.navigate(Screen.BookingRequest.createRoute(receiverId))
+                }
+            )
+        }
     }
 
         SnackbarHost(
