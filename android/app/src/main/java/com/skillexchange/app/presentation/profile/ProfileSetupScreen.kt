@@ -48,6 +48,7 @@ import com.skillexchange.app.presentation.auth.AuthTextField
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileSetupScreen(
     onNavigateToSkillSelection: () -> Unit = {},
@@ -286,6 +287,42 @@ fun ProfileSetupScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                viewModel.onIntent(ProfileIntent.RequestSkillExtraction)
+                            },
+                            enabled = !state.isExtractingSkills && state.bio.isNotBlank(),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (!state.isExtractingSkills && state.bio.isNotBlank()) Brand500 else Color(0xFFCBD5E1)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            if (state.isExtractingSkills) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Brand500
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đang phân tích...", fontSize = 13.sp, color = Brand500)
+                            } else {
+                                Text(
+                                    "Gợi ý kỹ năng 🤖",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
+                                )
+                            }
+                        }
+                    }
 
                     AuthTextField(
                         value = state.city,
@@ -527,6 +564,201 @@ fun ProfileSetupScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    if (state.showSkillExtractionSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Kỹ năng được phát hiện",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimaryLight
+                        )
+                        Text(
+                            text = "Hãy kiểm tra lại trước khi thêm",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B),
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+                    IconButton(onClick = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) }) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng", tint = Color(0xFF64748B))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val toAddCount = state.extractedSkills.count { it.isSelected && !it.isAlreadyAdded }
+
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(state.extractedSkills, key = { it.skill.skillId }) { item ->
+                        val (badgeText, badgeBg, badgeTextColor) = when (item.skill.matchType) {
+                            "EXACT" -> Triple("Chính xác", Color(0xFFECFDF5), Color(0xFF059669))
+                            "ALIAS" -> Triple("Từ đồng nghĩa", Color(0xFFEFF6FF), Color(0xFF2563EB))
+                            else -> Triple("Gần đúng", Color(0xFFFFFBEB), Color(0xFFD97706))
+                        }
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (item.isAlreadyAdded) Color(0xFFF8FAFC) else Color.White
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (item.isSelected && !item.isAlreadyAdded) Brand500 else Color(0xFFE2E8F0)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = item.isSelected,
+                                    onCheckedChange = { viewModel.onIntent(ProfileIntent.ToggleExtractedSkillSelection(item.skill.skillId)) },
+                                    enabled = !item.isAlreadyAdded,
+                                    colors = CheckboxDefaults.colors(checkedColor = Brand500)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = item.skill.skillName,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            color = if (item.isAlreadyAdded) Color(0xFF94A3B8) else TextPrimaryLight
+                                        )
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(badgeBg)
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = badgeText,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = badgeTextColor
+                                            )
+                                        }
+                                    }
+
+                                    if (item.skill.categoryName != null) {
+                                        Text(
+                                            text = item.skill.categoryName,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF64748B)
+                                        )
+                                    }
+
+                                    if (item.isAlreadyAdded) {
+                                        Text(
+                                            text = "(Đã có trong danh sách kỹ năng)",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF94A3B8),
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Thành thạo: ${item.level}/5",
+                                                fontSize = 12.sp,
+                                                color = TextSecondaryLight
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                (1..5).forEach { lvl ->
+                                                    val isLvlSelected = item.level == lvl
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (isLvlSelected) Brand500 else Color(0xFFF1F5F9))
+                                                            .clickable {
+                                                                viewModel.onIntent(ProfileIntent.SetExtractedSkillLevel(item.skill.skillId, lvl))
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = "$lvl",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = if (isLvlSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (isLvlSelected) Color.White else Color(0xFF475569)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Hủy", color = Color(0xFF64748B))
+                    }
+
+                    Button(
+                        onClick = { viewModel.onIntent(ProfileIntent.ConfirmAddExtractedSkills) },
+                        modifier = Modifier.weight(1.5f),
+                        enabled = toAddCount > 0,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                    ) {
+                        Text(
+                            text = if (toAddCount > 0) "Thêm vào hồ sơ ($toAddCount)" else "Thêm vào hồ sơ",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }

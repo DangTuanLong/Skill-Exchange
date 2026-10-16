@@ -342,5 +342,117 @@ class ProfileViewModelTest {
 
         assertEquals(false, viewModel.state.value.isUploadingAvatar)
     }
+
+    @Test
+    fun `RequestSkillExtraction populates extractedSkills and opens bottom sheet`() = runTest {
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(listOf(
+                    com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                        skillId = 1,
+                        skillName = "Kotlin",
+                        categoryId = 1,
+                        categoryName = "Lập trình",
+                        confidence = 1.0,
+                        matchType = "EXACT",
+                        matchedTerm = "Kotlin"
+                    ),
+                    com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                        skillId = 2,
+                        skillName = "Python",
+                        categoryId = 1,
+                        categoryName = "Lập trình",
+                        confidence = 0.9,
+                        matchType = "ALIAS",
+                        matchedTerm = "py"
+                    )
+                ))
+            }
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        // Thêm trước 1 kỹ năng id=1 vào HAVE
+        mockSkillRepository.skillsList.clear()
+        mockSkillRepository.skillsList.add(
+            UserSkill("us1", 1, "Kotlin", "Lập trình", SkillType.HAVE, 3)
+        )
+        viewModel.onIntent(ProfileIntent.LoadData)
+        advanceUntilIdle()
+
+        // Set bio và gọi request
+        viewModel.onIntent(ProfileIntent.BioChanged("Lập trình Kotlin và py"))
+        viewModel.onIntent(ProfileIntent.RequestSkillExtraction)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertTrue(state.showSkillExtractionSheet)
+        assertEquals(2, state.extractedSkills.size)
+
+        // Skill 1 đã có -> isAlreadyAdded = true, isSelected = false
+        val skill1 = state.extractedSkills.find { it.skill.skillId == 1 }!!
+        assertTrue(skill1.isAlreadyAdded)
+        assertFalse(skill1.isSelected)
+
+        // Skill 2 chưa có -> isAlreadyAdded = false, isSelected = true, level = 2 mặc định
+        val skill2 = state.extractedSkills.find { it.skill.skillId == 2 }!!
+        assertFalse(skill2.isAlreadyAdded)
+        assertTrue(skill2.isSelected)
+        assertEquals(2, skill2.level)
+    }
+
+    @Test
+    fun `ConfirmAddExtractedSkills adds only selected and new skills to HAVE list`() = runTest {
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(listOf(
+                    com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                        skillId = 5,
+                        skillName = "Python",
+                        categoryId = 1,
+                        categoryName = "Lập trình",
+                        confidence = 1.0,
+                        matchType = "EXACT",
+                        matchedTerm = "Python"
+                    )
+                ))
+            }
+        }
+
+        mockSkillRepository.skillsList.clear()
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.BioChanged("Học Python cơ bản"))
+        viewModel.onIntent(ProfileIntent.RequestSkillExtraction)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.showSkillExtractionSheet)
+
+        // Điều chỉnh proficiency level lên 4
+        viewModel.onIntent(ProfileIntent.SetExtractedSkillLevel(5, 4))
+        advanceUntilIdle()
+        assertEquals(4, viewModel.state.value.extractedSkills.first().level)
+
+        // Bấm xác nhận thêm vào hồ sơ
+        viewModel.onIntent(ProfileIntent.ConfirmAddExtractedSkills)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showSkillExtractionSheet)
+        // Kiểm tra skill 5 đã được thêm vào mySkills với type HAVE và level 4
+        val added = viewModel.state.value.mySkills.find { it.skillId == 5 }
+        assertNotNull(added)
+        assertEquals(SkillType.HAVE, added!!.type)
+        assertEquals(4, added.proficiencyLevel)
+    }
 }
 

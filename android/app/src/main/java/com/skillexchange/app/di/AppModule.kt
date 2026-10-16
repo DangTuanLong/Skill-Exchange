@@ -62,8 +62,12 @@ val appModule = module {
     // ── Profile & Skills ─────────────────────────────────────────────
     single { ProfileRemoteDataSource(get()) }
     single { SkillRemoteDataSource(get()) }
+    single { com.skillexchange.app.data.remote.nlp.NlpRemoteDataSource(get()) }
     single<IProfileRepository> { ProfileRepositoryImpl(get(), get(), get()) }
     single<ISkillRepository>   { SkillRepositoryImpl(get(), get()) }
+    single<com.skillexchange.app.domain.repository.INlpRepository> {
+        com.skillexchange.app.data.repository.NlpRepositoryImpl(get(), get())
+    }
     viewModelOf(::ProfileViewModel)
     viewModelOf(::ProfileDetailViewModel)
 

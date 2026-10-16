@@ -37,7 +37,18 @@ data class ProfileUiState(
     // UI
     val error: String? = null,
     val successMessage: String? = null,
-    val step: ProfileStep = ProfileStep.PROFILE_INFO
+    val step: ProfileStep = ProfileStep.PROFILE_INFO,
+    // NLP Skill Extraction (TASK-040)
+    val isExtractingSkills: Boolean = false,
+    val showSkillExtractionSheet: Boolean = false,
+    val extractedSkills: List<ExtractedSkillItem> = emptyList()
+)
+
+data class ExtractedSkillItem(
+    val skill: com.skillexchange.app.data.remote.nlp.ExtractedSkillDto,
+    val isSelected: Boolean = true,
+    val level: Int = 2,
+    val isAlreadyAdded: Boolean = false
 )
 
 enum class ProfileStep { PROFILE_INFO, SKILL_SELECTION, DONE }
@@ -61,6 +72,12 @@ sealed class ProfileIntent {
     data class SelectSkillForEdit(val userSkillId: String?) : ProfileIntent()
     object GoToSkillStep : ProfileIntent()
     object GoToDone : ProfileIntent()
+    // NLP Extraction Intents
+    object RequestSkillExtraction : ProfileIntent()
+    object DismissSkillExtractionSheet : ProfileIntent()
+    data class ToggleExtractedSkillSelection(val skillId: Int) : ProfileIntent()
+    data class SetExtractedSkillLevel(val skillId: Int, val level: Int) : ProfileIntent()
+    object ConfirmAddExtractedSkills : ProfileIntent()
 }
 
 
@@ -74,7 +91,8 @@ sealed class ProfileEffect {
 class ProfileViewModel(
     private val profileRepo: IProfileRepository,
     private val skillRepo: ISkillRepository,
-    private val tokenManager: com.skillexchange.app.core.security.TokenManager? = null
+    private val tokenManager: com.skillexchange.app.core.security.TokenManager? = null,
+    private val nlpRepo: com.skillexchange.app.domain.repository.INlpRepository? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -104,6 +122,11 @@ class ProfileViewModel(
             is ProfileIntent.SelectSkillForEdit -> selectSkillForEdit(intent.userSkillId)
             is ProfileIntent.GoToSkillStep    -> _state.update { it.copy(step = ProfileStep.SKILL_SELECTION) }
             is ProfileIntent.GoToDone         -> _state.update { it.copy(step = ProfileStep.DONE) }
+            is ProfileIntent.RequestSkillExtraction -> requestSkillExtraction()
+            is ProfileIntent.DismissSkillExtractionSheet -> _state.update { it.copy(showSkillExtractionSheet = false) }
+            is ProfileIntent.ToggleExtractedSkillSelection -> toggleExtractedSkillSelection(intent.skillId)
+            is ProfileIntent.SetExtractedSkillLevel -> setExtractedSkillLevel(intent.skillId, intent.level)
+            is ProfileIntent.ConfirmAddExtractedSkills -> confirmAddExtractedSkills()
         }
     }
 
@@ -290,5 +313,103 @@ class ProfileViewModel(
         val s = _state.value
         val isCompleted = s.fullName.isNotBlank() && s.mySkills.isNotEmpty()
         tokenManager?.saveProfileCompleted(isCompleted)
+    }
+
+    private fun requestSkillExtraction() {
+        val bio = _state.value.bio.trim()
+        if (bio.isBlank()) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Vui lòng nhập phần giới thiệu bản thân (bio) trước khi phân tích."))
+            }
+            return
+        }
+        val nlp = nlpRepo
+        if (nlp == null) {
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Dịch vụ gợi ý kỹ năng chưa sẵn sàng"))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(isExtractingSkills = true) }
+            nlp.extractSkills(bio)
+                .onSuccess { extracted ->
+                    _state.update { it.copy(isExtractingSkills = false) }
+                    if (extracted.isEmpty()) {
+                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong bio."))
+                    } else {
+                        val currentHaveSkillIds = _state.value.mySkills
+                            .filter { it.type.name == "HAVE" }
+                            .map { it.skillId }
+                            .toSet()
+
+                        val items = extracted.map { dto ->
+                            val alreadyHas = currentHaveSkillIds.contains(dto.skillId)
+                            ExtractedSkillItem(
+                                skill = dto,
+                                isSelected = !alreadyHas,
+                                level = 2, // mặc định mức thấp (2/5)
+                                isAlreadyAdded = alreadyHas
+                            )
+                        }
+                        _state.update { it.copy(extractedSkills = items, showSkillExtractionSheet = true) }
+                    }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isExtractingSkills = false) }
+                    _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi phân tích kỹ năng từ bio"))
+                }
+        }
+    }
+
+    private fun toggleExtractedSkillSelection(skillId: Int) {
+        _state.update { s ->
+            val updated = s.extractedSkills.map { item ->
+                if (item.skill.skillId == skillId && !item.isAlreadyAdded) {
+                    item.copy(isSelected = !item.isSelected)
+                } else item
+            }
+            s.copy(extractedSkills = updated)
+        }
+    }
+
+    private fun setExtractedSkillLevel(skillId: Int, level: Int) {
+        _state.update { s ->
+            val updated = s.extractedSkills.map { item ->
+                if (item.skill.skillId == skillId) {
+                    item.copy(level = level.coerceIn(1, 5))
+                } else item
+            }
+            s.copy(extractedSkills = updated)
+        }
+    }
+
+    private fun confirmAddExtractedSkills() {
+        val toAdd = _state.value.extractedSkills.filter { it.isSelected && !it.isAlreadyAdded }
+        if (toAdd.isEmpty()) {
+            _state.update { it.copy(showSkillExtractionSheet = false) }
+            viewModelScope.launch {
+                _effect.send(ProfileEffect.ShowSnackbar("Không có kỹ năng mới nào được chọn để thêm."))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(showSkillExtractionSheet = false, isLoading = true) }
+            var successCount = 0
+            for (item in toAdd) {
+                skillRepo.addUserSkill(item.skill.skillId, "HAVE", item.level, null)
+                    .onSuccess { addedSkill ->
+                        successCount++
+                        val updatedSkills = _state.value.mySkills
+                            .filterNot { it.skillId == addedSkill.skillId && it.type == addedSkill.type } + addedSkill
+                        _state.update { it.copy(mySkills = updatedSkills) }
+                    }
+            }
+            _state.update { it.copy(isLoading = false) }
+            checkAndUpdateProfileCompletion()
+            _effect.send(ProfileEffect.ShowSnackbar("Đã thêm $successCount kỹ năng vào danh sách Kỹ năng có sẵn (HAVE)!"))
+        }
     }
 }
