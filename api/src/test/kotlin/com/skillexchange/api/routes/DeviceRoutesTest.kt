@@ -85,10 +85,31 @@ class DeviceRoutesTest {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        assertTrue(response.bodyAsText().contains("Đăng ký thiết bị thành công"))
+        val bodyText = response.bodyAsText()
+        assertTrue(bodyText.contains("Đăng ký thiết bị thành công"))
+        // Check that token is masked in response (does not leak full token)
+        assertTrue(bodyText.contains("fcm-...2345"))
         verify(exactly = 1) {
             mockDeviceService.registerToken("user-test-123", token, "Pixel 8")
         }
+    }
+
+    @Test
+    fun testRegisterDevice_TokenTooLong_Returns422() = testApplication {
+        setupDeviceRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        val hugeToken = "x".repeat(4097)
+        val response = client.post("/api/devices") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-test-123")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"token":"$hugeToken"}""")
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("VALIDATION_FAILED"))
     }
 
     @Test

@@ -32,6 +32,7 @@ fun Application.module() {
 
     configureSerialization()
     configureCORS()
+    configureSecurityHeaders()
     configureMonitoring()
     configureStatusPages()
     configureAuth()

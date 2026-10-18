@@ -7,6 +7,7 @@ import com.skillexchange.api.models.db.UserSkillsTable
 import com.skillexchange.api.models.exchange.CreateExchangeRequest
 import com.skillexchange.api.models.exchange.ExchangeRequestDto
 import com.skillexchange.api.models.exchange.ExchangeStatus
+import com.skillexchange.api.models.ValidationConstants
 import com.skillexchange.api.plugins.ValidationException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -27,6 +28,11 @@ open class ExchangeService(
         // 1. Kiểm tra sender != receiver
         if (senderId == req.receiverId) {
             throw ValidationException("Không thể gửi yêu cầu trao đổi cho chính mình")
+        }
+
+        // 1b. Kiểm tra độ dài lời nhắn (ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH = 1000)
+        if (req.message != null && req.message.length > ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH) {
+            throw ValidationException("Lời nhắn không được vượt quá ${ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH} ký tự")
         }
 
         // 2. Kiểm tra receiver tồn tại
@@ -275,6 +281,10 @@ open class ExchangeService(
      * Hủy yêu cầu: sender khi PENDING; cả 2 khi ACCEPTED.
      */
     open fun cancelRequest(callerUserId: String, exchangeId: String, reason: String?): ExchangeRequestDto? = transaction {
+        if (reason != null && reason.length > ValidationConstants.MAX_CANCELLATION_REASON_LENGTH) {
+            throw ValidationException("Lý do hủy không được vượt quá ${ValidationConstants.MAX_CANCELLATION_REASON_LENGTH} ký tự")
+        }
+
         val uuid = try { UUID.fromString(exchangeId) } catch (e: Exception) { return@transaction null }
         val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.firstOrNull()
             ?: return@transaction null

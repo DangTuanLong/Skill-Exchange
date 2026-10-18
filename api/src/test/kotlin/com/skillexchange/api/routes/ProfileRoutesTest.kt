@@ -468,7 +468,7 @@ class ProfileRoutesTest {
             return uploadResult
         }
 
-        override suspend fun deleteAvatar(objectKey: String): Result<Unit> {
+        override suspend fun deleteAvatar(objectKey: String, userId: String?): Result<Unit> {
             deletedKeys.add(objectKey)
             return Result.success(Unit)
         }
@@ -702,5 +702,111 @@ class ProfileRoutesTest {
         assertTrue(r3.bodyAsText().contains("quá nhiều"))
     }
 
+    @Test
+    fun `PUT profile with fullName longer than 100 characters returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+        application {
+            configureSerialization()
+            configureStatusPages()
+            install(Authentication) {
+                jwt("auth-jwt") {
+                    realm = "Test Realm"
+                    verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                    validate { credential ->
+                        if (!credential.payload.subject.isNullOrEmpty()) JWTPrincipal(credential.payload) else null
+                    }
+                }
+            }
+            routing { profileRoutes(mockProfileService) }
+        }
+
+        val testClient = createClient { install(ContentNegotiation) { json() } }
+        val response = testClient.put("/api/profile") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                com.skillexchange.api.models.profile.UpdateProfileRequest(
+                    fullName = "a".repeat(101)
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Họ tên không được vượt quá 100 ký tự"))
+    }
+
+    @Test
+    fun `PUT profile with city longer than 100 characters returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+        application {
+            configureSerialization()
+            configureStatusPages()
+            install(Authentication) {
+                jwt("auth-jwt") {
+                    realm = "Test Realm"
+                    verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                    validate { credential ->
+                        if (!credential.payload.subject.isNullOrEmpty()) JWTPrincipal(credential.payload) else null
+                    }
+                }
+            }
+            routing { profileRoutes(mockProfileService) }
+        }
+
+        val testClient = createClient { install(ContentNegotiation) { json() } }
+        val response = testClient.put("/api/profile") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                com.skillexchange.api.models.profile.UpdateProfileRequest(
+                    fullName = "Valid Name",
+                    city = "c".repeat(101)
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Tên thành phố không được vượt quá 100 ký tự"))
+    }
+
+    @Test
+    fun `PUT profile with bio longer than 500 characters returns 422 Unprocessable Entity`() = testApplication {
+        val testToken = createTestJwt()
+        application {
+            configureSerialization()
+            configureStatusPages()
+            install(Authentication) {
+                jwt("auth-jwt") {
+                    realm = "Test Realm"
+                    verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                    validate { credential ->
+                        if (!credential.payload.subject.isNullOrEmpty()) JWTPrincipal(credential.payload) else null
+                    }
+                }
+            }
+            routing { profileRoutes(mockProfileService) }
+        }
+
+        val testClient = createClient { install(ContentNegotiation) { json() } }
+        val response = testClient.put("/api/profile") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                com.skillexchange.api.models.profile.UpdateProfileRequest(
+                    fullName = "Valid Name",
+                    bio = "b".repeat(501)
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Tiểu sử không được vượt quá 500 ký tự"))
+    }
 }
 

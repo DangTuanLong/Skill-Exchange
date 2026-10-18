@@ -18,7 +18,7 @@ import java.util.UUID
 
 interface IAvatarStorageService {
     suspend fun uploadAvatar(userId: String, bytes: ByteArray, extension: String, mimeType: String): Result<String>
-    suspend fun deleteAvatar(objectKey: String): Result<Unit>
+    suspend fun deleteAvatar(objectKey: String, userId: String? = null): Result<Unit>
 }
 
 class R2AvatarStorageService(
@@ -80,10 +80,14 @@ class R2AvatarStorageService(
         }
     }
 
-    override suspend fun deleteAvatar(objectKey: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun deleteAvatar(objectKey: String, userId: String?): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             if (!objectKey.startsWith("avatars/")) {
                 logger.warn("Refusing to delete object key not in avatars/ prefix: $objectKey")
+                return@runCatching
+            }
+            if (userId != null && !objectKey.startsWith("avatars/${userId}_")) {
+                logger.warn("Refusing to delete object key $objectKey not matching user $userId prefix")
                 return@runCatching
             }
             val deleteRequest = DeleteObjectRequest.builder()

@@ -1,5 +1,7 @@
 package com.skillexchange.api.routes
 
+import com.skillexchange.api.models.ApiError
+import com.skillexchange.api.models.ErrorCodes
 import com.skillexchange.api.models.exchange.CancelExchangeRequest
 import com.skillexchange.api.models.exchange.CreateExchangeRequest
 import com.skillexchange.api.plugins.ValidationException
@@ -37,7 +39,11 @@ fun Route.exchangeRoutes(exchangeService: ExchangeService) {
                 } catch (e: ValidationException) {
                     call.respond(
                         HttpStatusCode.UnprocessableEntity,
-                        RouteApiError(message = e.message ?: "Dữ liệu không hợp lệ", code = 422)
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = e.message ?: "Dữ liệu không hợp lệ"
+                        )
                     )
                 }
             }
@@ -172,6 +178,15 @@ fun Route.exchangeRoutes(exchangeService: ExchangeService) {
                     } else {
                         call.respond(HttpStatusCode.OK, ApiSuccess(data = result))
                     }
+                } catch (e: ValidationException) {
+                    call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = e.message ?: "Dữ liệu không hợp lệ"
+                        )
+                    )
                 } catch (e: ExchangeForbiddenException) {
                     call.respond(
                         HttpStatusCode.Forbidden,

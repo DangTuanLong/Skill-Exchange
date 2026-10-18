@@ -64,6 +64,8 @@ val appModule = module {
         com.skillexchange.api.services.chat.R2ChatAttachmentStorageService()
     }
     single { InMemoryRateLimiter(maxRequests = 5, windowMillis = 60_000L) }
+    single { com.skillexchange.api.services.auth.AuthRateLimiter() }
+    single { com.skillexchange.api.services.notification.ReminderRateLimiter() }
     single { com.skillexchange.api.services.rating.RatingService() }
     single { com.skillexchange.api.services.nlp.SkillExtractionService() }
     single { com.skillexchange.api.services.nlp.NlpRateLimiter() }

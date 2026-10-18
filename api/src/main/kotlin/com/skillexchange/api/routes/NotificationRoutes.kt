@@ -5,6 +5,7 @@ import com.skillexchange.api.models.ErrorCodes
 import com.skillexchange.api.models.notification.MarkReadResponseDto
 import com.skillexchange.api.plugins.getUserId
 import com.skillexchange.api.services.notification.NotificationService
+import com.skillexchange.api.services.notification.ReminderRateLimiter
 import com.skillexchange.api.services.notification.ReminderSchedulerService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -22,7 +23,8 @@ private val logger = LoggerFactory.getLogger("NotificationRoutes")
 
 fun Route.notificationRoutes(
     notificationService: NotificationService,
-    reminderSchedulerService: ReminderSchedulerService
+    reminderSchedulerService: ReminderSchedulerService,
+    reminderRateLimiter: ReminderRateLimiter = ReminderRateLimiter()
 ) {
     route("/api/notifications") {
         authenticate("auth-jwt") {
@@ -105,6 +107,17 @@ fun Route.notificationRoutes(
     // Endpoint nội bộ cho Job quét nhắc nhở (GitHub Actions / Scheduled Job)
     route("/api/internal/jobs/process-reminders") {
         post {
+            if (!reminderRateLimiter.tryAcquire()) {
+                return@post call.respond(
+                    HttpStatusCode.TooManyRequests,
+                    ApiError(
+                        status = 429,
+                        code = ErrorCodes.RATE_LIMITED,
+                        message = "Tần suất gọi job quá nhanh. Vui lòng thử lại sau ít phút."
+                    )
+                )
+            }
+
             val configuredSecret = (System.getProperty("JOB_SECRET") ?: System.getenv("JOB_SECRET"))?.trim()
             val providedSecret = call.request.headers["X-Job-Secret"]?.trim()
 

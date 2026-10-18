@@ -51,10 +51,12 @@ fun Application.configureRouting() {
     val skillGraphService: com.skillexchange.api.services.graph.SkillGraphService by inject()
     val graphRateLimiter: com.skillexchange.api.services.graph.GraphRateLimiter by inject()
     val statsService: StatsService by inject()
+    val authRateLimiter: com.skillexchange.api.services.auth.AuthRateLimiter by inject()
+    val reminderRateLimiter: com.skillexchange.api.services.notification.ReminderRateLimiter by inject()
 
     routing {
         healthRoutes()
-        authRoutes(authService, firebaseTokenService)
+        authRoutes(authService, firebaseTokenService, authRateLimiter)
         profileRoutes(profileService, avatarStorageService, rateLimiter)
         skillRoutes(skillService)
         userRoutes(userService)
@@ -63,7 +65,7 @@ fun Application.configureRouting() {
         deviceRoutes(deviceService)
         ratingRoutes(ratingService)
         chatRoutes(chatAttachmentStorageService, exchangeService)
-        notificationRoutes(notificationService, reminderSchedulerService)
+        notificationRoutes(notificationService, reminderSchedulerService, reminderRateLimiter)
         nlpRoutes(skillExtractionService, nlpRateLimiter, documentRateLimiter)
         graphRoutes(skillGraphService, graphRateLimiter)
         statsRoutes(statsService)

@@ -1,5 +1,8 @@
 package com.skillexchange.api.routes
 
+import com.skillexchange.api.models.ApiError
+import com.skillexchange.api.models.ErrorCodes
+import com.skillexchange.api.models.ValidationConstants
 import com.skillexchange.api.models.device.DeleteDeviceRequest
 import com.skillexchange.api.models.device.DeviceResponse
 import com.skillexchange.api.models.device.RegisterDeviceRequest
@@ -17,6 +20,10 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
+private fun maskDeviceToken(token: String): String {
+    return if (token.length > 8) "${token.take(4)}...${token.takeLast(4)}" else "***"
+}
+
 fun Route.deviceRoutes(deviceService: DeviceService) {
 
     route("/api/devices") {
@@ -30,31 +37,54 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
                 } catch (e: Exception) {
                     return@post call.respond(
                         HttpStatusCode.BadRequest,
-                        RouteApiError(message = "Dữ liệu yêu cầu không hợp lệ", code = 400)
+                        ApiError(
+                            status = 400,
+                            code = ErrorCodes.BAD_REQUEST,
+                            message = "Dữ liệu yêu cầu không hợp lệ"
+                        )
                     )
                 }
 
-                if (req.token.isBlank() || req.token.length > 4096) {
+                if (req.token.isBlank()) {
                     return@post call.respond(
                         HttpStatusCode.BadRequest,
-                        RouteApiError(message = "FCM token không hợp lệ", code = 400)
+                        ApiError(
+                            status = 400,
+                            code = ErrorCodes.BAD_REQUEST,
+                            message = "FCM token không được để trống"
+                        )
                     )
                 }
 
-                if (req.deviceInfo != null && req.deviceInfo.length > 200) {
+                if (req.token.length > ValidationConstants.MAX_FCM_TOKEN_LENGTH) {
                     return@post call.respond(
-                        HttpStatusCode.BadRequest,
-                        RouteApiError(message = "Thông tin thiết bị không được vượt quá 200 ký tự", code = 400)
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "FCM token vượt quá độ dài cho phép (${ValidationConstants.MAX_FCM_TOKEN_LENGTH} ký tự)"
+                        )
+                    )
+                }
+
+                if (req.deviceInfo != null && req.deviceInfo.length > ValidationConstants.MAX_DEVICE_INFO_LENGTH) {
+                    return@post call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "Thông tin thiết bị không được vượt quá ${ValidationConstants.MAX_DEVICE_INFO_LENGTH} ký tự"
+                        )
                     )
                 }
 
                 try {
-                    deviceService.registerToken(callerUserId, req.token, req.deviceInfo)
+                    deviceService.registerToken(callerUserId, req.token.trim(), req.deviceInfo?.trim())
                     call.respond(
                         HttpStatusCode.OK,
                         ApiSuccess(
                             data = DeviceResponse(
-                                token = req.token,
+                                token = maskDeviceToken(req.token.trim()),
                                 message = "Đăng ký thiết bị thành công"
                             )
                         )
@@ -62,7 +92,11 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
                 } catch (e: ValidationException) {
                     call.respond(
                         HttpStatusCode.UnprocessableEntity,
-                        RouteApiError(message = e.message ?: "Dữ liệu không hợp lệ", code = 422)
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = e.message ?: "Dữ liệu không hợp lệ"
+                        )
                     )
                 }
             }
@@ -70,13 +104,29 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
             // DELETE /api/devices - Xóa token FCM (khi logout hoặc hủy thiết bị)
             delete {
                 val callerUserId = call.getUserId()
-                val token = call.request.queryParameters["token"]
-                    ?: try { call.receiveNullable<DeleteDeviceRequest>()?.token } catch (_: Exception) { null }
+                val bodyToken = try { call.receiveNullable<DeleteDeviceRequest>()?.token?.trim() } catch (_: Exception) { null }
+                val queryToken = call.request.queryParameters["token"]?.trim()
+                val token = if (!bodyToken.isNullOrBlank()) bodyToken else queryToken
 
                 if (token.isNullOrBlank()) {
                     return@delete call.respond(
                         HttpStatusCode.BadRequest,
-                        RouteApiError(message = "Thiếu tham số token để xóa", code = 400)
+                        ApiError(
+                            status = 400,
+                            code = ErrorCodes.BAD_REQUEST,
+                            message = "Thiếu tham số token để xóa thiết bị"
+                        )
+                    )
+                }
+
+                if (token.length > ValidationConstants.MAX_FCM_TOKEN_LENGTH) {
+                    return@delete call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "FCM token vượt quá độ dài cho phép"
+                        )
                     )
                 }
 
@@ -85,7 +135,7 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
                     HttpStatusCode.OK,
                     ApiSuccess(
                         data = DeviceResponse(
-                            token = token,
+                            token = maskDeviceToken(token),
                             message = "Xóa thiết bị thành công"
                         )
                     )

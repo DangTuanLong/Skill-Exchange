@@ -371,4 +371,59 @@ class ExchangeRoutesTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.bodyAsText().contains("COMPLETED"))
     }
+
+    @Test
+    fun `PUT cancel - returns 422 when cancellation reason is too long`() = testApplication {
+        val callerId = "user-caller-111"
+        val tooLongReason = "r".repeat(501)
+        every {
+            mockExchangeService.cancelRequest(callerId, "exch-123", tooLongReason)
+        } throws ValidationException("Lý do hủy không được vượt quá 500 ký tự")
+
+        setupExchangeRoutesModule()
+        val clientWithJson = createClient { install(ContentNegotiation) { json() } }
+
+        val response = clientWithJson.put("/api/exchange-requests/exch-123/cancel") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+            contentType(ContentType.Application.Json)
+            setBody(CancelExchangeRequest(reason = tooLongReason))
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Lý do hủy không được vượt quá 500 ký tự"))
+    }
+
+    @Test
+    fun `POST create - returns 422 when message is too long`() = testApplication {
+        val callerId = "user-caller-111"
+        val tooLongMessage = "m".repeat(1001)
+        val req = CreateExchangeRequest(
+            receiverId = "user-receiver-222",
+            skillOfferedId = 1,
+            skillWantedId = 2,
+            durationMinutes = 60,
+            meetingMode = "ONLINE",
+            scheduledAt = "2026-11-01T10:00:00",
+            message = tooLongMessage
+        )
+        every {
+            mockExchangeService.createExchangeRequest(callerId, req)
+        } throws ValidationException("Lời nhắn không được vượt quá 1000 ký tự")
+
+        setupExchangeRoutesModule()
+        val clientWithJson = createClient { install(ContentNegotiation) { json() } }
+
+        val response = clientWithJson.post("/api/exchange-requests") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Lời nhắn không được vượt quá 1000 ký tự"))
+    }
 }

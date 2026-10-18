@@ -1,5 +1,8 @@
 package com.skillexchange.api.routes
 
+import com.skillexchange.api.models.ApiError
+import com.skillexchange.api.models.ErrorCodes
+import com.skillexchange.api.models.ValidationConstants
 import com.skillexchange.api.models.profile.AvatarUploadResponse
 import com.skillexchange.api.models.profile.ImageTypeDetector
 import com.skillexchange.api.models.profile.UpdateProfileRequest
@@ -48,13 +51,41 @@ fun Route.profileRoutes(
                 if (req.fullName.isBlank()) {
                     return@put call.respond(
                         HttpStatusCode.UnprocessableEntity,
-                        RouteApiError(message = "Họ tên không được để trống", code = 422)
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "Họ tên không được để trống"
+                        )
                     )
                 }
-                if (req.bio != null && req.bio.length > 500) {
+                if (req.fullName.length > ValidationConstants.MAX_FULL_NAME_LENGTH) {
                     return@put call.respond(
                         HttpStatusCode.UnprocessableEntity,
-                        RouteApiError(message = "Tiểu sử không được vượt quá 500 ký tự", code = 422)
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "Họ tên không được vượt quá ${ValidationConstants.MAX_FULL_NAME_LENGTH} ký tự"
+                        )
+                    )
+                }
+                if (req.city != null && req.city.length > ValidationConstants.MAX_CITY_LENGTH) {
+                    return@put call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "Tên thành phố không được vượt quá ${ValidationConstants.MAX_CITY_LENGTH} ký tự"
+                        )
+                    )
+                }
+                if (req.bio != null && req.bio.length > ValidationConstants.MAX_BIO_LENGTH) {
+                    return@put call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        ApiError(
+                            status = 422,
+                            code = ErrorCodes.VALIDATION_FAILED,
+                            message = "Tiểu sử không được vượt quá ${ValidationConstants.MAX_BIO_LENGTH} ký tự"
+                        )
                     )
                 }
                 if (req.availability != null) {
@@ -62,7 +93,11 @@ fun Route.profileRoutes(
                     if (availabilityError != null) {
                         return@put call.respond(
                             HttpStatusCode.UnprocessableEntity,
-                            RouteApiError(message = availabilityError, code = 422)
+                            ApiError(
+                                status = 422,
+                                code = ErrorCodes.VALIDATION_FAILED,
+                                message = availabilityError
+                            )
                         )
                     }
                 }
@@ -182,7 +217,7 @@ fun Route.profileRoutes(
                     val keyIndex = oldAvatarUrl.indexOf(userPrefix)
                     if (keyIndex != -1) {
                         val oldKey = oldAvatarUrl.substring(keyIndex).takeWhile { it != '?' && it != '#' }
-                        avatarStorageService.deleteAvatar(oldKey)
+                        avatarStorageService.deleteAvatar(oldKey, userId)
                     }
                 }
 

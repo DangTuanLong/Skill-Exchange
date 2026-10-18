@@ -115,6 +115,7 @@ service cloud.firestore {
                       && request.auth.uid in resource.data.participants
                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
                       && resource.data.senderId != request.auth.uid
+                      && request.resource.data.readAt is timestamp
                       && request.resource.data.senderId == resource.data.senderId
                       && request.resource.data.content == resource.data.content
                       && request.resource.data.participants.toSet() == resource.data.participants.toSet();

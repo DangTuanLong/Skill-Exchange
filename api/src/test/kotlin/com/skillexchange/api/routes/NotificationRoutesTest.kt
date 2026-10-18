@@ -59,7 +59,9 @@ class NotificationRoutesTest {
             .sign(Algorithm.HMAC256("test-secret"))
     }
 
-    private fun ApplicationTestBuilder.setupNotificationRoutesModule() {
+    private fun ApplicationTestBuilder.setupNotificationRoutesModule(
+        reminderRateLimiter: com.skillexchange.api.services.notification.ReminderRateLimiter = com.skillexchange.api.services.notification.ReminderRateLimiter()
+    ) {
         application {
             configureSerialization()
             configureStatusPages()
@@ -78,7 +80,7 @@ class NotificationRoutesTest {
                 }
             }
             routing {
-                notificationRoutes(mockNotificationService, mockReminderSchedulerService)
+                notificationRoutes(mockNotificationService, mockReminderSchedulerService, reminderRateLimiter)
             }
         }
     }
@@ -237,5 +239,35 @@ class NotificationRoutesTest {
         assertTrue(body.success)
         assertEquals(2, body.appointmentRemindersSent)
         assertEquals(1, body.ratingRemindersSent)
+    }
+
+    @Test
+    fun `POST internal process-reminders returns 429 when rate limit is exceeded`() = testApplication {
+        val testLimiter = com.skillexchange.api.services.notification.ReminderRateLimiter(maxPerMinute = 2)
+        setupNotificationRoutesModule(testLimiter)
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        System.setProperty("JOB_SECRET", "super-secret-123")
+        every { mockReminderSchedulerService.processReminders() } returns ProcessRemindersResponseDto(
+            success = true,
+            appointmentRemindersSent = 0,
+            ratingRemindersSent = 0,
+            message = "OK"
+        )
+
+        // 2 calls succeed
+        val res1 = client.post("/api/internal/jobs/process-reminders") { header("X-Job-Secret", "super-secret-123") }
+        assertEquals(HttpStatusCode.OK, res1.status)
+        val res2 = client.post("/api/internal/jobs/process-reminders") { header("X-Job-Secret", "super-secret-123") }
+        assertEquals(HttpStatusCode.OK, res2.status)
+
+        // 3rd call is rate limited
+        val res3 = client.post("/api/internal/jobs/process-reminders") { header("X-Job-Secret", "super-secret-123") }
+        assertEquals(HttpStatusCode.TooManyRequests, res3.status)
+        val body = res3.bodyAsText()
+        assertTrue(body.contains("RATE_LIMITED"))
+        assertTrue(body.contains("429"))
     }
 }

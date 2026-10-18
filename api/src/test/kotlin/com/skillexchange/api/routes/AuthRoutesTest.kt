@@ -26,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AuthRoutesTest {
@@ -40,7 +41,10 @@ class AuthRoutesTest {
             .sign(Algorithm.HMAC256("test-jwt-secret"))
     }
 
-    private fun testAuthApp(block: suspend (client: io.ktor.client.HttpClient) -> Unit) = testApplication {
+    private fun testAuthApp(
+        authRateLimiter: com.skillexchange.api.services.auth.AuthRateLimiter = com.skillexchange.api.services.auth.AuthRateLimiter(),
+        block: suspend (client: io.ktor.client.HttpClient) -> Unit
+    ) = testApplication {
         application {
             configureSerialization()
             configureStatusPages()
@@ -60,7 +64,7 @@ class AuthRoutesTest {
                 }
             }
             routing {
-                authRoutes(mockAuthService, mockFirebaseTokenService)
+                authRoutes(mockAuthService, mockFirebaseTokenService, authRateLimiter)
             }
         }
         val testClient = createClient {
@@ -178,6 +182,104 @@ class AuthRoutesTest {
             val body = response.bodyAsText()
             assertTrue(body.contains(expectedCustomToken))
             assertTrue(body.contains("\"expiresIn\":3600"))
+        }
+    }
+
+    @Test
+    fun `POST register with password longer than 256 characters returns 422 Unprocessable Entity`() = testAuthApp { client ->
+        val longPassword = "a".repeat(257)
+        val response = client.post("/api/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"test@example.com","password":"$longPassword","full_name":"Test User"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Mật khẩu không được vượt quá 256 ký tự"))
+    }
+
+    @Test
+    fun `POST register with email longer than 254 characters returns 422 Unprocessable Entity`() = testAuthApp { client ->
+        val longEmail = "a".repeat(250) + "@test.com" // > 254
+        val response = client.post("/api/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"$longEmail","password":"password123","full_name":"Test User"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Email không được vượt quá 254 ký tự"))
+    }
+
+    @Test
+    fun `POST register with full_name longer than 100 characters returns 422 Unprocessable Entity`() = testAuthApp { client ->
+        val longName = "a".repeat(101)
+        val response = client.post("/api/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"test@example.com","password":"password123","full_name":"$longName"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Họ tên không được vượt quá 100 ký tự"))
+    }
+
+    @Test
+    fun `POST login with password longer than 256 characters returns 422 Unprocessable Entity`() = testAuthApp { client ->
+        val longPassword = "a".repeat(257)
+        val response = client.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"test@example.com","password":"$longPassword"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("VALIDATION_FAILED"))
+        assertTrue(body.contains("Mật khẩu không được vượt quá 256 ký tự"))
+    }
+
+    @Test
+    fun `POST login rate limit returns 429 Too Many Requests when exceeding limit`() {
+        val testLimiter = com.skillexchange.api.services.auth.AuthRateLimiter(maxLoginPerMinute = 2)
+        testAuthApp(authRateLimiter = testLimiter) { client ->
+            // 2 allowed attempts
+            client.post("/api/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"rate@example.com","password":"password123"}""")
+            }
+            client.post("/api/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"rate@example.com","password":"password123"}""")
+            }
+
+            // 3rd attempt is rate-limited
+            val response = client.post("/api/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"rate@example.com","password":"password123"}""")
+            }
+            assertEquals(HttpStatusCode.TooManyRequests, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("RATE_LIMITED"))
+            assertTrue(body.contains("429"))
+        }
+    }
+
+    @Test
+    fun `POST register server error does not leak raw exception message`() {
+        io.mockk.coEvery {
+            mockAuthService.register(any(), any(), any())
+        } throws RuntimeException("FATAL: relation \"auth.users\" does not exist at postgres_backend.c:1234")
+
+        testAuthApp { client ->
+            val response = client.post("/api/auth/register") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"leak@example.com","password":"password123","full_name":"Test"}""")
+            }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            val body = response.bodyAsText()
+            // Ensure internal DB error stack is not leaked
+            assertFalse(body.contains("postgres_backend"))
+            assertFalse(body.contains("FATAL"))
+            assertTrue(body.contains("Đăng ký thất bại"))
         }
     }
 }
