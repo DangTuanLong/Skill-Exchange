@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.kover)
 }
 
 android {
@@ -39,6 +40,7 @@ android {
 
     buildTypes {
         debug {
+            enableUnitTestCoverage = true
             val debugUrl = overrideBaseUrl?.takeIf { it.isNotBlank() } ?: "http://10.0.2.2:8080"
             buildConfigField("String", "BASE_URL", "\"$debugUrl\"")
         }

@@ -37,6 +37,92 @@ class SkillRepositoryTest {
     }
 
     @Test
+    fun getCategories_Success_ReturnsCategories() = runTest {
+        val json = """
+        {
+            "success": true,
+            "data": [
+                {
+                    "id": 1,
+                    "name": "Công nghệ",
+                    "icon": "code",
+                    "skills": [
+                        {"id": 10, "category_id": 1, "name": "Kotlin"},
+                        {"id": 11, "category_id": 1, "name": "Android"}
+                    ]
+                }
+            ]
+        }
+        """.trimIndent()
+        val client = createMockClient(HttpStatusCode.OK, json)
+        val tokenManager = TokenManager(null)
+        val repository = SkillRepositoryImpl(SkillRemoteDataSource(client), tokenManager)
+
+        val result = repository.getCategories()
+
+        assertTrue(result.isSuccess)
+        val categories = result.getOrNull()
+        assertEquals(1, categories?.size)
+        assertEquals("Công nghệ", categories?.first()?.name)
+        assertEquals(2, categories?.first()?.skills?.size)
+    }
+
+    @Test
+    fun getUserSkills_Success_ReturnsUserSkills() = runTest {
+        val json = """
+        {
+            "success": true,
+            "data": [
+                {
+                    "id": "us-1",
+                    "skill_id": 10,
+                    "skill_name": "Kotlin",
+                    "category_name": "Công nghệ",
+                    "type": "HAVE",
+                    "proficiency_level": 4,
+                    "note": "Senior"
+                }
+            ]
+        }
+        """.trimIndent()
+        val client = createMockClient(HttpStatusCode.OK, json)
+        val tokenManager = TokenManager(null).apply { saveAccessToken("token-123") }
+        val repository = SkillRepositoryImpl(SkillRemoteDataSource(client), tokenManager)
+
+        val result = repository.getUserSkills("user-123")
+
+        assertTrue(result.isSuccess)
+        val skills = result.getOrNull()
+        assertEquals(1, skills?.size)
+        assertEquals("Kotlin", skills?.first()?.skillName)
+    }
+
+    @Test
+    fun addUserSkill_Success_ReturnsUserSkill() = runTest {
+        val json = """
+        {
+            "success": true,
+            "data": {
+                "id": "us-2",
+                "skill_id": 11,
+                "skill_name": "Android",
+                "category_name": "Công nghệ",
+                "type": "HAVE",
+                "proficiency_level": 3
+            }
+        }
+        """.trimIndent()
+        val client = createMockClient(HttpStatusCode.OK, json)
+        val tokenManager = TokenManager(null).apply { saveAccessToken("token-123") }
+        val repository = SkillRepositoryImpl(SkillRemoteDataSource(client), tokenManager)
+
+        val result = repository.addUserSkill(11, "HAVE", 3, null)
+
+        assertTrue(result.isSuccess)
+        assertEquals("Android", result.getOrNull()?.skillName)
+    }
+
+    @Test
     fun removeUserSkill_Success_ReturnsTrue() = runTest {
         // Matches exact response payload from DELETE /api/skills/user/{id}
         val json = """{"success":true,"data":"Đã xóa"}"""

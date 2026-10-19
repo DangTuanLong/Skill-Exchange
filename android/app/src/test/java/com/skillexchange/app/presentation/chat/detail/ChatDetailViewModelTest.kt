@@ -581,4 +581,75 @@ class ChatDetailViewModelTest {
 
         job.cancel()
     }
+
+    @Test
+    fun `unread messages are marked as read only once across multiple snapshots`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        roomFlow.emit(sampleRoom)
+        messagesFlow.emit(sampleMessages)
+        advanceUntilIdle()
+
+        assertEquals(1, markedAsReadIds.size)
+        assertEquals("msg_1", markedAsReadIds.first())
+
+        // Snapshot tiếp theo lại đẩy về cùng msg_1 khi server chưa cập nhật readAt
+        messagesFlow.emit(sampleMessages)
+        advanceUntilIdle()
+
+        // Vẫn chỉ đánh dấu 1 lần, không lặp lại
+        assertEquals(1, markedAsReadIds.size)
+    }
+
+    @Test
+    fun `typing status transitions to true when text is entered and expires to false after debounce`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        // Nhập ký tự -> gửi typing true ở thời điểm hiện tại (delay 2s chưa chạy)
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("Xin chào"))
+        testScheduler.runCurrent()
+
+        assertEquals(listOf(true), typingStatusHistory)
+
+        // Sau 2000ms không gõ gì thêm -> tự hết hạn về false
+        testScheduler.advanceTimeBy(2100L)
+        testScheduler.runCurrent()
+
+        assertEquals(listOf(true, false), typingStatusHistory)
+    }
+
+    @Test
+    fun `clearing input text cancels typing immediately`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged("Đang viết"))
+        testScheduler.runCurrent()
+        assertEquals(listOf(true), typingStatusHistory)
+
+        // Xóa sạch text -> ngay lập tức gửi false mà không cần đợi 2000ms
+        viewModel.onIntent(ChatDetailIntent.InputTextChanged(""))
+        testScheduler.runCurrent()
+        assertEquals(listOf(true, false), typingStatusHistory)
+    }
+
+    @Test
+    fun `observing other user typing updates state correctly`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        roomFlow.emit(sampleRoom)
+        advanceUntilIdle()
+
+        otherUserTypingFlow.emit(true)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.isOtherUserTyping)
+
+        otherUserTypingFlow.emit(false)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.isOtherUserTyping)
+    }
 }
+
