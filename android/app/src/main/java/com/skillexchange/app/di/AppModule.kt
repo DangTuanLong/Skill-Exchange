@@ -22,6 +22,7 @@ import com.skillexchange.app.presentation.booking.detail.BookingDetailViewModel
 import com.skillexchange.app.presentation.booking.list.BookingListViewModel
 import com.skillexchange.app.presentation.booking.request.BookingRequestViewModel
 import com.skillexchange.app.presentation.discovery.DiscoveryViewModel
+import com.skillexchange.app.presentation.home.HomeViewModel
 import com.skillexchange.app.presentation.profile.ProfileDetailViewModel
 import com.skillexchange.app.presentation.profile.ProfileViewModel
 import com.skillexchange.app.presentation.rating.RatingViewModel
@@ -77,6 +78,7 @@ val appModule = module {
     single { DiscoveryRemoteDataSource(get()) }
     single<IDiscoveryRepository> { DiscoveryRepositoryImpl(get()) }
     viewModelOf(::DiscoveryViewModel)
+    viewModelOf(::HomeViewModel)
 
     // ── Exchange / Booking ───────────────────────────────────────────
     single { com.skillexchange.app.data.remote.exchange.ExchangeRemoteDataSource(get()) }

@@ -32,6 +32,38 @@ data class DiscoverySearchResponseDto(
     val message: String? = null
 )
 
+@Serializable
+data class MatchedSkillDto(
+    @SerialName("skill_id") val skillId: Int,
+    @SerialName("skill_name") val skillName: String,
+    @SerialName("teacher_level") val teacherLevel: Int = 1,
+    @SerialName("learner_level") val learnerLevel: Int = 1
+)
+
+@Serializable
+data class MatchedSkillsBreakdownDto(
+    @SerialName("they_teach_you") val theyTeachYou: List<MatchedSkillDto> = emptyList(),
+    @SerialName("you_teach_them") val youTeachThem: List<MatchedSkillDto> = emptyList()
+)
+
+@Serializable
+data class MatchingSuggestionDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("full_name") val fullName: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    val city: String? = null,
+    @SerialName("total_score") val totalScore: Double = 0.0,
+    val percentage: Int = 0,
+    @SerialName("matched_skills") val matchedSkills: MatchedSkillsBreakdownDto? = null
+)
+
+@Serializable
+data class MatchingSuggestionsResponseDto(
+    val success: Boolean,
+    val data: List<MatchingSuggestionDto>? = null,
+    val message: String? = null
+)
+
 class DiscoveryRemoteDataSource(private val httpClient: HttpClient) {
 
     suspend fun searchUsers(
@@ -55,4 +87,9 @@ class DiscoveryRemoteDataSource(private val httpClient: HttpClient) {
         parameter("limit", limit)
         lastId?.takeIf { it.isNotBlank() }?.let { parameter("lastId", it) }
     }.body()
+
+    suspend fun getMatchingSuggestions(limit: Int = 20): MatchingSuggestionsResponseDto =
+        httpClient.get("${Constants.BASE_URL}/api/matching/suggestions") {
+            parameter("limit", limit)
+        }.body()
 }

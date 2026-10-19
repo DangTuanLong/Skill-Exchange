@@ -18,4 +18,8 @@ interface IDiscoveryRepository {
         limit: Int = 20,
         lastId: String? = null
     ): Result<DiscoverySearchResult>
+
+    suspend fun getMatchingSuggestions(
+        limit: Int = 20
+    ): Result<List<UserDiscovery>> = Result.success(emptyList())
 }

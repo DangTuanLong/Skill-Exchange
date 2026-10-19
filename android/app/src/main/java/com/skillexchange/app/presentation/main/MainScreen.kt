@@ -150,12 +150,11 @@ fun MainScreen(
             ) {
                 composable(Screen.Home.route) {
                     HomeScreen(
-                        onNavigateToDiscovery = {
-                            bottomNavController.navigate(Screen.Discovery.route) {
-                                popUpTo(bottomNavController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                        onNavigateToProfileDetail = { userId ->
+                            rootNavController.navigate(Screen.ProfileDetail.createRoute(userId))
+                        },
+                        onNavigateToSkillGraph = {
+                            rootNavController.navigate(Screen.SkillGraph.route)
                         },
                         onNavigateToProfileSetup = {
                             bottomNavController.navigate(Screen.MyProfile.route) {
@@ -166,6 +165,13 @@ fun MainScreen(
                         },
                         onNavigateToNotifications = {
                             rootNavController.navigate(Screen.Notifications.route)
+                        },
+                        onNavigateToDiscovery = {
+                            bottomNavController.navigate(Screen.Discovery.route) {
+                                popUpTo(bottomNavController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     )
                 }

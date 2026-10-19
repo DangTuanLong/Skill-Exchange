@@ -6,5 +6,6 @@ data class UserDiscovery(
     val bio: String? = null,
     val city: String? = null,
     val avatarUrl: String? = null,
-    val skills: List<UserSkill> = emptyList()
+    val skills: List<UserSkill> = emptyList(),
+    val matchPercentage: Int? = null
 )

@@ -60,4 +60,47 @@ class DiscoveryRepositoryImpl(
             nextCursor = response.data?.nextCursor
         )
     }
+
+    override suspend fun getMatchingSuggestions(limit: Int): Result<List<UserDiscovery>> = runCatching {
+        val response = remoteDataSource.getMatchingSuggestions(limit)
+        if (!response.success) {
+            error(response.message ?: "Không thể tải gợi ý phù hợp")
+        }
+        val items = response.data ?: emptyList()
+        items.map { dto ->
+            val skills = mutableListOf<UserSkill>()
+            dto.matchedSkills?.theyTeachYou?.forEach { s ->
+                skills.add(
+                    UserSkill(
+                        id = "matched_have_${s.skillId}",
+                        skillId = s.skillId,
+                        skillName = s.skillName,
+                        categoryName = "",
+                        type = SkillType.HAVE,
+                        proficiencyLevel = s.teacherLevel
+                    )
+                )
+            }
+            dto.matchedSkills?.youTeachThem?.forEach { s ->
+                skills.add(
+                    UserSkill(
+                        id = "matched_want_${s.skillId}",
+                        skillId = s.skillId,
+                        skillName = s.skillName,
+                        categoryName = "",
+                        type = SkillType.WANT,
+                        proficiencyLevel = s.learnerLevel
+                    )
+                )
+            }
+            UserDiscovery(
+                userId = dto.userId,
+                fullName = dto.fullName,
+                avatarUrl = dto.avatarUrl,
+                city = dto.city,
+                skills = skills,
+                matchPercentage = dto.percentage
+            )
+        }
+    }
 }
