@@ -13,8 +13,13 @@ object DeepLinkParser {
         if (!isLoggedIn) return null
         if (entityId.isNullOrBlank()) return null
 
-        return when (type) {
-            "NEW_REQUEST" -> Screen.BookingDetail.createRoute(entityId)
+        return when (type?.trim()?.uppercase()) {
+            "NEW_MESSAGE" -> Screen.ChatDetail.createRoute(entityId)
+            "NEW_REQUEST",
+            "REQUEST_ACCEPTED",
+            "REQUEST_REJECTED",
+            "APPOINTMENT_REMINDER" -> Screen.BookingDetail.createRoute(entityId)
+            "RATING_REMINDER" -> Screen.Rating.createRoute(entityId)
             else -> null
         }
     }

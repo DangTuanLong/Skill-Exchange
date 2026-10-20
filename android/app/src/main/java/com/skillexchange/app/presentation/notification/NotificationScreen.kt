@@ -36,8 +36,9 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
-    onNavigateBack: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
     onNavigateToEntity: (type: String, entityId: String) -> Unit,
+    showBackButton: Boolean = (onNavigateBack != null),
     viewModel: NotificationViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -83,15 +84,17 @@ fun NotificationScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Quay lại"
-                        )
+                    if (showBackButton && onNavigateBack != null) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Quay lại"
+                            )
+                        }
                     }
                 },
                 actions = {

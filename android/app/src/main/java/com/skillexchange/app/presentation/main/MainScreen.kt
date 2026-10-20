@@ -4,16 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -29,12 +28,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.core.ui.theme.TextSecondaryLight
-import com.skillexchange.app.navigation.PlaceholderScreen
 import com.skillexchange.app.navigation.Screen
-import com.skillexchange.app.presentation.discovery.DiscoveryScreen
 import com.skillexchange.app.presentation.home.HomeScreen
-import com.skillexchange.app.presentation.profile.ProfileSetupScreen
+import com.skillexchange.app.presentation.notification.NotificationScreen
+import com.skillexchange.app.presentation.notification.NotificationViewModel
 import com.skillexchange.app.presentation.profile.myprofile.MyProfileScreen
+import org.koin.androidx.compose.koinViewModel
 
 sealed class BottomNavItem(
     val route: String,
@@ -49,25 +48,18 @@ sealed class BottomNavItem(
         unselectedIcon = Icons.Outlined.Home
     )
 
-    object Discovery : BottomNavItem(
-        route = Screen.Discovery.route,
-        title = "Khám phá",
-        selectedIcon = Icons.Default.Search,
-        unselectedIcon = Icons.Outlined.Search
-    )
-
-    object Chat : BottomNavItem(
-        route = Screen.ChatList.route,
-        title = "Tin nhắn",
-        selectedIcon = Icons.Default.Chat,
-        unselectedIcon = Icons.Outlined.Chat
-    )
-
     object Booking : BottomNavItem(
         route = Screen.BookingList.route,
-        title = "Lịch hẹn",
+        title = "Trao đổi",
         selectedIcon = Icons.Default.DateRange,
         unselectedIcon = Icons.Outlined.DateRange
+    )
+
+    object Notifications : BottomNavItem(
+        route = Screen.Notifications.route,
+        title = "Thông báo",
+        selectedIcon = Icons.Default.Notifications,
+        unselectedIcon = Icons.Outlined.Notifications
     )
 
     object Profile : BottomNavItem(
@@ -81,18 +73,19 @@ sealed class BottomNavItem(
 @Composable
 fun MainScreen(
     rootNavController: NavHostController,
-    bottomNavController: NavHostController = rememberNavController()
+    bottomNavController: NavHostController = rememberNavController(),
+    notificationViewModel: NotificationViewModel = koinViewModel()
 ) {
     val items = listOf(
         BottomNavItem.Home,
-        BottomNavItem.Discovery,
-        BottomNavItem.Chat,
         BottomNavItem.Booking,
+        BottomNavItem.Notifications,
         BottomNavItem.Profile
     )
 
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val notifState by notificationViewModel.state.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -102,12 +95,30 @@ fun MainScreen(
             ) {
                 items.forEach { item ->
                     val selected = currentRoute == item.route
+                    val unreadCount = if (item == BottomNavItem.Notifications) notifState.unreadCount else 0L
+
                     NavigationBarItem(
                         icon = {
-                            Icon(
-                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                contentDescription = item.title
-                            )
+                            BadgedBox(
+                                badge = {
+                                    if (unreadCount > 0) {
+                                        Badge(
+                                            containerColor = Brand500,
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = item.title
+                                )
+                            }
                         },
                         label = {
                             Text(
@@ -164,35 +175,27 @@ fun MainScreen(
                             }
                         },
                         onNavigateToNotifications = {
-                            rootNavController.navigate(Screen.Notifications.route)
-                        },
-                        onNavigateToDiscovery = {
-                            bottomNavController.navigate(Screen.Discovery.route) {
+                            bottomNavController.navigate(Screen.Notifications.route) {
                                 popUpTo(bottomNavController.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
-                        }
-                    )
-                }
-
-                composable(Screen.Discovery.route) {
-                    DiscoveryScreen(
-                        onNavigateToProfileDetail = { userId ->
-                            rootNavController.navigate(Screen.ProfileDetail.createRoute(userId))
                         },
-                        onNavigateToSkillGraph = {
-                            rootNavController.navigate(Screen.SkillGraph.route)
+                        onNavigateToChat = {
+                            rootNavController.navigate(Screen.ChatList.route)
                         }
                     )
                 }
 
-                composable(Screen.ChatList.route) {
-                    com.skillexchange.app.presentation.chat.list.ChatListScreen(
-                        onNavigateToChat = { chatId ->
-                            rootNavController.navigate(Screen.ChatDetail.createRoute(chatId))
+                // Compatibility alias: discovery -> home
+                composable(Screen.Discovery.route) {
+                    LaunchedEffect(Unit) {
+                        bottomNavController.navigate(Screen.Home.route) {
+                            popUpTo(bottomNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                    )
+                    }
                 }
 
                 composable(Screen.BookingList.route) {
@@ -200,6 +203,21 @@ fun MainScreen(
                         onNavigateToDetail = { exchangeId ->
                             rootNavController.navigate(Screen.BookingDetail.createRoute(exchangeId))
                         }
+                    )
+                }
+
+                composable(Screen.Notifications.route) {
+                    NotificationScreen(
+                        onNavigateBack = null,
+                        showBackButton = false,
+                        onNavigateToEntity = { type, entityId ->
+                            when (type) {
+                                "NEW_MESSAGE" -> rootNavController.navigate(Screen.ChatDetail.createRoute(entityId))
+                                "RATING_REMINDER" -> rootNavController.navigate(Screen.Rating.createRoute(entityId))
+                                else -> rootNavController.navigate(Screen.BookingDetail.createRoute(entityId))
+                            }
+                        },
+                        viewModel = notificationViewModel
                     )
                 }
 

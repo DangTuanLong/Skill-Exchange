@@ -143,17 +143,33 @@ fun HomeScreen(
                             }
 
                             IconButton(
-                                onClick = onNavigateToNotifications,
+                                onClick = onNavigateToChat,
                                 modifier = Modifier
                                     .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                                     .clip(CircleShape)
                                     .background(Color.White.copy(alpha = 0.2f))
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Thông báo",
-                                    tint = Color.White
-                                )
+                                BadgedBox(
+                                    badge = {
+                                        if (state.unreadChatCount > 0) {
+                                            Badge(
+                                                containerColor = Brand500,
+                                                contentColor = Color.White
+                                            ) {
+                                                Text(
+                                                    text = if (state.unreadChatCount > 99) "99+" else state.unreadChatCount.toString(),
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Chat,
+                                        contentDescription = "Tin nhắn",
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
 

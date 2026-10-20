@@ -233,6 +233,16 @@ fun SkillExchangeNavHost(
             )
         }
 
+        // ── Chat (TASK-030 & TASK-060) ──────────────────────────────
+        composable(Screen.ChatList.route) {
+            com.skillexchange.app.presentation.chat.list.ChatListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToChat = { chatId ->
+                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                }
+            )
+        }
+
         composable(
             route = Screen.ChatDetail.route,
             arguments = listOf(navArgument("chatId") { type = NavType.StringType })
@@ -243,6 +253,15 @@ fun SkillExchangeNavHost(
                     navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
                 }
             )
+        }
+
+        // ── Compatibility alias: Discovery -> Home (DEC-022) ──────────
+        composable(Screen.Discovery.route) {
+            LaunchedEffect(Unit) {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Discovery.route) { inclusive = true }
+                }
+            }
         }
 
         composable(Screen.Rating.route,
@@ -258,6 +277,7 @@ fun SkillExchangeNavHost(
         composable(Screen.Notifications.route) {
             com.skillexchange.app.presentation.notification.NotificationScreen(
                 onNavigateBack = { navController.popBackStack() },
+                showBackButton = true,
                 onNavigateToEntity = { type, entityId ->
                     when (type) {
                         "NEW_MESSAGE" -> navController.navigate(Screen.ChatDetail.createRoute(entityId))

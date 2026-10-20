@@ -4,11 +4,14 @@ import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
 import com.skillexchange.app.domain.model.UserSkill
+import com.skillexchange.app.domain.model.chat.ChatRoom
 import com.skillexchange.app.domain.repository.DiscoverySearchResult
+import com.skillexchange.app.domain.repository.IChatRepository
 import com.skillexchange.app.domain.repository.IDiscoveryRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -296,5 +299,67 @@ class HomeViewModelTest {
 
         assertNull(viewModel.state.value.error)
         assertEquals(1, viewModel.state.value.discoveryUsers.size)
+    }
+
+    @Test
+    fun `observes chatRoomsFlow and computes total unreadChatCount`() = runTest {
+        val mockChatRepo = object : IChatRepository {
+            override fun getChatRoomsFlow() = flowOf(
+                listOf(
+                    ChatRoom(
+                        id = "c1",
+                        exchangeId = "e1",
+                        senderId = "u1",
+                        receiverId = "u2",
+                        senderName = "A",
+                        receiverName = "B",
+                        senderAvatarUrl = null,
+                        receiverAvatarUrl = null,
+                        skillOfferedName = "Kotlin",
+                        skillWantedName = "Design",
+                        status = "ACCEPTED",
+                        lastMessage = "Hi",
+                        lastMessageAt = 1000L,
+                        lastSenderId = "u2",
+                        unreadCount = 2
+                    ),
+                    ChatRoom(
+                        id = "c2",
+                        exchangeId = "e2",
+                        senderId = "u1",
+                        receiverId = "u3",
+                        senderName = "A",
+                        receiverName = "C",
+                        senderAvatarUrl = null,
+                        receiverAvatarUrl = null,
+                        skillOfferedName = "Guitar",
+                        skillWantedName = "English",
+                        status = "ACCEPTED",
+                        lastMessage = "Hello",
+                        lastMessageAt = 2000L,
+                        lastSenderId = "u3",
+                        unreadCount = 3
+                    )
+                )
+            )
+
+            override fun getChatRoom(chatId: String): kotlinx.coroutines.flow.Flow<ChatRoom?> = flowOf(null)
+            override fun getMessagesFlow(chatId: String, limit: Long): kotlinx.coroutines.flow.Flow<List<com.skillexchange.app.domain.model.chat.ChatMessage>> = flowOf(emptyList())
+            override fun generateNewMessageId(chatId: String): String = "msg-1"
+            override suspend fun sendMessage(chatId: String, content: String, participants: List<String>, messageId: String, type: String, fileUrl: String?, fileName: String?, fileSize: Long?) = Result.success("msg-1")
+            override suspend fun uploadAttachment(chatId: String, fileBytes: ByteArray, fileName: String, mimeType: String) = error("Not needed")
+            override suspend fun setTypingStatus(chatId: String, isTyping: Boolean) = Result.success(Unit)
+            override fun observeOtherUserTyping(chatId: String, otherUserId: String) = flowOf(false)
+            override suspend fun markMessagesAsRead(chatId: String, messageIds: List<String>) = Result.success(Unit)
+        }
+
+        val viewModel = HomeViewModel(
+            discoveryRepository = mockDiscoveryRepository,
+            skillRepository = mockSkillRepository,
+            chatRepository = mockChatRepo
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(5, viewModel.state.value.unreadChatCount)
     }
 }

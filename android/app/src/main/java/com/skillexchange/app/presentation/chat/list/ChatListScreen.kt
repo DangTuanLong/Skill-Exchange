@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Person
@@ -62,6 +64,7 @@ import java.util.Locale
 
 @Composable
 fun ChatListScreen(
+    onNavigateBack: (() -> Unit)? = null,
     onNavigateToChat: (String) -> Unit,
     viewModel: ChatListViewModel = koinViewModel()
 ) {
@@ -83,12 +86,29 @@ fun ChatListScreen(
                     .background(Color.White)
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                Text(
-                    text = "Tin nhắn",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimaryLight
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (onNavigateBack != null) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Quay lại",
+                                tint = TextPrimaryLight
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Tin nhắn",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimaryLight
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = state.searchQuery,
