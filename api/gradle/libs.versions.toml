@@ -1,5 +1,7 @@
 [versions]
 googleAuth = "1.54.0"
+pdfbox = "3.0.8"
 
 [libraries]
 google-auth-oauth2-http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleAuth" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }

@@ -25,6 +25,7 @@ class HomeViewModelTest {
 
     private var shouldFailSearch = false
     private var shouldFailMatching = false
+    private var returnEmptyUsers = false
 
     private val mockDiscoveryRepository = object : IDiscoveryRepository {
         var lastQuery: String? = null
@@ -58,6 +59,10 @@ class HomeViewModelTest {
 
             if (shouldFailSearch) {
                 return Result.failure(Exception("Lỗi kết nối máy chủ"))
+            }
+
+            if (returnEmptyUsers) {
+                return Result.success(DiscoverySearchResult(users = emptyList(), nextCursor = null))
             }
 
             val users = if (lastId == null) {
@@ -131,6 +136,7 @@ class HomeViewModelTest {
         Dispatchers.setMain(testDispatcher)
         shouldFailSearch = false
         shouldFailMatching = false
+        returnEmptyUsers = false
     }
 
     @After
@@ -361,5 +367,106 @@ class HomeViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(5, viewModel.state.value.unreadChatCount)
+    }
+
+    @Test
+    fun `matching error sets error and retry recovers matching suggestions`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, viewModel.state.value.matchingSuggestions.size)
+
+        shouldFailMatching = true
+        viewModel.loadMatchingSuggestions()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("Lỗi tải gợi ý", viewModel.state.value.error)
+        assertFalse(viewModel.state.value.isLoading)
+
+        // Retry matching
+        shouldFailMatching = false
+        viewModel.onIntent(HomeIntent.Retry)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.state.value.error)
+        assertEquals(1, viewModel.state.value.matchingSuggestions.size)
+        assertEquals("u_match_1", viewModel.state.value.matchingSuggestions[0].userId)
+    }
+
+    @Test
+    fun `switching tabs preserves selectedCategoryIds and filter criteria without resetting state`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Set filters
+        viewModel.onIntent(HomeIntent.ToggleCategory(1))
+        viewModel.onIntent(HomeIntent.CitySelected("Hà Nội"))
+        viewModel.onIntent(HomeIntent.MinProficiencySelected(2))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(HomeTab.ALL_USERS, viewModel.state.value.selectedTab)
+        assertEquals(setOf(1), viewModel.state.value.selectedCategoryIds)
+        assertEquals("Hà Nội", viewModel.state.value.selectedCity)
+        assertEquals(2, viewModel.state.value.minProficiency)
+
+        // Switch to MATCHING
+        viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.MATCHING))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Verify preserved
+        assertEquals(HomeTab.MATCHING, viewModel.state.value.selectedTab)
+        assertEquals(setOf(1), viewModel.state.value.selectedCategoryIds)
+        assertEquals("Hà Nội", viewModel.state.value.selectedCity)
+        assertEquals(2, viewModel.state.value.minProficiency)
+
+        // Switch back to ALL_USERS
+        viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.ALL_USERS))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(HomeTab.ALL_USERS, viewModel.state.value.selectedTab)
+        assertEquals(setOf(1), viewModel.state.value.selectedCategoryIds)
+        assertEquals("Hà Nội", viewModel.state.value.selectedCity)
+        assertEquals(2, viewModel.state.value.minProficiency)
+    }
+
+    @Test
+    fun `search returns empty result list when no users match and handles gracefully`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.ALL_USERS))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, viewModel.state.value.displayedUsers.size)
+
+        // Return empty users
+        returnEmptyUsers = true
+        viewModel.onIntent(HomeIntent.PerformSearch)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.discoveryUsers.isEmpty())
+        assertTrue(viewModel.state.value.displayedUsers.isEmpty())
+        assertNull(viewModel.state.value.error)
+        assertFalse(viewModel.state.value.isLoading)
+    }
+
+    @Test
+    fun `clearing search query restores default discovery users`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Type query
+        viewModel.onIntent(HomeIntent.QueryChanged("Python"))
+        testDispatcher.scheduler.advanceTimeBy(350)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("Python", mockDiscoveryRepository.lastQuery)
+
+        // Clear query
+        viewModel.onIntent(HomeIntent.QueryChanged(""))
+        testDispatcher.scheduler.advanceTimeBy(350)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("", viewModel.state.value.query)
+        assertNull(mockDiscoveryRepository.lastQuery)
+        assertEquals(1, viewModel.state.value.discoveryUsers.size)
     }
 }

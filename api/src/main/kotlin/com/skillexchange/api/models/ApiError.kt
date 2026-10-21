@@ -22,6 +22,10 @@ object ErrorCodes {
     const val EMPTY_FILE = "EMPTY_FILE"
     const val UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
     const val SERVER_BUSY = "SERVER_BUSY"
+    const val PDF_ENCRYPTED = "PDF_ENCRYPTED"
+    const val PDF_TOO_MANY_PAGES = "PDF_TOO_MANY_PAGES"
+    const val PDF_NO_TEXT = "PDF_NO_TEXT"
+    const val PDF_UNSAFE_CONTENT = "PDF_UNSAFE_CONTENT"
 
     fun fromStatus(status: Int): String = when (status) {
         400 -> BAD_REQUEST

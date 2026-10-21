@@ -21,10 +21,17 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.request.contentType
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayInputStream
 import java.util.concurrent.Semaphore
 
@@ -131,6 +138,7 @@ fun Route.nlpRoutes(
 
                 // 2. Kiểm tra giới hạn số request xử lý đồng thời (Concurrency limiter: tối đa 3)
                 if (!documentConcurrencyLimiter.tryAcquire()) {
+                    call.response.header("Retry-After", "5")
                     return@post call.respond(
                         HttpStatusCode.ServiceUnavailable,
                         ApiError(
@@ -148,68 +156,78 @@ fun Route.nlpRoutes(
                         false
                     }
 
-                    val textToAnalyze: String = if (isJson) {
-                        val req = try {
-                            call.receive<ExtractSkillsDocumentRequest>()
-                        } catch (e: Exception) {
-                            return@post call.respond(
-                                HttpStatusCode.UnprocessableEntity,
-                                ApiError(
-                                    status = 422,
-                                    code = ErrorCodes.VALIDATION_FAILED,
-                                    message = "Dữ liệu JSON không hợp lệ"
-                                )
-                            )
-                        }
-                        DocumentParser.parseTextDocument(
-                            ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
-                            req.fileName
-                        )
-                    } else {
-                        // Multipart form-data
-                        var extracted: String? = null
-                        var foundFile = false
-                        val multipart = try {
-                            call.receiveMultipart()
-                        } catch (e: Exception) {
-                            return@post call.respond(
-                                HttpStatusCode.UnprocessableEntity,
-                                ApiError(
-                                    status = 422,
-                                    code = ErrorCodes.VALIDATION_FAILED,
-                                    message = "Yêu cầu tải tệp multipart không hợp lệ"
-                                )
-                            )
-                        }
-
-                        multipart.forEachPart { part ->
-                            if (part is PartData.FileItem && !foundFile) {
-                                foundFile = true
-                                val fileName = part.originalFileName ?: "document.txt"
-                                part.streamProvider().use { stream ->
-                                    extracted = DocumentParser.parseTextDocument(stream, fileName)
+                    val textToAnalyze: String = withContext(Dispatchers.IO) {
+                        withTimeout(5000L) {
+                            val coroutineCtx = currentCoroutineContext()
+                            if (isJson) {
+                                val req = try {
+                                    call.receive<ExtractSkillsDocumentRequest>()
+                                } catch (e: Exception) {
+                                    throw DocumentParseException(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        ErrorCodes.VALIDATION_FAILED,
+                                        "Dữ liệu JSON không hợp lệ"
+                                    )
                                 }
-                            }
-                            part.dispose()
-                        }
-
-                        if (!foundFile || extracted == null) {
-                            return@post call.respond(
-                                HttpStatusCode.UnprocessableEntity,
-                                ApiError(
-                                    status = 422,
-                                    code = ErrorCodes.EMPTY_FILE,
-                                    message = "Vui lòng đính kèm tệp tài liệu (.txt hoặc .md) trong yêu cầu."
+                                DocumentParser.parseDocument(
+                                    ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
+                                    req.fileName,
+                                    checkCancelled = { coroutineCtx.ensureActive() }
                                 )
-                            )
-                        }
+                            } else {
+                                // Multipart form-data
+                                var extracted: String? = null
+                                var foundFile = false
+                                val multipart = try {
+                                    call.receiveMultipart()
+                                } catch (e: Exception) {
+                                    throw DocumentParseException(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        ErrorCodes.VALIDATION_FAILED,
+                                        "Yêu cầu tải tệp multipart không hợp lệ"
+                                    )
+                                }
 
-                        extracted!!
+                                multipart.forEachPart { part ->
+                                    if (part is PartData.FileItem && !foundFile) {
+                                        foundFile = true
+                                        val fileName = part.originalFileName ?: "document.txt"
+                                        part.streamProvider().use { stream ->
+                                            extracted = DocumentParser.parseDocument(
+                                                stream,
+                                                fileName,
+                                                checkCancelled = { coroutineCtx.ensureActive() }
+                                            )
+                                        }
+                                    }
+                                    part.dispose()
+                                }
+
+                                if (!foundFile || extracted == null) {
+                                    throw DocumentParseException(
+                                        HttpStatusCode.UnprocessableEntity,
+                                        ErrorCodes.EMPTY_FILE,
+                                        "Vui lòng đính kèm tệp tài liệu (.txt, .md hoặc .pdf) trong yêu cầu."
+                                    )
+                                }
+
+                                extracted!!
+                            }
+                        }
                     }
 
                     // 3. Phân tích trích xuất kỹ năng bằng dịch vụ in-process (DEC-020)
                     val skills = skillExtractionService.extractSkills(textToAnalyze)
                     call.respond(HttpStatusCode.OK, ExtractSkillsResponse(success = true, data = skills))
+                } catch (e: TimeoutCancellationException) {
+                    call.respond(
+                        HttpStatusCode.GatewayTimeout,
+                        ApiError(
+                            status = 504,
+                            code = ErrorCodes.QUERY_TIMEOUT,
+                            message = "Xử lý tài liệu quá thời gian quy định (timeout 5s). Vui lòng thử lại với tệp nhỏ hơn."
+                        )
+                    )
                 } catch (e: DocumentParseException) {
                     call.respond(
                         e.statusCode,

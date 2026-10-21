@@ -77,9 +77,9 @@ fun Application.configureStatusPages() {
             }
         }
 
-        // 415 Unsupported Media Type (bảo tồn route unmigrated /avatar)
+        // 415 Unsupported Media Type (bảo tồn route unmigrated /avatar và /api/nlp)
         status(HttpStatusCode.UnsupportedMediaType) { call, status ->
-            if (!call.request.uri.contains("/avatar")) {
+            if (!call.request.uri.contains("/avatar") && !call.request.uri.contains("/api/nlp")) {
                 call.respond(
                     status,
                     ApiError(

@@ -99,6 +99,9 @@ dependencies {
     // Google Auth (FCM HTTP v1)
     implementation(libs.google.auth.oauth2.http)
 
+    // PDFBox for PDF text extraction (TASK-043 Mức 2)
+    implementation(libs.pdfbox)
+
     // Testing
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.2.10")
@@ -138,4 +141,26 @@ tasks.register<JavaExec>("cleanDemoData") {
     description = "Cleans up all demo users with @seed.skillexchange.test domain (TASK-013)"
     classpath = sourceSets["seed"].runtimeClasspath
     mainClass.set("com.skillexchange.api.seed.CleanDemoDataRunnerKt")
+}
+
+tasks.test {
+    exclude("**/*Benchmark*")
+}
+
+tasks.register<Test>("benchmarkTest") {
+    group = "verification"
+    description = "Runs memory and latency benchmark tests"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    include("**/*Benchmark*")
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                classes("*Benchmark*")
+            }
+        }
+    }
 }
