@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.skillexchange.app.core.ui.theme.*
+import com.skillexchange.app.core.ui.util.CategoryIconHelper
 import com.skillexchange.app.domain.model.SkillType
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
@@ -191,7 +192,9 @@ fun SkillSelectionScreen(
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.categories) { cat ->
                         val isSelected = (state.selectedCategoryId ?: state.categories.firstOrNull()?.id) == cat.id
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(if (isSelected) Brand500 else Color.White)
@@ -199,9 +202,17 @@ fun SkillSelectionScreen(
                                 .clickable { viewModel.onIntent(ProfileIntent.SelectCategory(cat.id)) }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Text(formatCategoryLabel(cat.icon, cat.name),
+                            Icon(
+                                imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isSelected) Color.White else Brand500
+                            )
+                            Text(
+                                text = cat.name,
                                 color = if (isSelected) Color.White else TextPrimaryLight,
-                                fontSize = 13.sp)
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 }

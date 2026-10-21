@@ -233,7 +233,7 @@ fun BookingDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Text(
-                                "Nội dung trao đổi 🤝",
+                                "Nội dung trao đổi",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = TextPrimaryLight

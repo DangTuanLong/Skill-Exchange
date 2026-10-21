@@ -105,7 +105,7 @@ fun DiscoveryScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Khám phá kỹ năng 🔍",
+                            text = "Khám phá kỹ năng",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimaryLight
@@ -283,7 +283,12 @@ fun DiscoveryScreen(
                                             .background(Brand500, CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("🔄", fontSize = 20.sp)
+                                        Icon(
+                                            imageVector = Icons.Default.Sync,
+                                            contentDescription = "Trao đổi vòng tròn",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
@@ -294,7 +299,7 @@ fun DiscoveryScreen(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         Text(
-                                            text = "Khám phá các chu trình trao đổi gián tiếp (A ➔ B ➔ C ➔ A)",
+                                            text = "Khám phá các chu trình trao đổi gián tiếp (A → B → C → A)",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                         )

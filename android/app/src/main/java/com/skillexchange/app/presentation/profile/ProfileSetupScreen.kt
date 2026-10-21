@@ -26,6 +26,9 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Lock
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -338,12 +341,21 @@ fun ProfileSetupScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Đang tải...", fontSize = 13.sp, color = Brand500)
                             } else {
-                                Text(
-                                    "Tải tài liệu 📄",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Brand500
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.UploadFile,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Brand500
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Tải tài liệu",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Brand500
+                                    )
+                                }
                             }
                         }
 
@@ -369,12 +381,21 @@ fun ProfileSetupScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Đang phân tích...", fontSize = 13.sp, color = Brand500)
                             } else {
-                                Text(
-                                    "Gợi ý từ Bio 🤖",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Gợi ý từ Bio",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
+                                    )
+                                }
                             }
                         }
                     }
@@ -821,12 +842,21 @@ fun ProfileSetupScreen(
         AlertDialog(
             onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog) },
             title = {
-                Text(
-                    text = "🔒 Bảo mật & Quyền riêng tư",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = TextPrimaryLight
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Bảo mật",
+                        modifier = Modifier.size(20.dp),
+                        tint = Brand500
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Bảo mật & Quyền riêng tư",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextPrimaryLight
+                    )
+                }
             },
             text = {
                 Text(

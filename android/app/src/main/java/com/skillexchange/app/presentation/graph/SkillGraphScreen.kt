@@ -29,6 +29,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -259,13 +261,15 @@ private fun SkillGraphContent(
             Tab(
                 selected = uiState.selectedTab == GraphLoopTab.MULTI_WAY,
                 onClick = { onTabSelected(GraphLoopTab.MULTI_WAY) },
-                text = { Text("Vòng 3–4 người 🔄 (${uiState.loops3Plus.size})") },
+                icon = { Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                text = { Text("Vòng 3–4 người (${uiState.loops3Plus.size})") },
                 modifier = Modifier.height(48.dp)
             )
             Tab(
                 selected = uiState.selectedTab == GraphLoopTab.TWO_WAY,
                 onClick = { onTabSelected(GraphLoopTab.TWO_WAY) },
-                text = { Text("Song phương 2 người 🤝 (${uiState.loops2.size})") },
+                icon = { Icon(Icons.Default.Handshake, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                text = { Text("Song phương 2 người (${uiState.loops2.size})") },
                 modifier = Modifier.height(48.dp)
             )
         }
@@ -390,12 +394,12 @@ private fun SkillGraphContent(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${fromUser?.fullName ?: "Đối tác"} ➔ ${toUser?.fullName ?: "Đối tác"}",
+                                    text = "${fromUser?.fullName ?: "Đối tác"} → ${toUser?.fullName ?: "Đối tác"}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Dạy ${edge.skillName} (Cấp ${edge.haveLevel} ➔ Cấp ${edge.wantLevel})",
+                                    text = "Dạy ${edge.skillName} (Cấp ${edge.haveLevel} → Cấp ${edge.wantLevel})",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

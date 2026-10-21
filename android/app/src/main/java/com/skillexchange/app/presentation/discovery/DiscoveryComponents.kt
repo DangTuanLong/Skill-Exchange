@@ -209,9 +209,5 @@ fun SkillBadgeChip(name: String, level: Int, isHave: Boolean) {
 }
 
 fun formatCategoryLabel(icon: String, name: String): String {
-    return if (icon.isBlank() || icon.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
-        name
-    } else {
-        "$icon $name"
-    }
+    return name
 }

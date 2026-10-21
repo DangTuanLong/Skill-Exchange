@@ -503,7 +503,8 @@ fun MyProfileScreen(
                             )
                             StatBox(
                                 label = "Đánh giá",
-                                value = if (rep?.avgRating != null) "${String.format("%.1f", rep.avgRating)}★" else "Mới",
+                                value = if (rep?.avgRating != null) String.format("%.1f", rep.avgRating) else "Mới",
+                                icon = if (rep?.avgRating != null) Icons.Default.Star else null,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -566,7 +567,8 @@ fun MyProfileScreen(
 private fun StatBox(
     label: String,
     value: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     Surface(
         modifier = modifier,
@@ -579,12 +581,25 @@ private fun StatBox(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = value,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Brand600
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFFD97706)
+                    )
+                }
+                Text(
+                    text = value,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Brand600
+                )
+            }
             Text(
                 text = label,
                 fontSize = 11.sp,

@@ -20,11 +20,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.skillexchange.app.R
 import com.skillexchange.app.core.ui.theme.*
 
 data class OnboardingPage(
-    val emoji: String,
+    val icon: ImageVector,
     val title: String,
     val description: String,
     val gradientColors: List<Color>
@@ -32,19 +37,19 @@ data class OnboardingPage(
 
 private val pages = listOf(
     OnboardingPage(
-        emoji = "🤝",
+        icon = Icons.Default.Handshake,
         title = "Trao đổi kỹ năng",
         description = "Bạn có kỹ năng gì? Hãy chia sẻ với người khác và học lại điều bạn muốn — hoàn toàn miễn phí.",
         gradientColors = listOf(Color(0xFF2563EB), Color(0xFF0EA5E9))
     ),
     OnboardingPage(
-        emoji = "🔍",
+        icon = Icons.Default.Search,
         title = "Tìm người phù hợp",
         description = "AI gợi ý đối tác học phù hợp nhất dựa trên kỹ năng và mục tiêu của bạn.",
         gradientColors = listOf(Color(0xFF0EA5E9), Color(0xFF14B8A6))
     ),
     OnboardingPage(
-        emoji = "⭐",
+        icon = Icons.Default.Star,
         title = "Đánh giá & Phát triển",
         description = "Theo dõi hành trình học tập, đánh giá buổi trao đổi và xây dựng uy tín cộng đồng.",
         gradientColors = listOf(Color(0xFF14B8A6), Color(0xFF10B981))
@@ -92,7 +97,12 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                         .background(Brush.linearGradient(page.gradientColors)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(page.emoji, fontSize = 42.sp)
+                    Icon(
+                        imageVector = page.icon,
+                        contentDescription = page.title,
+                        tint = Color.White,
+                        modifier = Modifier.size(44.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))

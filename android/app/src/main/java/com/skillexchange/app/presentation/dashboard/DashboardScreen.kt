@@ -10,10 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -145,7 +142,12 @@ fun DashboardScreen(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = "🌱", fontSize = 56.sp)
+                        Icon(
+                            imageVector = Icons.Default.Spa,
+                            contentDescription = "Chưa có dữ liệu",
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Chưa có dữ liệu thống kê",
@@ -249,7 +251,12 @@ fun DashboardScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(text = "💡", fontSize = 20.sp)
+                                            Icon(
+                                                imageVector = Icons.Default.Lightbulb,
+                                                contentDescription = "Gợi ý",
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = "Gợi ý khoảng trống kỹ năng",
@@ -332,12 +339,21 @@ fun DashboardScreen(
                                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(
-                                            text = "Bảng xếp hạng uy tín 🏆",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Bảng xếp hạng uy tín",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.EmojiEvents,
+                                                contentDescription = "Bảng xếp hạng",
+                                                modifier = Modifier.size(20.dp),
+                                                tint = Color(0xFFF59E0B)
+                                            )
+                                        }
                                         Text(
                                             text = "Top 10 thành viên có đóng góp và uy tín cao nhất",
                                             style = MaterialTheme.typography.bodySmall,
@@ -417,7 +433,12 @@ private fun StatCardsSection(
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = "🤝", fontSize = 24.sp)
+                Icon(
+                    imageVector = Icons.Default.Handshake,
+                    contentDescription = "Số phiên",
+                    modifier = Modifier.size(24.dp),
+                    tint = Brand500
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = totalSessions.toString(),
@@ -446,7 +467,12 @@ private fun StatCardsSection(
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = "⭐", fontSize = 24.sp)
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = "Điểm đánh giá",
+                    modifier = Modifier.size(24.dp),
+                    tint = Color(0xFFF59E0B)
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (ratingCount > 0) String.format("%.1f", avgRating) else "—",
@@ -475,7 +501,12 @@ private fun StatCardsSection(
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = "🎯", fontSize = 24.sp)
+                Icon(
+                    imageVector = Icons.Default.TrackChanges,
+                    contentDescription = "Tỷ lệ hoàn thành",
+                    modifier = Modifier.size(24.dp),
+                    tint = Color(0xFF10B981)
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${(completionRate * 100).toInt()}%",
@@ -498,13 +529,6 @@ private fun LeaderboardUserRow(
     item: LeaderboardItemDto,
     onClick: () -> Unit
 ) {
-    val rankBadgeText = when (item.rank) {
-        1 -> "🥇"
-        2 -> "🥈"
-        3 -> "🥉"
-        else -> "#${item.rank}"
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -517,12 +541,26 @@ private fun LeaderboardUserRow(
             modifier = Modifier.width(36.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = rankBadgeText,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            if (item.rank in 1..3) {
+                val medalColor = when (item.rank) {
+                    1 -> Color(0xFFF59E0B) // Vàng
+                    2 -> Color(0xFF94A3B8) // Bạc
+                    else -> Color(0xFFD97706) // Đồng
+                }
+                Icon(
+                    imageVector = Icons.Default.WorkspacePremium,
+                    contentDescription = "Hạng ${item.rank}",
+                    modifier = Modifier.size(24.dp),
+                    tint = medalColor
+                )
+            } else {
+                Text(
+                    text = "#${item.rank}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -594,12 +632,21 @@ private fun LeaderboardUserRow(
 
         // Điểm uy tín
         Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = "★ ${String.format("%.1f", item.score)}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = "Điểm đánh giá",
+                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFFF59E0B)
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+                Text(
+                    text = String.format("%.1f", item.score),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
             Text(
                 text = "${item.totalExchanges} phiên",
                 style = MaterialTheme.typography.bodySmall,

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.skillexchange.app.R
 import com.skillexchange.app.core.ui.theme.*
+import com.skillexchange.app.core.ui.util.CategoryIconHelper
 import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.presentation.discovery.UserCardItem
 import com.skillexchange.app.presentation.discovery.formatCategoryLabel
@@ -283,7 +284,7 @@ fun HomeScreen(
                                     color = TextPrimaryLight
                                 )
                                 Text(
-                                    text = "Chu trình A➔B➔C",
+                                    text = "Chu trình A → B → C",
                                     fontSize = 11.sp,
                                     color = TextSecondaryLight
                                 )
@@ -393,10 +394,18 @@ fun HomeScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
-                                    label = { Text(formatCategoryLabel(cat.icon, cat.name), fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text(cat.name, fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Brand500,
-                                        selectedLabelColor = Color.White
+                                        selectedLabelColor = Color.White,
+                                        selectedLeadingIconColor = Color.White
                                     )
                                 )
                             }
@@ -415,7 +424,8 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TabToggleButton(
-                        text = "Gợi ý phù hợp ⭐",
+                        text = "Gợi ý phù hợp",
+                        icon = Icons.Default.Star,
                         isSelected = state.selectedTab == HomeTab.MATCHING,
                         onClick = { viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.MATCHING)) },
                         modifier = Modifier.weight(1f)
@@ -604,10 +614,18 @@ fun HomeScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
-                                    label = { Text(formatCategoryLabel(cat.icon, cat.name), fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text(cat.name, fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Brand500,
-                                        selectedLabelColor = Color.White
+                                        selectedLabelColor = Color.White,
+                                        selectedLeadingIconColor = Color.White
                                     )
                                 )
                             }
@@ -702,7 +720,8 @@ private fun TabToggleButton(
     text: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     Box(
         modifier = modifier
@@ -713,12 +732,25 @@ private fun TabToggleButton(
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else TextPrimaryLight
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (isSelected) Color.White else Brand500
+                )
+            }
+            Text(
+                text = text,
+                fontSize = 13.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) Color.White else TextPrimaryLight
+            )
+        }
     }
 }
 

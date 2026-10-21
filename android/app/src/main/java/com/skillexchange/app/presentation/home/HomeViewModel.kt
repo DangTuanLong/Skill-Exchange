@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class HomeTab {
-    MATCHING,    // "Gợi ý phù hợp ⭐"
+    MATCHING,    // "Gợi ý phù hợp"
     ALL_USERS    // "Tất cả đối tác"
 }
 

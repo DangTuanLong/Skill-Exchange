@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.foundation.lazy.LazyColumn
@@ -143,7 +144,7 @@ fun ProfileDetailScreen(
                                         Icon(Icons.Default.Handshake, contentDescription = null, tint = Color.White)
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            "GỬI YÊU CẦU TRAO ĐỔI 🤝",
+                                            "GỬI YÊU CẦU TRAO ĐỔI",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                             color = Color.White
@@ -173,7 +174,7 @@ fun ProfileDetailScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Gợi ý kết nối 1 chạm ✨",
+                                            text = "Gợi ý kết nối 1 chạm",
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF15803D)
@@ -238,7 +239,7 @@ fun ProfileDetailScreen(
                                 )
                             ) {
                                 Text(
-                                    "GỬI YÊU CẦU TRAO ĐỔI 🤝",
+                                    "GỬI YÊU CẦU TRAO ĐỔI",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
@@ -356,13 +357,24 @@ fun ProfileDetailScreen(
                                     color = Color(0xFFEFF6FF),
                                     border = BorderStroke(1.dp, Color(0xFFBFDBFE))
                                 ) {
-                                    Text(
-                                        text = "🌱 Thành viên mới",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Brand600,
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Spa,
+                                            contentDescription = null,
+                                            tint = Brand600,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Thành viên mới",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Brand600
+                                        )
+                                    }
                                 }
                             } else {
                                 Row(
@@ -386,7 +398,7 @@ fun ProfileDetailScreen(
                                             Spacer(modifier = Modifier.width(4.dp))
                                             val formattedAvg = String.format(java.util.Locale.US, "%.1f", rep.avgRating)
                                             Text(
-                                                text = "$formattedAvg ★ (${rep.ratingCount} đánh giá)",
+                                                text = "$formattedAvg (${rep.ratingCount} đánh giá)",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF92400E)

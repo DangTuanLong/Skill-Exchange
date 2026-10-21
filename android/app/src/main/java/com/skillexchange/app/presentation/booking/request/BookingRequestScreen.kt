@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -168,7 +169,7 @@ fun BookingRequestScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                "Kỹ năng bạn sẽ dạy 🤝",
+                                "Kỹ năng bạn sẽ dạy",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = TextPrimaryLight
@@ -203,7 +204,7 @@ fun BookingRequestScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                "Kỹ năng bạn muốn học 📚",
+                                "Kỹ năng bạn muốn học",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = TextPrimaryLight
@@ -238,7 +239,7 @@ fun BookingRequestScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                "Thời gian trao đổi ⏰",
+                                "Thời gian trao đổi",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = TextPrimaryLight
@@ -502,11 +503,22 @@ private fun ReceiverSummaryCard(
                     color = TextPrimaryLight
                 )
                 if (!city.isNullOrBlank()) {
-                    Text(
-                        text = "📍 $city",
-                        fontSize = 13.sp,
-                        color = TextSecondaryLight
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "Địa điểm",
+                            modifier = Modifier.size(14.dp),
+                            tint = TextSecondaryLight
+                        )
+                        Text(
+                            text = city,
+                            fontSize = 13.sp,
+                            color = TextSecondaryLight
+                        )
+                    }
                 }
             }
         }
