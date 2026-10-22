@@ -36,11 +36,17 @@ coroutines = "1.10.2"
 # Security
 securityCrypto = "1.0.0"
 
+# ML Kit
+mlkitTextRecognition = "16.0.1"
+
 # Firebase
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 
 [libraries]
+# ML Kit Text Recognition (Bundled)
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+
 # AndroidX Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }

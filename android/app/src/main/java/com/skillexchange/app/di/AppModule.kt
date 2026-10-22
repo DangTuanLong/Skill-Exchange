@@ -71,6 +71,9 @@ val appModule = module {
     single<com.skillexchange.app.domain.repository.INlpRepository> {
         com.skillexchange.app.data.repository.NlpRepositoryImpl(get(), get())
     }
+    single<com.skillexchange.app.core.ocr.IOcrRecognizer> {
+        com.skillexchange.app.core.ocr.MlKitOcrRecognizer(androidContext())
+    }
     viewModelOf(::ProfileViewModel)
     viewModelOf(::ProfileDetailViewModel)
 

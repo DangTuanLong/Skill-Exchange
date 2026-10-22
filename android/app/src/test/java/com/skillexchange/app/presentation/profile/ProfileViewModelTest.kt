@@ -682,5 +682,147 @@ class ProfileViewModelTest {
         assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("10.000 ký tự"))
         job.cancel()
     }
+
+    @Test
+    fun `RequestOcrScan opens privacy dialog`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ProfileIntent.RequestOcrScan)
+        assertTrue(viewModel.state.value.showOcrPrivacyDialog)
+
+        viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog)
+        assertFalse(viewModel.state.value.showOcrPrivacyDialog)
+    }
+
+    @Test
+    fun `ConfirmOcrPrivacyDialog dismisses dialog and emits OpenImagePicker effect`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        viewModel.onIntent(ProfileIntent.RequestOcrScan)
+        viewModel.onIntent(ProfileIntent.ConfirmOcrPrivacyDialog)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showOcrPrivacyDialog)
+        assertTrue(effectReceived is ProfileEffect.OpenImagePicker)
+        job.cancel()
+    }
+
+    @Test
+    fun `ProcessOcrImage success opens OCR preview dialog with recognized text`() = runTest {
+        val mockOcr = object : com.skillexchange.app.core.ocr.IOcrRecognizer {
+            override suspend fun recognizeText(imageUri: android.net.Uri): Result<String> {
+                return Result.success("Kỹ năng: Kotlin, Docker, Python")
+            }
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            ocrRecognizer = mockOcr
+        )
+        advanceUntilIdle()
+
+        val dummyUri = createDummyUri()
+
+        viewModel.onIntent(ProfileIntent.ProcessOcrImage(dummyUri))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.isProcessingOcr)
+        assertTrue(state.showOcrPreviewDialog)
+        assertEquals("Kỹ năng: Kotlin, Docker, Python", state.ocrRecognizedText)
+        assertNull(state.ocrTextError)
+    }
+
+    @Test
+    fun `ProcessOcrImage blank text shows error snackbar`() = runTest {
+        val mockOcr = object : com.skillexchange.app.core.ocr.IOcrRecognizer {
+            override suspend fun recognizeText(imageUri: android.net.Uri): Result<String> {
+                return Result.success("   ")
+            }
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            ocrRecognizer = mockOcr
+        )
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
+        val dummyUri = createDummyUri()
+
+        viewModel.onIntent(ProfileIntent.ProcessOcrImage(dummyUri))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isProcessingOcr)
+        assertFalse(viewModel.state.value.showOcrPreviewDialog)
+        assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains("Không tìm thấy văn bản"))
+        job.cancel()
+    }
+
+    @Test
+    fun `OcrTextChanged validates character limit and SubmitOcrText extracts skills`() = runTest {
+        val extractedSkill = com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+            skillId = 99,
+            skillName = "Figma",
+            categoryId = 2,
+            categoryName = "Thiết kế",
+            confidence = 0.9,
+            matchType = "EXACT",
+            matchedTerm = "Figma"
+        )
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> {
+                return Result.success(listOf(extractedSkill))
+            }
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> =
+                Result.success(listOf(extractedSkill))
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        // Exceed limit
+        val tooLong = "A".repeat(10001)
+        viewModel.onIntent(ProfileIntent.OcrTextChanged(tooLong))
+        assertNotNull(viewModel.state.value.ocrTextError)
+
+        // Valid text
+        viewModel.onIntent(ProfileIntent.OcrTextChanged("Kinh nghiệm sử dụng Figma thiết kế UI"))
+        assertNull(viewModel.state.value.ocrTextError)
+        assertEquals("Kinh nghiệm sử dụng Figma thiết kế UI", viewModel.state.value.ocrRecognizedText)
+
+        // Submit OCR text
+        viewModel.onIntent(ProfileIntent.SubmitOcrText)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.showOcrPreviewDialog)
+        assertTrue(state.showSkillExtractionSheet)
+        assertEquals(1, state.extractedSkills.size)
+        assertEquals(99, state.extractedSkills[0].skill.skillId)
+    }
+
+    private fun createDummyUri(): android.net.Uri {
+        return android.net.TestUri()
+    }
 }
+
 

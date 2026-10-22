@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,12 +21,14 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Lock
@@ -108,6 +111,14 @@ fun ProfileSetupScreen(
         }
     }
 
+    val ocrImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.onIntent(ProfileIntent.ProcessOcrImage(uri))
+        }
+    }
+
     LaunchedEffect(Unit) { visible = true }
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
@@ -115,6 +126,11 @@ fun ProfileSetupScreen(
                 is ProfileEffect.NavigateToSkillSelection -> onNavigateToSkillSelection()
                 is ProfileEffect.NavigateToHome           -> onNavigateToHome()
                 is ProfileEffect.OpenDocumentPicker       -> documentPickerLauncher.launch("*/*")
+                is ProfileEffect.OpenImagePicker          -> {
+                    ocrImagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                }
                 is ProfileEffect.ShowSnackbar             -> snackbarHostState.showSnackbar(effect.message)
             }
         }
@@ -316,9 +332,51 @@ fun ProfileSetupScreen(
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
+                        OutlinedButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                            },
+                            enabled = !state.isProcessingOcr,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (!state.isProcessingOcr) Brand500 else Color(0xFFCBD5E1)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            if (state.isProcessingOcr) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Brand500
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đang quét...", fontSize = 13.sp, color = Brand500)
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoCamera,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Brand500
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Quét ảnh OCR",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Brand500
+                                    )
+                                }
+                            }
+                        }
+
                         OutlinedButton(
                             onClick = {
                                 focusManager.clearFocus()
@@ -884,4 +942,138 @@ fun ProfileSetupScreen(
             }
         )
     }
+
+    if (state.showOcrPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Bảo mật OCR",
+                        modifier = Modifier.size(20.dp),
+                        tint = Brand500
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Bảo mật & Quét ảnh OCR",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextPrimaryLight
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "Hình ảnh được xử lý trực tiếp trên thiết bị của bạn (offline) bằng mô hình máy học trên máy. Hệ thống cam kết không lưu trữ và không tải hình ảnh lên máy chủ.\n\nVĂN BẢN nhận dạng được sẽ được gửi lên máy chủ khi bạn bấm trích xuất kỹ năng, vì vậy bạn hãy xóa số điện thoại, email hoặc thông tin nhạy cảm khác nếu có trước khi gửi.",
+                    fontSize = 14.sp,
+                    color = TextSecondaryLight,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onIntent(ProfileIntent.ConfirmOcrPrivacyDialog) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Tiếp tục chọn ảnh", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog) }
+                ) {
+                    Text("Hủy", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
+
+    if (state.showOcrPreviewDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissOcrPreviewDialog) },
+            title = {
+                Column {
+                    Text(
+                        text = "Văn bản nhận dạng (OCR)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextPrimaryLight
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Kiểm tra, xóa số điện thoại/email hoặc chỉnh sửa trước khi gửi",
+                        fontSize = 12.sp,
+                        color = TextSecondaryLight
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                ) {
+                    OutlinedTextField(
+                        value = state.ocrRecognizedText,
+                        onValueChange = { viewModel.onIntent(ProfileIntent.OcrTextChanged(it)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false),
+                        minLines = 6,
+                        maxLines = 12,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Brand500,
+                            unfocusedBorderColor = Color(0xFFCBD5E1)
+                        ),
+                        placeholder = { Text("Văn bản trích xuất từ ảnh...") }
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (state.ocrTextError != null) {
+                            Text(
+                                text = state.ocrTextError ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                        Text(
+                            text = "${state.ocrRecognizedText.length} / 10.000",
+                            fontSize = 12.sp,
+                            color = if (state.ocrRecognizedText.length > 10000) MaterialTheme.colorScheme.error else Color(0xFF94A3B8)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onIntent(ProfileIntent.SubmitOcrText) },
+                    enabled = state.ocrRecognizedText.isNotBlank() && state.ocrTextError == null,
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Trích xuất kỹ năng", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.onIntent(ProfileIntent.DismissOcrPreviewDialog) }
+                ) {
+                    Text("Hủy", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
 }
+
