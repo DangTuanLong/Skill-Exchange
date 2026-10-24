@@ -32,6 +32,7 @@ import com.skillexchange.app.presentation.notification.NotificationViewModel
 import com.skillexchange.app.presentation.profile.myprofile.MyProfileViewModel
 import com.skillexchange.app.presentation.graph.SkillGraphViewModel
 import com.skillexchange.app.presentation.dashboard.DashboardViewModel
+import com.skillexchange.app.presentation.schedule.ScheduleViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -91,6 +92,7 @@ val appModule = module {
     viewModelOf(::BookingRequestViewModel)
     viewModelOf(::BookingDetailViewModel)
     viewModelOf(::BookingListViewModel)
+    viewModelOf(::ScheduleViewModel)
 
     // ── Device & FCM Push ─────────────────────────────────────────────
     single { com.skillexchange.app.data.remote.device.DeviceRemoteDataSource(get()) }

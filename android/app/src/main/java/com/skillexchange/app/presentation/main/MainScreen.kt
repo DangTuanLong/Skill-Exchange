@@ -1,6 +1,7 @@
 package com.skillexchange.app.presentation.main
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -88,6 +89,7 @@ fun MainScreen(
     val notifState by notificationViewModel.state.collectAsState()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar(
                 containerColor = Color.White,
@@ -153,7 +155,7 @@ fun MainScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             NavHost(
                 navController = bottomNavController,
@@ -202,6 +204,9 @@ fun MainScreen(
                     com.skillexchange.app.presentation.booking.list.BookingListScreen(
                         onNavigateToDetail = { exchangeId ->
                             rootNavController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                        },
+                        onNavigateToSchedule = {
+                            rootNavController.navigate(Screen.MySchedule.route)
                         }
                     )
                 }
@@ -236,6 +241,9 @@ fun MainScreen(
                         },
                         onNavigateToDashboard = {
                             rootNavController.navigate(Screen.Dashboard.route)
+                        },
+                        onNavigateToSchedule = {
+                            rootNavController.navigate(Screen.MySchedule.route)
                         }
                     )
                 }

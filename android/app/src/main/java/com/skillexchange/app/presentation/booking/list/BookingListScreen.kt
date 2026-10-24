@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -47,6 +48,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun BookingListScreen(
     onNavigateToDetail: (exchangeId: String) -> Unit,
+    onNavigateToSchedule: () -> Unit = {},
     viewModel: BookingListViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -77,6 +79,13 @@ fun BookingListScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToSchedule) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Thời gian biểu của tôi",
+                            tint = Brand500
+                        )
+                    }
                     IconButton(onClick = { viewModel.onIntent(BookingListIntent.Refresh) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Làm mới", tint = Brand500)
                     }

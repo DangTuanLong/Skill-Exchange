@@ -38,6 +38,7 @@ fun MyProfileScreen(
     onNavigateToManageSkills: () -> Unit = {},
     onNavigateToLogin: () -> Unit = {},
     onNavigateToDashboard: () -> Unit = {},
+    onNavigateToSchedule: () -> Unit = {},
     viewModel: MyProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -441,6 +442,22 @@ fun MyProfileScreen(
                                 fontSize = 13.sp,
                                 color = TextSecondaryLight
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = onNavigateToSchedule,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand600)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Xem thời gian biểu đầy đủ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

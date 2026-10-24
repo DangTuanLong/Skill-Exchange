@@ -255,6 +255,18 @@ fun SkillExchangeNavHost(
             )
         }
 
+        composable(Screen.MySchedule.route) {
+            com.skillexchange.app.presentation.schedule.ScheduleScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { exchangeId ->
+                    navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                },
+                onNavigateToChat = { chatId ->
+                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                }
+            )
+        }
+
         // ── Compatibility alias: Discovery -> Home (DEC-022) ──────────
         composable(Screen.Discovery.route) {
             LaunchedEffect(Unit) {

@@ -282,7 +282,7 @@ class ProfileViewModel(
                     _state.update { it.copy(isSaving = false, savedProfile = profile, availability = profile.availability) }
                     checkAndUpdateProfileCompletion()
                     _effect.send(ProfileEffect.ShowSnackbar("Lưu hồ sơ thành công!"))
-                    _effect.send(ProfileEffect.NavigateToSkillSelection)
+                    _effect.send(ProfileEffect.NavigateToHome)
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isSaving = false, error = e.message) }

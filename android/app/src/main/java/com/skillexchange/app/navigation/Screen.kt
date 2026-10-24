@@ -35,6 +35,7 @@ sealed class Screen(val route: String) {
         fun createRoute(exchangeId: String) = "booking_detail/$exchangeId"
     }
     data object BookingList : Screen("booking_list")
+    data object MySchedule : Screen("my_schedule")
 
     // Chat
     data object ChatList : Screen("chat_list")

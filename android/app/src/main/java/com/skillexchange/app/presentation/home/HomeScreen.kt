@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -91,244 +92,106 @@ fun HomeScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFFF8FAFF)
-    ) { paddingValues ->
+    ) { _ ->
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            // ── Item 1: Header Banner Section ────────────────────────────────
+            // ── Item 1: Condensed TopBar with Search, Đổi vòng tròn, Tin nhắn ──
             item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                        .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
                         .background(Brush.verticalGradient(listOf(Brand600, Brand500)))
-                        .padding(horizontal = 24.dp, vertical = 24.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                                    contentDescription = "Logo",
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                )
-                                Column {
-                                    Text(
-                                        text = "Xin chào",
-                                        fontSize = 14.sp,
-                                        color = Color.White.copy(alpha = 0.85f)
-                                    )
-                                    Text(
-                                        text = "SkillExchange",
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = onNavigateToChat,
-                                modifier = Modifier
-                                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            ) {
-                                BadgedBox(
-                                    badge = {
-                                        if (state.unreadChatCount > 0) {
-                                            Badge(
-                                                containerColor = Brand500,
-                                                contentColor = Color.White
-                                            ) {
-                                                Text(
-                                                    text = if (state.unreadChatCount > 99) "99+" else state.unreadChatCount.toString(),
-                                                    fontSize = 10.sp
-                                                )
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Chat,
-                                        contentDescription = "Tin nhắn",
-                                        tint = Color.White
-                                    )
-                                }
-                            }
-                        }
-
-                        // Banner Card Inside Header
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Trao đổi kỹ năng hai chiều",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Tìm bạn học cùng tiến bộ: Lập trình, Ngoại ngữ, Thiết kế, Âm nhạc...",
-                                        fontSize = 12.sp,
-                                        color = Color.White.copy(alpha = 0.9f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Item 2: Quick Actions Section ────────────────────────────────
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onNavigateToProfileSetup() },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF16A34A).copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(20.dp))
-                            }
-                            Column {
-                                Text(
-                                    text = "Hồ sơ của tôi",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    text = "Kỹ năng & Lịch rảnh",
-                                    fontSize = 11.sp,
-                                    color = TextSecondaryLight
-                                )
-                            }
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onNavigateToSkillGraph() },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Brand500.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Autorenew, contentDescription = null, tint = Brand500, modifier = Modifier.size(20.dp))
-                            }
-                            Column {
-                                Text(
-                                    text = "Đổi vòng tròn",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    text = "Chu trình A → B → C",
-                                    fontSize = 11.sp,
-                                    color = TextSecondaryLight
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Item 3: Search Bar & Filter Section ───────────────────────────
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // 1. Search Bar taking majority of width
                         OutlinedTextField(
                             value = state.query,
                             onValueChange = { viewModel.onIntent(HomeIntent.QueryChanged(it)) },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Tìm tên, kỹ năng (Kotlin, Tiếng Anh...)", fontSize = 13.sp, color = Color(0xFF94A3B8)) },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Brand500) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp),
+                            placeholder = {
+                                Text(
+                                    "Tìm kiếm đối tác, kỹ năng...",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF94A3B8),
+                                    maxLines = 1
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Tìm kiếm",
+                                    tint = Brand500,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
                             trailingIcon = {
-                                if (state.query.isNotEmpty()) {
-                                    IconButton(onClick = {
-                                        viewModel.onIntent(HomeIntent.QueryChanged(""))
-                                        viewModel.onIntent(HomeIntent.PerformSearch)
-                                    }) {
-                                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondaryLight)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    if (state.query.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.onIntent(HomeIntent.QueryChanged(""))
+                                                viewModel.onIntent(HomeIntent.PerformSearch)
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Clear",
+                                                tint = TextSecondaryLight,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.onIntent(HomeIntent.ToggleFilterSheet) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        BadgedBox(
+                                            badge = {
+                                                if (state.activeFilterCount > 0) {
+                                                    Badge(containerColor = Brand500) {
+                                                        Text(
+                                                            "${state.activeFilterCount}",
+                                                            color = Color.White,
+                                                            fontSize = 9.sp
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Tune,
+                                                contentDescription = "Bộ lọc",
+                                                tint = if (state.activeFilterCount > 0) Brand500 else TextSecondaryLight,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Brand500,
-                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
                                 focusedContainerColor = Color.White,
                                 unfocusedContainerColor = Color.White
                             ),
@@ -339,76 +202,104 @@ fun HomeScreen(
                             })
                         )
 
+                        // 2. Đổi vòng tròn button
                         IconButton(
-                            onClick = { viewModel.onIntent(HomeIntent.ToggleFilterSheet) },
+                            onClick = onNavigateToSkillGraph,
                             modifier = Modifier
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (state.activeFilterCount > 0) Color(0xFFEFF6FF) else Color.White)
-                                .border(1.dp, if (state.activeFilterCount > 0) Brand500 else Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Autorenew,
+                                contentDescription = "Đổi vòng tròn",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // 3. Tin nhắn button
+                        IconButton(
+                            onClick = onNavigateToChat,
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
                         ) {
                             BadgedBox(
                                 badge = {
-                                    if (state.activeFilterCount > 0) {
-                                        Badge(containerColor = Brand500) {
-                                            Text("${state.activeFilterCount}", color = Color.White, fontSize = 10.sp)
+                                    if (state.unreadChatCount > 0) {
+                                        Badge(
+                                            containerColor = Color(0xFFEF4444),
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = if (state.unreadChatCount > 99) "99+" else state.unreadChatCount.toString(),
+                                                fontSize = 10.sp
+                                            )
                                         }
                                     }
                                 }
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "Bộ lọc",
-                                    tint = if (state.activeFilterCount > 0) Brand500 else TextPrimaryLight
+                                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                                    contentDescription = "Tin nhắn",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
                     }
+                }
+            }
 
-                    // Category Chips (DEC-014: Multi-select OR, selected categories moved to front)
-                    if (state.categories.isNotEmpty()) {
-                        val selectedIds = state.selectedCategoryIds
-                        val orderedCategories = remember(state.categories, selectedIds) {
-                            state.categories.sortedWith(
-                                compareByDescending<SkillCategory> { it.id in selectedIds }
-                                    .thenBy { it.name }
+            // ── Item 2: Category Chips (DEC-014: Multi-select OR, selected categories moved to front) ──
+            if (state.categories.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    val selectedIds = state.selectedCategoryIds
+                    val orderedCategories = remember(state.categories, selectedIds) {
+                        state.categories.sortedWith(
+                            compareByDescending<SkillCategory> { it.id in selectedIds }
+                                .thenBy { it.name }
+                        )
+                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = state.selectedCategoryIds.isEmpty(),
+                                onClick = { viewModel.onIntent(HomeIntent.ClearCategories) },
+                                label = { Text("Tất cả", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Brand500,
+                                    selectedLabelColor = Color.White
+                                )
                             )
                         }
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            item {
-                                FilterChip(
-                                    selected = state.selectedCategoryIds.isEmpty(),
-                                    onClick = { viewModel.onIntent(HomeIntent.ClearCategories) },
-                                    label = { Text("Tất cả", fontSize = 12.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Brand500,
-                                        selectedLabelColor = Color.White
+                        items(orderedCategories, key = { it.id }) { cat ->
+                            val isSelected = state.selectedCategoryIds.contains(cat.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
                                     )
+                                },
+                                label = { Text(cat.name, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Brand500,
+                                    selectedLabelColor = Color.White,
+                                    selectedLeadingIconColor = Color.White
                                 )
-                            }
-                            items(orderedCategories, key = { it.id }) { cat ->
-                                val isSelected = state.selectedCategoryIds.contains(cat.id)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    label = { Text(cat.name, fontSize = 12.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Brand500,
-                                        selectedLabelColor = Color.White,
-                                        selectedLeadingIconColor = Color.White
-                                    )
-                                )
-                            }
+                            )
                         }
                     }
                 }

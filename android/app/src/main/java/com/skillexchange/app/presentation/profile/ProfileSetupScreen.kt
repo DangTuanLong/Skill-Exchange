@@ -31,8 +31,10 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
-
+import com.skillexchange.app.domain.model.SkillType
+import com.skillexchange.app.core.ui.util.CategoryIconHelper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +57,11 @@ import com.skillexchange.app.presentation.auth.AuthTextField
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
+enum class ProfileSetupTab {
+    INFO,
+    SKILLS
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileSetupScreen(
@@ -66,6 +73,7 @@ fun ProfileSetupScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
     var visible by remember { mutableStateOf(false) }
+    var currentTab by remember { mutableStateOf(ProfileSetupTab.INFO) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -123,7 +131,10 @@ fun ProfileSetupScreen(
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
-                is ProfileEffect.NavigateToSkillSelection -> onNavigateToSkillSelection()
+                is ProfileEffect.NavigateToSkillSelection -> {
+                    currentTab = ProfileSetupTab.SKILLS
+                    onNavigateToSkillSelection()
+                }
                 is ProfileEffect.NavigateToHome           -> onNavigateToHome()
                 is ProfileEffect.OpenDocumentPicker       -> documentPickerLauncher.launch("*/*")
                 is ProfileEffect.OpenImagePicker          -> {
@@ -149,6 +160,132 @@ fun ProfileSetupScreen(
     }
 
     Scaffold(
+        topBar = {
+            Surface(
+                color = Color(0xFFF8FAFF),
+                shadowElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFE2E8F0).copy(alpha = 0.8f))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Tab: Thông tin
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (currentTab == ProfileSetupTab.INFO) Brand500 else Color.Transparent)
+                                .clickable {
+                                    focusManager.clearFocus()
+                                    currentTab = ProfileSetupTab.INFO
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Thông tin",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = if (currentTab == ProfileSetupTab.INFO) Color.White else TextPrimaryLight
+                            )
+                        }
+
+                        // Tab: Kỹ năng
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (currentTab == ProfileSetupTab.SKILLS) Brand500 else Color.Transparent)
+                                .clickable {
+                                    focusManager.clearFocus()
+                                    currentTab = ProfileSetupTab.SKILLS
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Kỹ năng",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = if (currentTab == ProfileSetupTab.SKILLS) Color.White else TextPrimaryLight
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            Surface(
+                color = Color.White,
+                shadowElevation = 8.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (!state.isSaving)
+                                    Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))
+                                else Brush.horizontalGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1)))
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                if (state.fullName.isBlank()) {
+                                    currentTab = ProfileSetupTab.INFO
+                                    viewModel.onIntent(ProfileIntent.SaveProfile)
+                                } else {
+                                    viewModel.onIntent(ProfileIntent.SaveProfile)
+                                }
+                            },
+                            enabled = !state.isSaving,
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
+                        ) {
+                            if (state.isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    "Xong",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFFF8FAFF)
     ) { paddingValues ->
@@ -161,9 +298,10 @@ fun ProfileSetupScreen(
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
+            if (currentTab == ProfileSetupTab.INFO) {
+                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         "Thông tin cá nhân",
@@ -646,56 +784,244 @@ fun ProfileSetupScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        } else {
+            // ── SKILLS TAB ──────────────────────────────────────────────
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Title
+                Column {
+                    Text(
+                        text = "Kỹ năng của tôi",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimaryLight
+                    )
+                    Text(
+                        text = "Chọn kỹ năng bạn có hoặc muốn học",
+                        fontSize = 13.sp,
+                        color = TextSecondaryLight
+                    )
+                }
 
-                    // Save + Continue button
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth().height(52.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (!state.isSaving)
-                                    Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))
-                                else Brush.horizontalGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1)))
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.onIntent(ProfileIntent.SaveProfile)
-                            },
-                            enabled = !state.isSaving,
-                            modifier = Modifier.fillMaxSize(),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Transparent,
-                                disabledContainerColor = Color.Transparent
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(0.dp)
+                // HAVE / WANT Tab Selector
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFE0F2FE))
+                        .padding(4.dp)
+                ) {
+                    listOf("Kỹ năng tôi có", "Kỹ năng muốn học").forEachIndexed { index, label ->
+                        val selected = state.selectedTab == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) Brand500 else Color.Transparent)
+                                .clickable { viewModel.onIntent(ProfileIntent.SelectTab(index)) },
+                            contentAlignment = Alignment.Center
                         ) {
-                            if (state.isSaving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White, strokeWidth = 2.dp
+                            Text(
+                                text = label,
+                                color = if (selected) Color.White else TextSecondaryLight,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
+                // My skills in the current tab
+                val tabType = if (state.selectedTab == 0) SkillType.HAVE else SkillType.WANT
+                val myTabSkills = state.mySkills.filter { it.type == tabType }
+                if (myTabSkills.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Đã chọn (${myTabSkills.size})",
+                            fontSize = 13.sp,
+                            color = TextSecondaryLight,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        myTabSkills.forEach { skill ->
+                            val isSelectedForEdit = state.selectedSkillIdForEdit == skill.id
+                            ProfileUserSkillChip(
+                                name = skill.skillName,
+                                level = skill.proficiencyLevel,
+                                type = skill.type,
+                                isSelected = isSelectedForEdit,
+                                onClick = { viewModel.onIntent(ProfileIntent.SelectSkillForEdit(skill.id)) },
+                                onRemove = { viewModel.onIntent(ProfileIntent.RemoveSkill(skill.id)) }
+                            )
+                        }
+                    }
+                }
+
+                // Proficiency Slider (only for HAVE)
+                if (state.selectedTab == 0) {
+                    val editingSkill = state.mySkills.find { it.id == state.selectedSkillIdForEdit }
+                    ProfileProficiencySlider(
+                        level = state.proficiencyLevel,
+                        editingSkillName = editingSkill?.skillName,
+                        onLevelChange = { viewModel.onIntent(ProfileIntent.SetProficiency(it)) }
+                    )
+                }
+
+                // Smart AI extraction row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            focusManager.clearFocus()
+                            viewModel.onIntent(ProfileIntent.RequestSkillExtraction)
+                        },
+                        enabled = !state.isExtractingSkills,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Gợi ý AI", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            focusManager.clearFocus()
+                            viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                        },
+                        enabled = !state.isProcessingOcr,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            focusManager.clearFocus()
+                            viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
+                        },
+                        enabled = !state.isExtractingDocument,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.UploadFile, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Tài liệu", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                // Category picker
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Danh mục kỹ năng",
+                        fontSize = 14.sp,
+                        color = TextSecondaryLight,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(state.categories) { cat ->
+                            val isSelected = (state.selectedCategoryId ?: state.categories.firstOrNull()?.id) == cat.id
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(if (isSelected) Brand500 else Color.White)
+                                    .border(1.dp, if (isSelected) Brand500 else Color(0xFFCBD5E1), RoundedCornerShape(20.dp))
+                                    .clickable { viewModel.onIntent(ProfileIntent.SelectCategory(cat.id)) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (isSelected) Color.White else Brand500
                                 )
-                            } else {
                                 Text(
-                                    "Quản lý kỹ năng",
-                                    fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White
+                                    text = cat.name,
+                                    color = if (isSelected) Color.White else TextPrimaryLight,
+                                    fontSize = 13.sp
                                 )
                             }
                         }
                     }
+                }
 
-                    TextButton(
-                        onClick = onNavigateToHome,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Trở về trang chủ", color = TextSecondaryLight, fontSize = 14.sp)
+                // Skills in selected category
+                val selectedCat = state.categories.find { it.id == state.selectedCategoryId }
+                    ?: state.categories.firstOrNull()
+                if (selectedCat != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = selectedCat.name,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimaryLight
+                        )
+                        selectedCat.skills.chunked(2).forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                row.forEach { skill ->
+                                    val alreadyAdded = state.mySkills.any { it.skillId == skill.id && it.type == tabType }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (alreadyAdded) Color(0xFFEFF6FF) else Color.White)
+                                            .border(
+                                                1.dp,
+                                                if (alreadyAdded) Brand500 else Color(0xFFCBD5E1),
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable {
+                                                if (!alreadyAdded) {
+                                                    viewModel.onIntent(ProfileIntent.AddSkill(skill.id))
+                                                } else {
+                                                    val existingUserSkill = state.mySkills.find { it.skillId == skill.id && it.type == tabType }
+                                                    viewModel.onIntent(ProfileIntent.SelectSkillForEdit(existingUserSkill?.id))
+                                                }
+                                            }
+                                            .padding(12.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = skill.name,
+                                                color = TextPrimaryLight,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (alreadyAdded) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Brand500,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
+        }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -1074,6 +1400,119 @@ fun ProfileSetupScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ProfileUserSkillChip(
+    name: String,
+    level: Int,
+    type: SkillType,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (type == SkillType.HAVE) Color(0xFFEFF6FF) else Color(0xFFF0FDF4))
+            .border(
+                width = if (isSelected) 1.5.dp else 0.dp,
+                color = if (isSelected) Brand500 else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(name, color = TextPrimaryLight, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        if (type == SkillType.HAVE) {
+            repeat(5) { i ->
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (i < level) Brand500 else Color(0xFFCBD5E1))
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+        }
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Xóa kỹ năng",
+                tint = TextSecondaryLight,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileProficiencySlider(
+    level: Int,
+    editingSkillName: String?,
+    onLevelChange: (Int) -> Unit
+) {
+    val labels = listOf("Mới học", "Cơ bản", "Trung bình", "Thành thạo", "Chuyên gia")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "Mức độ thành thạo",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimaryLight
+                )
+                if (editingSkillName != null) {
+                    Text(
+                        "Đang chỉnh: $editingSkillName",
+                        fontSize = 12.sp,
+                        color = Brand500,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            Text(
+                labels.getOrNull(level - 1) ?: "",
+                fontSize = 13.sp,
+                color = Brand500,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Slider(
+            value = level.toFloat(),
+            onValueChange = { onLevelChange(it.toInt()) },
+            valueRange = 1f..5f,
+            steps = 3,
+            colors = SliderDefaults.colors(
+                thumbColor = Brand500,
+                activeTrackColor = Brand500,
+                inactiveTrackColor = Color(0xFFCBD5E1)
+            )
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("1", fontSize = 11.sp, color = TextSecondaryLight)
+            Text("5", fontSize = 11.sp, color = TextSecondaryLight)
+        }
     }
 }
 
