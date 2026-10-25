@@ -176,6 +176,37 @@ CREATE OR REPLACE TRIGGER set_exchange_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
+-- 5.1 RESCHEDULE PROPOSALS [PLANNED — DEC-025, TASK-067]
+-- ============================================================
+CREATE TABLE IF NOT EXISTS reschedule_proposals (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exchange_id       UUID NOT NULL REFERENCES exchange_requests(id) ON DELETE CASCADE,
+    proposer_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    new_scheduled_at  TIMESTAMPTZ NOT NULL,
+    reason            VARCHAR(200),
+    status            VARCHAR(20) NOT NULL DEFAULT 'PENDING' CONSTRAINT reschedule_proposals_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'EXPIRED')),
+    -- proposal_number (1..3) tính trên TẤT CẢ các bản ghi đề xuất từng tạo của exchange đó (COUNT(*) + 1),
+    -- bao gồm cả các bản ghi CANCELLED, REJECTED, EXPIRED để chống spam hủy rồi đề xuất lại.
+    proposal_number   INT NOT NULL CONSTRAINT reschedule_proposals_number_check CHECK (proposal_number BETWEEN 1 AND 3),
+    responded_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Chỉ cho phép tối đa 1 proposal PENDING cho mỗi exchange
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_pending_reschedule
+    ON reschedule_proposals (exchange_id)
+    WHERE status = 'PENDING';
+
+CREATE INDEX IF NOT EXISTS idx_reschedule_proposals_exchange
+    ON reschedule_proposals(exchange_id, created_at DESC);
+
+CREATE OR REPLACE TRIGGER set_reschedule_proposals_updated_at
+    BEFORE UPDATE ON reschedule_proposals
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================
 -- 6. RATINGS [IMPLEMENTED — TASK-033]
 -- Không bật RLS (API là cổng duy nhất).
 -- ============================================================
@@ -207,17 +238,19 @@ BEGIN
             'REQUEST_ACCEPTED',
             'REQUEST_REJECTED',
             'APPOINTMENT_REMINDER',
-            'RATING_REMINDER'
+            'RATING_REMINDER',
+            'RESCHEDULE_PROPOSED',
+            'RESCHEDULE_ACCEPTED',
+            'RESCHEDULE_REJECTED'
         );
-    ELSE
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'NEW_MESSAGE';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'NEW_REQUEST';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'REQUEST_ACCEPTED';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'REQUEST_REJECTED';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'APPOINTMENT_REMINDER';
-        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RATING_REMINDER';
     END IF;
 END$$;
+
+-- LƯU Ý POSTGRESQL: ALTER TYPE ... ADD VALUE không thể chạy trong transaction block.
+-- Chạy riêng rẽ từng câu lệnh dưới đây trong Supabase SQL Editor:
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RESCHEDULE_PROPOSED';
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RESCHEDULE_ACCEPTED';
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'RESCHEDULE_REJECTED';
 
 CREATE TABLE IF NOT EXISTS notifications (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -234,10 +267,49 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user   ON notifications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
 
--- Chống trùng lặp nhắc nhở (DEC-018)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_reminders
+-- ============================================================
+-- 8.1 CHỐNG TRÙNG LẶP NHẮC NHỞ (DEC-018, CẬP NHẬT THEO DEC-025 - PHƯƠNG ÁN 1)
+-- Thay thế idx_notifications_unique_reminders cũ bằng 2 partial unique indexes:
+-- 1. idx_notifications_unique_appointment: cho phép gửi nhắc nhở cho mốc giờ mới khi dời lịch
+--    Biểu thức (data->>'scheduledAt') là IMMUTABLE trong PostgreSQL (hàm jsonb_extract_path_text).
+--    Quy tắc định dạng: data->>'scheduledAt' bắt buộc là chuỗi ISO-8601 UTC cố định (uuuu-MM-dd'T'HH:mm:ss'Z').
+-- 2. idx_notifications_unique_rating: giữ nguyên quy tắc mỗi user/exchange chỉ nhắc 1 lần.
+--
+-- HƯỚNG DẪN THỨ TỰ CHẠY MIGRATION AN TOÀN CHO CHỦ DỰ ÁN:
+--
+-- [Bước 1: Chạy câu kiểm tra dữ liệu trùng trước (Pre-check)]
+-- SELECT user_id, type, entity_id, (data->>'scheduledAt') AS scheduled_at, COUNT(*)
+-- FROM notifications
+-- WHERE type = 'APPOINTMENT_REMINDER'
+-- GROUP BY user_id, type, entity_id, (data->>'scheduledAt')
+-- HAVING COUNT(*) > 1;
+--
+-- SELECT user_id, type, entity_id, COUNT(*)
+-- FROM notifications
+-- WHERE type = 'RATING_REMINDER'
+-- GROUP BY user_id, type, entity_id
+-- HAVING COUNT(*) > 1;
+--
+-- [Bước 2: Tạo 2 index mới TRƯỚC để bảo đảm không bị khoảng trống thiếu ràng buộc]
+-- CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_appointment
+-- ON notifications (user_id, type, entity_id, (data->>'scheduledAt'))
+-- WHERE type = 'APPOINTMENT_REMINDER';
+--
+-- CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_rating
+-- ON notifications (user_id, type, entity_id)
+-- WHERE type = 'RATING_REMINDER';
+--
+-- [Bước 3: DROP index cũ sau khi các index mới đã sẵn sàng]
+-- DROP INDEX IF EXISTS idx_notifications_unique_reminders;
+-- ============================================================
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_appointment
+ON notifications (user_id, type, entity_id, (data->>'scheduledAt'))
+WHERE type = 'APPOINTMENT_REMINDER';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_rating
 ON notifications (user_id, type, entity_id)
-WHERE type IN ('APPOINTMENT_REMINDER', 'RATING_REMINDER');
+WHERE type = 'RATING_REMINDER';
 
 -- ============================================================
 -- 9. FCM TOKENS [IMPLEMENTED — TASK-023]
@@ -267,6 +339,7 @@ ALTER TABLE exchange_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fcm_tokens        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reschedule_proposals ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: public read, own write
 CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (TRUE);
@@ -292,6 +365,10 @@ CREATE POLICY "notifications_all" ON notifications FOR ALL USING (auth.uid() = u
 
 -- FCM tokens: own only
 CREATE POLICY "fcm_tokens_all" ON fcm_tokens FOR ALL USING (auth.uid() = user_id);
+
+-- Reschedule proposals: Bật RLS nhưng KHÔNG tạo policy cho anon/authenticated (defense in depth).
+-- Toàn bộ truy vấn trực tiếp từ Supabase client SDK (PostgREST) bị chặn hoàn toàn.
+-- API Ktor kết nối qua JDBC connection pool bằng user postgres (superuser/service role có BYPASSRLS) nên vẫn truy cập bình thường.
 
 -- ============================================================
 -- DONE — Cập nhật khi thay đổi schema (DEC-007)

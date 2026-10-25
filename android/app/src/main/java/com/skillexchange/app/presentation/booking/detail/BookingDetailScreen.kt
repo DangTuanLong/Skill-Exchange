@@ -26,6 +26,7 @@ import com.skillexchange.app.core.ui.theme.TextPrimaryLight
 import com.skillexchange.app.core.ui.theme.TextSecondaryLight
 import com.skillexchange.app.domain.model.exchange.ExchangeStatus
 import org.koin.androidx.compose.koinViewModel
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -40,6 +41,8 @@ fun BookingDetailScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -408,6 +411,36 @@ fun BookingDetailScreen(
                                         Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Nhắn tin trao đổi", fontWeight = FontWeight.SemiBold)
+                                    }
+
+                                    // Thêm vào lịch điện thoại (TASK-066, DEC-025)
+                                    OutlinedButton(
+                                        onClick = {
+                                            state.exchange?.let { ex ->
+                                                try {
+                                                    val eventData = CalendarIntentHelper.buildEventData(ex, state.currentUserId)
+                                                    val intent = CalendarIntentHelper.buildCalendarIntent(eventData)
+                                                    context.startActivity(intent)
+                                                } catch (_: android.content.ActivityNotFoundException) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar("Không tìm thấy ứng dụng Lịch trên thiết bị")
+                                                    }
+                                                } catch (e: Exception) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar(e.message ?: "Không thể mở ứng dụng Lịch")
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
+                                    ) {
+                                        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Thêm vào lịch", fontWeight = FontWeight.SemiBold)
                                     }
 
                                     // Xác nhận hoàn thành
