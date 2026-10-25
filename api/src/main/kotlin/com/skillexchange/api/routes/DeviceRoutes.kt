@@ -101,12 +101,15 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
                 }
             }
 
-            // DELETE /api/devices - Xóa token FCM (khi logout hoặc hủy thiết bị)
+            // DELETE /api/devices - Xóa token FCM (khi logout hoặc hủy thiết bị, chỉ nhận token qua JSON body)
             delete {
                 val callerUserId = call.getUserId()
-                val bodyToken = try { call.receiveNullable<DeleteDeviceRequest>()?.token?.trim() } catch (_: Exception) { null }
-                val queryToken = call.request.queryParameters["token"]?.trim()
-                val token = if (!bodyToken.isNullOrBlank()) bodyToken else queryToken
+                val req = try {
+                    call.receiveNullable<DeleteDeviceRequest>()
+                } catch (_: Exception) {
+                    null
+                }
+                val token = req?.token?.trim()
 
                 if (token.isNullOrBlank()) {
                     return@delete call.respond(
@@ -114,7 +117,7 @@ fun Route.deviceRoutes(deviceService: DeviceService) {
                         ApiError(
                             status = 400,
                             code = ErrorCodes.BAD_REQUEST,
-                            message = "Thiếu tham số token để xóa thiết bị"
+                            message = "Thiếu token trong request body để xóa thiết bị"
                         )
                     )
                 }

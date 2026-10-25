@@ -130,22 +130,20 @@ class DeviceRoutesTest {
     }
 
     @Test
-    fun testDeleteDevice_QueryParam_Success() = testApplication {
+    fun testDeleteDevice_QueryParamOnly_FailsBadRequest() = testApplication {
         setupDeviceRoutesModule()
         val client = createClient {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         }
 
-        every { mockDeviceService.deleteToken("user-test-123", "fcm-token-123") } returns true
-
         val response = client.delete("/api/devices?token=fcm-token-123") {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-test-123")}")
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertTrue(response.bodyAsText().contains("Xóa thiết bị thành công"))
-        verify(exactly = 1) {
-            mockDeviceService.deleteToken("user-test-123", "fcm-token-123")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("Thiếu token trong request body để xóa thiết bị"))
+        verify(exactly = 0) {
+            mockDeviceService.deleteToken(any(), any())
         }
     }
 

@@ -1,5 +1,11 @@
 package com.skillexchange.api.services.auth
 
+import io.ktor.client.request.*
+import io.ktor.client.statement.bodyAsText
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
+import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -76,5 +82,63 @@ class AuthRateLimiterTest {
 
         // Should be allowed again
         assertTrue(limiter.tryAcquireLogin("expire@example.com", "1.1.1.1"))
+    }
+
+    @Test
+    fun `getClientIp ignores spoofed CF-Connecting-IP header and falls back to remoteAddress`() = testApplication {
+        routing {
+            get("/test-ip") {
+                call.respondText(call.getClientIp())
+            }
+        }
+        val response = client.get("/test-ip") {
+            header("CF-Connecting-IP", "1.2.3.4")
+        }
+        val ip = response.bodyAsText()
+        assertFalse(ip == "1.2.3.4", "CF-Connecting-IP must not be trusted on Render")
+        assertEquals("localhost", ip)
+    }
+
+    @Test
+    fun `getClientIp extracts last element in X-Forwarded-For when client attempts spoofing`() = testApplication {
+        routing {
+            get("/test-ip") {
+                call.respondText(call.getClientIp())
+            }
+        }
+        // Client sends fake IP at the start, Render reverse proxy appends real client IP at the end
+        val response = client.get("/test-ip") {
+            header("X-Forwarded-For", "203.0.113.195, 198.51.100.1")
+        }
+        val ip = response.bodyAsText()
+        assertEquals("198.51.100.1", ip)
+    }
+
+    @Test
+    fun `getClientIp extracts single IP in X-Forwarded-For and trims whitespace`() = testApplication {
+        routing {
+            get("/test-ip") {
+                call.respondText(call.getClientIp())
+            }
+        }
+        val response = client.get("/test-ip") {
+            header("X-Forwarded-For", " 10.0.0.5 ")
+        }
+        val ip = response.bodyAsText()
+        assertEquals("10.0.0.5", ip)
+    }
+
+    @Test
+    fun `getClientIp falls back to remoteAddress when X-Forwarded-For is blank or empty`() = testApplication {
+        routing {
+            get("/test-ip") {
+                call.respondText(call.getClientIp())
+            }
+        }
+        val response = client.get("/test-ip") {
+            header("X-Forwarded-For", "   ,   ")
+        }
+        val ip = response.bodyAsText()
+        assertEquals("localhost", ip)
     }
 }

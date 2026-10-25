@@ -6,19 +6,24 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Trích xuất IP khách (Client IP) an toàn đằng sau Reverse Proxy Render / Cloudflare.
- * Thứ tự ưu tiên:
- * 1. `CF-Connecting-IP`: do Cloudflare xác thực và gán ở tầng ngoài cùng.
- * 2. `X-Forwarded-For`: IP đầu tiên trong chuỗi danh sách là IP của client gốc được proxy ghi nhận.
- * 3. `call.request.local.remoteAddress`: Fallback kết nối trực tiếp trong môi trường local dev.
+ * Trích xuất IP khách (Client IP) an toàn đằng sau Reverse Proxy của Render.
+ *
+ * Lưu ý theo tài liệu vận hành của Render:
+ * - Render reverse proxy không cấu hình Cloudflare phía trước trên tên miền mặc định (*.onrender.com),
+ *   do đó KHÔNG tin cậy `CF-Connecting-IP` (client có thể tự gửi header giả mạo để bypass rate limiter).
+ * - Reverse proxy của Render tự động nối (append) địa chỉ IP của client thực tế vào CUỐI danh sách `X-Forwarded-For`.
+ *   Nếu client tự ý gửi header giả mạo dạng `X-Forwarded-For: client_fake_ip`, proxy của Render sẽ chuyển tiếp thành:
+ *   `X-Forwarded-For: client_fake_ip, real_client_ip`.
+ * - Do đó, phần tử CUỐI CÙNG (last element) sau khi split(',') và trim khoảng trắng là IP đáng tin cậy nhất
+ *   do Render proxy ghi nhận.
+ * - Fallback: `request.local.remoteAddress` cho môi trường phát triển cục bộ hoặc kết nối trực tiếp.
  */
 fun ApplicationCall.getClientIp(): String {
-    val cfIp = request.headers["CF-Connecting-IP"]?.trim()?.takeIf { it.isNotBlank() }
-    if (cfIp != null) return cfIp
-
     val xForwardedFor = request.headers["X-Forwarded-For"]
     if (!xForwardedFor.isNullOrBlank()) {
-        val clientIp = xForwardedFor.split(",").firstOrNull()?.trim()
+        val clientIp = xForwardedFor.split(",")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
         if (!clientIp.isNullOrBlank()) return clientIp
     }
 
