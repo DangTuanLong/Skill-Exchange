@@ -16,6 +16,7 @@ interface IExchangeNotificationHook {
     fun onRequestRejected(exchange: ExchangeRequestDto) {}
     fun onRequestCancelled(exchange: ExchangeRequestDto, cancelledBy: String) {}
     fun onRequestCompleted(exchange: ExchangeRequestDto) {}
+    fun syncChatRoom(exchange: ExchangeRequestDto) {}
 }
 
 /**
@@ -156,6 +157,15 @@ class FcmExchangeNotificationHook(
             firestoreChatService?.updateChatStatusAsync(exchange.id, "COMPLETED")
         } catch (e: Throwable) {
             logger.error("Lỗi khi kích hoạt hook cập nhật COMPLETED phòng chat Firestore cho exchange ${exchange.id}: ${e.message}")
+        }
+    }
+
+    override fun syncChatRoom(exchange: ExchangeRequestDto) {
+        try {
+            // Đồng bộ idempotent phòng chat Firestore, không gửi notification hay push FCM
+            firestoreChatService?.createChatRoomAsync(exchange)
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi đồng bộ phòng chat Firestore cho exchange ${exchange.id}: ${e.message}")
         }
     }
 }

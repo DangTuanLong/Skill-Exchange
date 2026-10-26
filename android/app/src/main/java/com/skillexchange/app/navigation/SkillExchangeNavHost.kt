@@ -18,15 +18,37 @@ import com.skillexchange.app.presentation.onboarding.OnboardingScreen
 import com.skillexchange.app.presentation.profile.ProfileDetailScreen
 import com.skillexchange.app.presentation.profile.ProfileSetupScreen
 import com.skillexchange.app.presentation.profile.SkillSelectionScreen
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.skillexchange.app.core.notification.InAppNotificationManager
 import org.koin.compose.koinInject
 
@@ -53,8 +75,13 @@ fun SkillExchangeNavHost(
     // Xử lý thông báo foreground (in-app banner)
     LaunchedEffect(Unit) {
         InAppNotificationManager.notificationFlow.collect { notif ->
+            val messageText = if (notif.title.isNotBlank() && notif.body.isNotBlank()) {
+                "${notif.title}\n${notif.body}"
+            } else {
+                notif.title.ifBlank { notif.body }
+            }
             val result = snackbarHostState.showSnackbar(
-                message = "${notif.title}: ${notif.body}",
+                message = messageText,
                 actionLabel = "Xem",
                 duration = SnackbarDuration.Long
             )
@@ -324,7 +351,88 @@ fun SkillExchangeNavHost(
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp)
+        ) { snackbarData ->
+            val lines = snackbarData.visuals.message.split("\n", limit = 2)
+            val title = lines.getOrNull(0) ?: ""
+            val body = lines.getOrNull(1) ?: ""
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { snackbarData.performAction() },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (body.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = body,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    if (snackbarData.visuals.actionLabel != null) {
+                        TextButton(
+                            onClick = { snackbarData.performAction() },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(
+                                text = snackbarData.visuals.actionLabel!!,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -13,6 +13,7 @@ tmp.md
 .env
 .env.*
 .env.example
+.agents/
 
 **/local.properties
 local.properties
