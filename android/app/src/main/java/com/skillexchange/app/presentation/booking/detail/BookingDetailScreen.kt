@@ -37,6 +37,7 @@ fun BookingDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToRating: ((String) -> Unit)? = null,
     onNavigateToChat: ((String) -> Unit)? = null,
+    onNavigateToCall: ((exchangeId: String, isVideo: Boolean) -> Unit)? = null,
     viewModel: BookingDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -44,6 +45,31 @@ fun BookingDetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    var lastCallTime by remember { mutableLongStateOf(0L) }
+    var cooldownRemaining by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(cooldownRemaining) {
+        if (cooldownRemaining > 0) {
+            kotlinx.coroutines.delay(1000L)
+            cooldownRemaining -= 1
+        }
+    }
+
+    val handleCallClick: (String, Boolean) -> Unit = { id, isVideo ->
+        val now = System.currentTimeMillis()
+        val elapsedSeconds = (now - lastCallTime) / 1000
+        if (elapsedSeconds < 10) {
+            val remaining = (10 - elapsedSeconds).toInt()
+            cooldownRemaining = remaining
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Vui lòng đợi $remaining giây trước khi gọi lại")
+            }
+        } else {
+            lastCallTime = now
+            onNavigateToCall?.invoke(id, isVideo)
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -395,6 +421,50 @@ fun BookingDetailScreen(
                                 }
 
                                 ExchangeStatus.ACCEPTED -> {
+                                    // Gọi thoại & Gọi video trong app (TASK-074, DEC-026)
+                                    state.exchange?.let { ex ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { handleCallClick(ex.id, false) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                enabled = cooldownRemaining <= 0,
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
+                                            ) {
+                                                Icon(Icons.Default.Phone, contentDescription = "Gọi thoại", modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    if (cooldownRemaining > 0) "Chờ ${cooldownRemaining}s" else "Gọi thoại",
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = { handleCallClick(ex.id, true) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                enabled = cooldownRemaining <= 0,
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
+                                            ) {
+                                                Icon(Icons.Default.Videocam, contentDescription = "Gọi video", modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    if (cooldownRemaining > 0) "Chờ ${cooldownRemaining}s" else "Gọi video",
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
                                     // Nhắn tin (TASK-030)
                                     OutlinedButton(
                                         onClick = {

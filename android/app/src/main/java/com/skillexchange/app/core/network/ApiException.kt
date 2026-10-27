@@ -78,6 +78,13 @@ class ApiException(
         const val CODE_INTERNAL = "INTERNAL"
         const val CODE_BAD_REQUEST = "BAD_REQUEST"
 
+        // In-app Calling Error Codes (DEC-026, TASK-073, TASK-074)
+        const val CODE_USER_BUSY = "USER_BUSY"
+        const val CODE_EXCHANGE_NOT_ACTIVE = "EXCHANGE_NOT_ACTIVE"
+        const val CODE_CALL_COOLDOWN_ACTIVE = "CALL_COOLDOWN_ACTIVE"
+        const val CODE_LIVEKIT_NOT_CONFIGURED = "LIVEKIT_NOT_CONFIGURED"
+        const val CODE_CALL_NOT_FOUND = "CALL_NOT_FOUND"
+
         /**
          * Chuyển đổi từ HTTP status và ApiErrorDto sang ApiException.
          * Ưu tiên chuỗi code -> fallback status -> fallback server message -> thông điệp mặc định.
@@ -142,6 +149,11 @@ class ApiException(
                     CODE_RATE_LIMITED -> return "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau ít phút."
                     CODE_INTERNAL -> return "Lỗi máy chủ. Vui lòng thử lại sau."
                     CODE_BAD_REQUEST -> return "Yêu cầu không hợp lệ."
+                    CODE_USER_BUSY -> return "Người dùng đang có cuộc gọi khác. Vui lòng thử lại sau."
+                    CODE_EXCHANGE_NOT_ACTIVE -> return "Buổi trao đổi chưa được chấp nhận hoặc đã kết thúc."
+                    CODE_CALL_COOLDOWN_ACTIVE -> return "Vui lòng đợi ít giây trước khi thực hiện cuộc gọi tiếp theo."
+                    CODE_LIVEKIT_NOT_CONFIGURED -> return "Dịch vụ gọi trực tiếp chưa sẵn sàng. Vui lòng thử lại sau."
+                    CODE_CALL_NOT_FOUND -> return "Không tìm thấy phiên cuộc gọi."
                     else -> {}
                 }
             }

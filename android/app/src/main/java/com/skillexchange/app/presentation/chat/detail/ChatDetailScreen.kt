@@ -46,8 +46,10 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,6 +73,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +103,7 @@ import java.util.Locale
 fun ChatDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToBookingDetail: (String) -> Unit,
+    onNavigateToCall: ((exchangeId: String, isVideo: Boolean) -> Unit)? = null,
     viewModel: ChatDetailViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
@@ -107,6 +111,40 @@ fun ChatDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    var lastCallTime by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    var cooldownRemaining by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
+    LaunchedEffect(cooldownRemaining) {
+        if (cooldownRemaining > 0) {
+            kotlinx.coroutines.delay(1000L)
+            cooldownRemaining -= 1
+        }
+    }
+
+    val isCallAllowed = !state.isReadOnly
+    val callExchangeId = state.room?.exchangeId ?: ""
+
+    val handleCallClick: (Boolean) -> Unit = { isVideo ->
+        if (!isCallAllowed || callExchangeId.isBlank()) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Chỉ có thể gọi điện khi buổi trao đổi đã được chấp nhận")
+            }
+        } else {
+            val now = System.currentTimeMillis()
+            val elapsedSeconds = (now - lastCallTime) / 1000
+            if (elapsedSeconds < 10) {
+                val remaining = (10 - elapsedSeconds).toInt()
+                cooldownRemaining = remaining
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Vui lòng đợi $remaining giây trước khi gọi lại")
+                }
+            } else {
+                lastCallTime = now
+                onNavigateToCall?.invoke(callExchangeId, isVideo)
+            }
+        }
+    }
 
     val reversedMessages = remember(state.messages) { state.messages.reversed() }
 
@@ -212,6 +250,31 @@ fun ChatDetailScreen(
                     }
                 },
                 actions = {
+                    // Nút Gọi thoại (TASK-074, DEC-026)
+                    IconButton(
+                        onClick = { handleCallClick(false) },
+                        enabled = isCallAllowed && cooldownRemaining <= 0
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Phone,
+                            contentDescription = "Gọi thoại",
+                            tint = if (isCallAllowed && cooldownRemaining <= 0) Brand500 else Color.LightGray
+                        )
+                    }
+
+                    // Nút Gọi video (TASK-074, DEC-026)
+                    IconButton(
+                        onClick = { handleCallClick(true) },
+                        enabled = isCallAllowed && cooldownRemaining <= 0
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = "Gọi video",
+                            tint = if (isCallAllowed && cooldownRemaining <= 0) Brand500 else Color.LightGray
+                        )
+                    }
+
+                    // Nút Xem lịch hẹn
                     IconButton(
                         onClick = { viewModel.onIntent(ChatDetailIntent.NavigateToBookingDetail) }
                     ) {

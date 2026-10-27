@@ -340,6 +340,7 @@ ALTER TABLE friendships       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fcm_tokens        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reschedule_proposals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_sessions     ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: public read, own write
 CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (TRUE);
@@ -366,9 +367,47 @@ CREATE POLICY "notifications_all" ON notifications FOR ALL USING (auth.uid() = u
 -- FCM tokens: own only
 CREATE POLICY "fcm_tokens_all" ON fcm_tokens FOR ALL USING (auth.uid() = user_id);
 
--- Reschedule proposals: Bật RLS nhưng KHÔNG tạo policy cho anon/authenticated (defense in depth).
+-- Reschedule proposals & Call sessions: Bật RLS nhưng KHÔNG tạo policy cho anon/authenticated (defense in depth).
 -- Toàn bộ truy vấn trực tiếp từ Supabase client SDK (PostgREST) bị chặn hoàn toàn.
 -- API Ktor kết nối qua JDBC connection pool bằng user postgres (superuser/service role có BYPASSRLS) nên vẫn truy cập bình thường.
+
+-- ============================================================
+-- 5.2 CALL SESSIONS [PLANNED — DEC-026, TASK-073]
+-- ============================================================
+CREATE TABLE IF NOT EXISTS call_sessions (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exchange_id       UUID NOT NULL REFERENCES exchange_requests(id) ON DELETE CASCADE,
+    caller_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    receiver_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    room_name         VARCHAR(100) NOT NULL UNIQUE,
+    call_type         VARCHAR(10) NOT NULL CONSTRAINT call_sessions_type_check CHECK (call_type IN ('VOICE', 'VIDEO')),
+    status            VARCHAR(20) NOT NULL DEFAULT 'DIALING' CONSTRAINT call_sessions_status_check CHECK (status IN ('DIALING', 'RINGING', 'CONNECTED', 'ENDED', 'REJECTED', 'BUSY', 'MISSED', 'FAILED')),
+    started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    connected_at      TIMESTAMPTZ,
+    ended_at          TIMESTAMPTZ,
+    duration_seconds  INT NOT NULL DEFAULT 0 CONSTRAINT call_sessions_duration_check CHECK (duration_seconds >= 0),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_call_sessions_different_users CHECK (caller_id <> receiver_id)
+);
+
+-- Partial Unique Indexes bảo vệ Concurrency Guard (mỗi người tối đa 1 cuộc gọi active)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_call_sessions_active_caller
+    ON call_sessions (caller_id)
+    WHERE status IN ('DIALING', 'RINGING', 'CONNECTED');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_call_sessions_active_receiver
+    ON call_sessions (receiver_id)
+    WHERE status IN ('DIALING', 'RINGING', 'CONNECTED');
+
+-- Các index hỗ trợ dọn dẹp timeout và tra cứu
+CREATE INDEX IF NOT EXISTS idx_call_sessions_exchange ON call_sessions (exchange_id);
+CREATE INDEX IF NOT EXISTS idx_call_sessions_timeout ON call_sessions (status, created_at) WHERE status IN ('DIALING', 'RINGING', 'CONNECTED');
+
+CREATE OR REPLACE TRIGGER set_call_sessions_updated_at
+    BEFORE UPDATE ON call_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
 -- DONE — Cập nhật khi thay đổi schema (DEC-007)

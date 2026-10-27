@@ -134,3 +134,20 @@ object NotificationsTable : Table("notifications") {
     val createdAt  = datetime("created_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)
 }
+
+object CallSessionsTable : Table("call_sessions") {
+    val id              = uuid("id").autoGenerate()
+    val exchangeId      = uuid("exchange_id").references(ExchangeRequestsTable.id)
+    val callerId        = uuid("caller_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val receiverId      = uuid("receiver_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val roomName        = varchar("room_name", 100).uniqueIndex()
+    val callType        = varchar("call_type", 10)
+    val status          = varchar("status", 20).default("DIALING")
+    val startedAt       = datetime("started_at").default(LocalDateTime.now())
+    val connectedAt     = datetime("connected_at").nullable()
+    val endedAt         = datetime("ended_at").nullable()
+    val durationSeconds = integer("duration_seconds").default(0)
+    val createdAt       = datetime("created_at").default(LocalDateTime.now())
+    val updatedAt       = datetime("updated_at").default(LocalDateTime.now())
+    override val primaryKey = PrimaryKey(id)
+}

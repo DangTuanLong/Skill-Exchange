@@ -26,6 +26,11 @@ object ErrorCodes {
     const val PDF_TOO_MANY_PAGES = "PDF_TOO_MANY_PAGES"
     const val PDF_NO_TEXT = "PDF_NO_TEXT"
     const val PDF_UNSAFE_CONTENT = "PDF_UNSAFE_CONTENT"
+    const val EXCHANGE_NOT_ACTIVE = "EXCHANGE_NOT_ACTIVE"
+    const val USER_BUSY = "USER_BUSY"
+    const val CALL_COOLDOWN_ACTIVE = "CALL_COOLDOWN_ACTIVE"
+    const val CALL_NOT_FOUND = "CALL_NOT_FOUND"
+    const val LIVEKIT_NOT_CONFIGURED = "LIVEKIT_NOT_CONFIGURED"
 
     fun fromStatus(status: Int): String = when (status) {
         400 -> BAD_REQUEST

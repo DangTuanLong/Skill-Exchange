@@ -33,6 +33,7 @@ import com.skillexchange.app.presentation.profile.myprofile.MyProfileViewModel
 import com.skillexchange.app.presentation.graph.SkillGraphViewModel
 import com.skillexchange.app.presentation.dashboard.DashboardViewModel
 import com.skillexchange.app.presentation.schedule.ScheduleViewModel
+import com.skillexchange.app.presentation.call.CallViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -148,4 +149,12 @@ val appModule = module {
         com.skillexchange.app.data.repository.StatsRepositoryImpl(get(), get())
     }
     viewModelOf(::DashboardViewModel)
+
+    // ── In-app Calling (DEC-026, TASK-074) ────────────────────────────
+    single<com.skillexchange.app.core.call.CallEngine> { com.skillexchange.app.core.call.FakeCallEngine() }
+    single { com.skillexchange.app.data.remote.call.CallRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.ICallRepository> {
+        com.skillexchange.app.data.repository.CallRepositoryImpl(get())
+    }
+    viewModelOf(::CallViewModel)
 }

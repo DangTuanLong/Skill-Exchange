@@ -18,7 +18,8 @@ import java.util.UUID
 
 open class ReminderSchedulerService(
     private val notificationService: NotificationService,
-    private val timeProvider: () -> LocalDateTime = { LocalDateTime.now() }
+    private val timeProvider: () -> LocalDateTime = { LocalDateTime.now() },
+    private val callService: com.skillexchange.api.services.call.CallService? = null
 ) {
     private val logger = LoggerFactory.getLogger(ReminderSchedulerService::class.java)
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm dd/MM")
@@ -36,6 +37,9 @@ open class ReminderSchedulerService(
 
             // 2. Quét nhắc đánh giá sau 24 giờ kể từ COMPLETED (RATING_REMINDER)
             ratingRemindersCount = processRatingReminders(now)
+
+            // 3. Dọn dẹp các cuộc gọi hết hạn (DEC-026, TASK-073)
+            callService?.cleanupExpiredCalls()
         } catch (e: Throwable) {
             logger.error("Lỗi khi quét reminders: ${e.message}", e)
         }

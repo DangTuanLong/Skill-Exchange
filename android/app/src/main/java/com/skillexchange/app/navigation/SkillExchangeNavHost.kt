@@ -256,6 +256,9 @@ fun SkillExchangeNavHost(
                 },
                 onNavigateToChat = { chatId ->
                     navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                },
+                onNavigateToCall = { exchangeId, isVideo ->
+                    navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
                 }
             )
         }
@@ -278,7 +281,26 @@ fun SkillExchangeNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToBookingDetail = { exchangeId ->
                     navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                },
+                onNavigateToCall = { exchangeId, isVideo ->
+                    navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
                 }
+            )
+        }
+
+        // ── In-app Calling (DEC-026, TASK-074) ────────────────────────
+        composable(
+            route = Screen.Call.route,
+            arguments = listOf(
+                navArgument("exchangeId") { type = NavType.StringType },
+                navArgument("isVideo") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) {
+            com.skillexchange.app.presentation.call.CallScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

@@ -6,6 +6,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -25,6 +26,14 @@ import java.time.Instant
 interface IFirestoreChatService {
     fun createChatRoomAsync(exchange: ExchangeRequestDto)
     fun updateChatStatusAsync(exchangeId: String, status: String)
+    fun recordSystemCallMessageAsync(
+        exchangeId: String,
+        callType: String,
+        callStatus: String,
+        durationSeconds: Int,
+        callerId: String,
+        receiverId: String
+    )
 }
 
 open class FirestoreChatService(
@@ -34,6 +43,94 @@ open class FirestoreChatService(
 ) : IFirestoreChatService {
 
     private val logger = LoggerFactory.getLogger(FirestoreChatService::class.java)
+
+    override fun recordSystemCallMessageAsync(
+        exchangeId: String,
+        callType: String,
+        callStatus: String,
+        durationSeconds: Int,
+        callerId: String,
+        receiverId: String
+    ) {
+        scope.launch {
+            try {
+                val projectId = credentialsProvider.getProjectId() ?: return@launch
+                val accessToken = credentialsProvider.getAccessToken() ?: return@launch
+
+                val nowIso = Instant.now().toString()
+                val messageId = java.util.UUID.randomUUID().toString()
+
+                val callTypeUpper = callType.trim().uppercase()
+                val isVideo = callTypeUpper == "VIDEO"
+                val callTypeLabel = if (isVideo) "Cuộc gọi video" else "Cuộc gọi thoại"
+
+                val content = when (callStatus.trim().uppercase()) {
+                    "ENDED", "COMPLETED" -> {
+                        val mm = durationSeconds / 60
+                        val ss = durationSeconds % 60
+                        val timeStr = "%02d:%02d".format(mm, ss)
+                        "$callTypeLabel ($timeStr)"
+                    }
+                    "REJECTED" -> "Cuộc gọi bị từ chối"
+                    "MISSED" -> "Cuộc gọi nhỡ"
+                    "BUSY" -> "Máy bận"
+                    else -> "$callTypeLabel đã kết thúc"
+                }
+
+                // 1. Tạo tin nhắn SYSTEM_CALL trong subcollection /chats/{exchangeId}/messages/{messageId}
+                val msgFields = buildJsonObject {
+                    put("type", buildJsonObject { put("stringValue", "SYSTEM_CALL") })
+                    put("callType", buildJsonObject { put("stringValue", callTypeUpper) })
+                    put("callStatus", buildJsonObject { put("stringValue", callStatus.trim().uppercase()) })
+                    put("durationSeconds", buildJsonObject { put("integerValue", durationSeconds.toString()) })
+                    put("callerId", buildJsonObject { put("stringValue", callerId) })
+                    put("receiverId", buildJsonObject { put("stringValue", receiverId) })
+                    put("senderId", buildJsonObject { put("stringValue", callerId) })
+                    put("content", buildJsonObject { put("stringValue", content) })
+                    put("createdAt", buildJsonObject { put("timestampValue", nowIso) })
+                    put("participants", buildJsonObject {
+                        put("arrayValue", buildJsonObject {
+                            putJsonArray("values") {
+                                add(buildJsonObject { put("stringValue", callerId) })
+                                add(buildJsonObject { put("stringValue", receiverId) })
+                            }
+                        })
+                    })
+                }
+                val msgPayload = buildJsonObject { put("fields", msgFields) }
+                val msgUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/chats/$exchangeId/messages?documentId=$messageId"
+
+                val msgResp = httpClient.post(msgUrl) {
+                    header(HttpHeaders.Authorization, "Bearer $accessToken")
+                    contentType(ContentType.Application.Json)
+                    setBody(msgPayload.toString())
+                }
+
+                if (msgResp.status != HttpStatusCode.OK) {
+                    logger.warn("Ghi tin nhắn SYSTEM_CALL Firestore thất bại (${msgResp.status}): ${msgResp.bodyAsText()}")
+                }
+
+                // 2. Cập nhật lastMessage của phòng chat cha
+                val chatFields = buildJsonObject {
+                    put("lastMessage", buildJsonObject { put("stringValue", content) })
+                    put("lastMessageAt", buildJsonObject { put("timestampValue", nowIso) })
+                    put("lastSenderId", buildJsonObject { put("stringValue", callerId) })
+                    put("updatedAt", buildJsonObject { put("timestampValue", nowIso) })
+                }
+                val chatPayload = buildJsonObject { put("fields", chatFields) }
+                val chatUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/chats/$exchangeId?updateMask.fieldPaths=lastMessage&updateMask.fieldPaths=lastMessageAt&updateMask.fieldPaths=lastSenderId&updateMask.fieldPaths=updatedAt"
+
+                httpClient.patch(chatUrl) {
+                    header(HttpHeaders.Authorization, "Bearer $accessToken")
+                    contentType(ContentType.Application.Json)
+                    setBody(chatPayload.toString())
+                }
+            } catch (e: Throwable) {
+                // Lỗi ghi Firestore chỉ ghi log, không làm hỏng nghiệp vụ kết thúc cuộc gọi
+                logger.error("Lỗi khi ghi nhận tin nhắn SYSTEM_CALL Firestore cho exchange $exchangeId: ${e.message}")
+            }
+        }
+    }
 
     override fun createChatRoomAsync(exchange: ExchangeRequestDto) {
         scope.launch {

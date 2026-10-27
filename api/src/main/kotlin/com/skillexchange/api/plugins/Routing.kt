@@ -1,6 +1,7 @@
 package com.skillexchange.api.plugins
 
 import com.skillexchange.api.routes.authRoutes
+import com.skillexchange.api.routes.callRoutes
 import com.skillexchange.api.routes.chatRoutes
 import com.skillexchange.api.routes.exchangeRoutes
 import com.skillexchange.api.routes.healthRoutes
@@ -53,6 +54,7 @@ fun Application.configureRouting() {
     val statsService: StatsService by inject()
     val authRateLimiter: com.skillexchange.api.services.auth.AuthRateLimiter by inject()
     val reminderRateLimiter: com.skillexchange.api.services.notification.ReminderRateLimiter by inject()
+    val callService: com.skillexchange.api.services.call.CallService by inject()
 
     routing {
         healthRoutes()
@@ -69,5 +71,6 @@ fun Application.configureRouting() {
         nlpRoutes(skillExtractionService, nlpRateLimiter, documentRateLimiter)
         graphRoutes(skillGraphService, graphRateLimiter)
         statsRoutes(statsService)
+        callRoutes(callService)
     }
 }
