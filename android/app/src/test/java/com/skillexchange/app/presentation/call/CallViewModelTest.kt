@@ -1,6 +1,8 @@
 package com.skillexchange.app.presentation.call
 
 import androidx.lifecycle.SavedStateHandle
+import com.skillexchange.app.core.call.AppAudioDevice
+import com.skillexchange.app.core.call.AudioRoutingManager
 import com.skillexchange.app.core.call.CallEngineStatus
 import com.skillexchange.app.core.call.FakeCallEngine
 import com.skillexchange.app.core.network.ApiException
@@ -366,5 +368,108 @@ class CallViewModelTest {
         assertEquals(CallUiStatus.ENDED, viewModel.state.value.uiStatus)
         assertTrue(viewModel.state.value.errorMessage?.contains("kết thúc") == true)
         assertEquals(CallEngineStatus.IDLE, fakeEngine.status.value)
+    }
+
+    @Test
+    fun testAudioRouting_SelectDevice_UpdatesSelectedDevice() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        assertEquals(AppAudioDevice.EARPIECE, viewModel.state.value.selectedAudioDevice)
+        assertFalse(viewModel.state.value.isSpeakerOn)
+
+        viewModel.onIntent(CallIntent.SelectAudioDevice(AppAudioDevice.SPEAKER))
+        testScheduler.runCurrent()
+
+        assertEquals(AppAudioDevice.SPEAKER, viewModel.state.value.selectedAudioDevice)
+        assertTrue(viewModel.state.value.isSpeakerOn)
+
+        viewModel.onIntent(CallIntent.SelectAudioDevice(AppAudioDevice.EARPIECE))
+        testScheduler.runCurrent()
+
+        assertEquals(AppAudioDevice.EARPIECE, viewModel.state.value.selectedAudioDevice)
+        assertFalse(viewModel.state.value.isSpeakerOn)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testAudioRouting_BluetoothWithoutPermission_RequestsPermission() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        fakeEngine.simulateAvailableDevices(setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER, AppAudioDevice.BLUETOOTH))
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        var sideEffect: CallSideEffect? = null
+        val job = launch {
+            sideEffect = viewModel.effect.first()
+        }
+
+        viewModel.onIntent(CallIntent.SelectAudioDevice(AppAudioDevice.BLUETOOTH))
+        testScheduler.runCurrent()
+
+        assertEquals(CallSideEffect.RequestBluetoothPermission, sideEffect)
+        job.cancel()
+
+        var snackbarEffect: CallSideEffect? = null
+        val job2 = launch {
+            snackbarEffect = viewModel.effect.first()
+        }
+
+        // Người dùng từ chối cấp quyền Bluetooth
+        viewModel.onIntent(CallIntent.BluetoothPermissionResult(granted = false))
+        testScheduler.runCurrent()
+
+        assertTrue(snackbarEffect is CallSideEffect.ShowSnackbar)
+        assertTrue((snackbarEffect as CallSideEffect.ShowSnackbar).message.contains("bị từ chối"))
+        job2.cancel()
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testAudioRouting_BluetoothGranted_SwitchesToBluetooth() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        fakeEngine.simulateAvailableDevices(setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER, AppAudioDevice.BLUETOOTH))
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        viewModel.onIntent(CallIntent.BluetoothPermissionResult(granted = true))
+        testScheduler.runCurrent()
+
+        assertEquals(AppAudioDevice.BLUETOOTH, viewModel.state.value.selectedAudioDevice)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testAudioFocus_SystemCallInterruption_ShowsInterruptedState() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        assertFalse(viewModel.state.value.isInterruptedBySystemCall)
+        assertFalse(viewModel.state.value.isMutedByAudioFocus)
+
+        // Mô phỏng cuộc gọi SIM chen ngang
+        fakeEngine.simulateAudioFocusChange(AudioRoutingManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        testScheduler.runCurrent()
+
+        assertTrue(viewModel.state.value.isInterruptedBySystemCall)
+        assertTrue(viewModel.state.value.isMutedByAudioFocus)
+
+        // Mô phỏng cuộc gọi SIM kết thúc
+        fakeEngine.simulateAudioFocusChange(AudioRoutingManager.AUDIOFOCUS_GAIN)
+        testScheduler.runCurrent()
+
+        assertFalse(viewModel.state.value.isInterruptedBySystemCall)
+        assertFalse(viewModel.state.value.isMutedByAudioFocus)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
     }
 }

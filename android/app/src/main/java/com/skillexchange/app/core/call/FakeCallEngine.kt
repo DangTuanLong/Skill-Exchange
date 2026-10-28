@@ -17,17 +17,43 @@ class FakeCallEngine(
     private val _isSpeakerphoneOn = MutableStateFlow(false)
     override val isSpeakerphoneOn: StateFlow<Boolean> = _isSpeakerphoneOn.asStateFlow()
 
+    private var audioRoutingManager = AudioRoutingManager(isVideo = false)
+    private val _selectedAudioDevice = MutableStateFlow(AppAudioDevice.EARPIECE)
+    override val selectedAudioDevice: StateFlow<AppAudioDevice> = _selectedAudioDevice.asStateFlow()
+
+    private val _availableAudioDevices = MutableStateFlow<Set<AppAudioDevice>>(setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER))
+    override val availableAudioDevices: StateFlow<Set<AppAudioDevice>> = _availableAudioDevices.asStateFlow()
+
+    private val _isMutedByAudioFocus = MutableStateFlow(false)
+    override val isMutedByAudioFocus: StateFlow<Boolean> = _isMutedByAudioFocus.asStateFlow()
+
+    private val _isInterruptedBySystemCall = MutableStateFlow(false)
+    override val isInterruptedBySystemCall: StateFlow<Boolean> = _isInterruptedBySystemCall.asStateFlow()
+
     var lastConnectedUrl: String? = null
         private set
     var lastConnectedRoomName: String? = null
         private set
     var lastConnectedToken: String? = null
         private set
+    var lastConnectedIsVideo: Boolean = false
+        private set
 
-    override fun connect(url: String, roomName: String, token: String) {
+    var hasBluetoothPermission: Boolean = false
+        private set
+
+    override fun connect(url: String, roomName: String, token: String, isVideo: Boolean) {
         lastConnectedUrl = url
         lastConnectedRoomName = roomName
         lastConnectedToken = token
+        lastConnectedIsVideo = isVideo
+        audioRoutingManager = AudioRoutingManager(
+            isVideo = isVideo,
+            initialAvailableDevices = _availableAudioDevices.value,
+            initialHasBluetoothPermission = hasBluetoothPermission
+        )
+        _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
+        _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
         _status.value = CallEngineStatus.CONNECTING
         if (autoConnect) {
             _status.value = CallEngineStatus.CONNECTED
@@ -43,10 +69,41 @@ class FakeCallEngine(
     }
 
     override fun setSpeakerphoneEnabled(enabled: Boolean) {
-        _isSpeakerphoneOn.value = enabled
+        val target = if (enabled) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        selectAudioDevice(target)
+    }
+
+    override fun selectAudioDevice(device: AppAudioDevice): Boolean {
+        val success = audioRoutingManager.selectDevice(device)
+        if (success) {
+            _selectedAudioDevice.value = device
+            _isSpeakerphoneOn.value = (device == AppAudioDevice.SPEAKER)
+        }
+        return success
+    }
+
+    override fun setBluetoothPermission(granted: Boolean) {
+        hasBluetoothPermission = granted
+        audioRoutingManager.setBluetoothPermission(granted)
+        _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
+        _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
     }
 
     fun simulateStatus(newStatus: CallEngineStatus) {
         _status.value = newStatus
     }
+
+    fun simulateAvailableDevices(devices: Set<AppAudioDevice>) {
+        _availableAudioDevices.value = devices
+        audioRoutingManager.setAvailableDevices(devices)
+        _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
+        _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
+    }
+
+    fun simulateAudioFocusChange(focusChange: Int) {
+        audioRoutingManager.onAudioFocusChange(focusChange)
+        _isMutedByAudioFocus.value = audioRoutingManager.isMutedByAudioFocus.value
+        _isInterruptedBySystemCall.value = audioRoutingManager.isInterruptedBySystemCall.value
+    }
 }
+

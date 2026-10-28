@@ -1,7 +1,15 @@
 package com.skillexchange.app.presentation.call
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,22 +23,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import com.skillexchange.app.core.ui.theme.Brand500
-import com.skillexchange.app.domain.model.call.CallUiStatus
-import android.Manifest
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
+import coil3.compose.AsyncImage
+import com.skillexchange.app.core.call.AppAudioDevice
+import com.skillexchange.app.core.ui.theme.Brand500
+import com.skillexchange.app.domain.model.call.CallUiStatus
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +46,7 @@ fun CallScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+    var showAudioDeviceSheet by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -50,6 +54,12 @@ fun CallScreen(
         if (!isGranted) {
             showPermissionRationaleDialog = true
         }
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.onIntent(CallIntent.BluetoothPermissionResult(isGranted))
     }
 
     LaunchedEffect(Unit) {
@@ -67,6 +77,13 @@ fun CallScreen(
             when (effect) {
                 is CallSideEffect.ShowSnackbar -> {
                     snackbarHostState.showSnackbar(effect.message)
+                }
+                is CallSideEffect.RequestBluetoothPermission -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    } else {
+                        viewModel.onIntent(CallIntent.BluetoothPermissionResult(true))
+                    }
                 }
                 is CallSideEffect.NavigateBack -> {
                     onNavigateBack()
@@ -169,49 +186,83 @@ fun CallScreen(
                         Text(
                             text = state.uiStatus.label,
                             color = when (state.uiStatus) {
-                                CallUiStatus.BUSY, CallUiStatus.REJECTED, CallUiStatus.MISSED, CallUiStatus.ERROR -> Color(0xFFF87171)
-                                CallUiStatus.CONNECTED -> Color(0xFF34D399)
-                                else -> Color(0xFF38BDF8)
+                                CallUiStatus.RINGING, CallUiStatus.DIALING -> Color(0xFF38BDF8)
+                                CallUiStatus.BUSY, CallUiStatus.MISSED, CallUiStatus.REJECTED -> Color(0xFFF87171)
+                                CallUiStatus.ENDED -> Color(0xFF94A3B8)
+                                CallUiStatus.ERROR -> Color(0xFFEF4444)
+                                else -> Color.White
                             },
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
 
-                    if (!state.errorMessage.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = state.errorMessage ?: "",
-                            color = Color(0xFFFCA5A5),
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center
-                        )
+                    // Thông báo gián đoạn Audio Focus (Cuộc gọi hệ thống chen vào)
+                    if (state.isInterruptedBySystemCall) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = Color(0x33F59E0B),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PhoneCallback, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Cuộc gọi bị tạm dừng do có cuộc gọi hệ thống", color = Color(0xFFFEF3C7), fontSize = 12.sp)
+                            }
+                        }
+                    } else if (state.isMutedByAudioFocus) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = Color(0x33F59E0B),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.MicOff, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Micro tạm ngắt do ứng dụng khác chiếm âm thanh", color = Color(0xFFFEF3C7), fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
 
-                // 2. Avatar trung tâm (120dp)
+                // 2. Avatar lớn ở trung tâm kèm hiệu ứng sóng âm khi kết nối
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(160.dp)
+                    modifier = Modifier.size(200.dp)
                 ) {
-                    // Vòng viền phát sóng âm khi CONNECTED
                     if (state.uiStatus == CallUiStatus.CONNECTED) {
+                        // Vòng hào quang pulsing giả lập sóng âm
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .border(2.dp, Color(0x4438BDF8), CircleShape)
+                                .size(170.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x2238BDF8))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(150.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x3338BDF8))
                         )
                     }
 
-                    if (!state.partnerAvatar.isNullOrBlank()) {
+                    if (state.partnerAvatar != null) {
                         AsyncImage(
                             model = state.partnerAvatar,
-                            contentDescription = "Avatar ${state.partnerName}",
+                            contentDescription = state.partnerName,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(120.dp)
                                 .clip(CircleShape)
-                                .border(3.dp, Brand500, CircleShape),
-                            contentScale = ContentScale.Crop
+                                .border(3.dp, Color(0xFF38BDF8), CircleShape)
                         )
                     } else {
                         Box(
@@ -219,32 +270,39 @@ fun CallScreen(
                                 .size(120.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF334155))
-                                .border(3.dp, Brand500, CircleShape),
+                                .border(3.dp, Color(0xFF38BDF8), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Avatar mặc định",
-                                modifier = Modifier.size(64.dp),
-                                tint = Color(0xFF94A3B8)
+                            Text(
+                                text = state.partnerName.take(1).uppercase(),
+                                color = Color.White,
+                                fontSize = 44.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                // 3. Floating Call Controls Bar ở đáy
+                // 3. Thông báo lỗi hoặc nút Thử lại (nếu có)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    if (state.errorMessage != null && state.uiStatus != CallUiStatus.CONNECTED) {
+                        Text(
+                            text = state.errorMessage ?: "",
+                            color = Color(0xFFF87171),
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+
                     if (state.canRetry) {
                         Button(
                             onClick = { viewModel.onIntent(CallIntent.Retry) },
                             colors = ButtonDefaults.buttonColors(containerColor = Brand500),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -297,17 +355,31 @@ fun CallScreen(
                             }
                         }
 
-                        // Nút Bật/Tắt Loa ngoài
+                        // Nút Thiết bị âm thanh (Loa ngoài / Loa trong / Tai nghe / Bluetooth)
+                        val audioIcon = when (state.selectedAudioDevice) {
+                            AppAudioDevice.SPEAKER -> Icons.Default.VolumeUp
+                            AppAudioDevice.EARPIECE -> Icons.Default.PhoneInTalk
+                            AppAudioDevice.WIRED -> Icons.Default.Headphones
+                            AppAudioDevice.BLUETOOTH -> Icons.Default.BluetoothAudio
+                        }
+                        val isAudioHighlight = state.selectedAudioDevice == AppAudioDevice.SPEAKER || state.selectedAudioDevice == AppAudioDevice.BLUETOOTH
+
                         IconButton(
-                            onClick = { viewModel.onIntent(CallIntent.ToggleSpeaker) },
+                            onClick = {
+                                if (state.availableAudioDevices.size > 2) {
+                                    showAudioDeviceSheet = true
+                                } else {
+                                    viewModel.onIntent(CallIntent.ToggleSpeaker)
+                                }
+                            },
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(CircleShape)
-                                .background(if (state.isSpeakerOn) Color(0xFF38BDF8) else Color(0xFF334155))
+                                .background(if (isAudioHighlight) Color(0xFF38BDF8) else Color(0xFF334155))
                         ) {
                             Icon(
-                                imageVector = if (state.isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.PhoneInTalk,
-                                contentDescription = if (state.isSpeakerOn) "Tắt loa ngoài" else "Bật loa ngoài",
+                                imageVector = audioIcon,
+                                contentDescription = state.selectedAudioDevice.displayName,
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -338,6 +410,64 @@ fun CallScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showPermissionRationaleDialog = false }) {
+                    Text("Đóng")
+                }
+            }
+        )
+    }
+
+    if (showAudioDeviceSheet) {
+        AlertDialog(
+            onDismissRequest = { showAudioDeviceSheet = false },
+            title = { Text("Thiết bị âm thanh", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    state.availableAudioDevices.forEach { device ->
+                        val isSelected = device == state.selectedAudioDevice
+                        val icon = when (device) {
+                            AppAudioDevice.SPEAKER -> Icons.Default.VolumeUp
+                            AppAudioDevice.EARPIECE -> Icons.Default.PhoneInTalk
+                            AppAudioDevice.WIRED -> Icons.Default.Headphones
+                            AppAudioDevice.BLUETOOTH -> Icons.Default.BluetoothAudio
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.onIntent(CallIntent.SelectAudioDevice(device))
+                                    showAudioDeviceSheet = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (isSelected) Brand500 else Color(0xFF64748B),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = device.displayName,
+                                color = if (isSelected) Brand500 else Color.Unspecified,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Đang chọn",
+                                    tint = Brand500,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAudioDeviceSheet = false }) {
                     Text("Đóng")
                 }
             }

@@ -3,6 +3,7 @@ package com.skillexchange.app.presentation.call
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.skillexchange.app.core.call.AppAudioDevice
 import com.skillexchange.app.core.call.CallEngine
 import com.skillexchange.app.core.call.CallEngineStatus
 import com.skillexchange.app.core.network.ApiException
@@ -110,6 +111,42 @@ class CallViewModel(
                 _state.update { it.copy(isSpeakerOn = speakerOn) }
             }
         }
+
+        viewModelScope.launch {
+            callEngine.selectedAudioDevice.collect { device ->
+                _state.update {
+                    it.copy(
+                        selectedAudioDevice = device,
+                        isSpeakerOn = (device == AppAudioDevice.SPEAKER)
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            callEngine.availableAudioDevices.collect { devices ->
+                _state.update { it.copy(availableAudioDevices = devices) }
+            }
+        }
+
+        viewModelScope.launch {
+            callEngine.isMutedByAudioFocus.collect { muted ->
+                _state.update { it.copy(isMutedByAudioFocus = muted) }
+            }
+        }
+
+        viewModelScope.launch {
+            var wasInterrupted = false
+            callEngine.isInterruptedBySystemCall.collect { interrupted ->
+                _state.update { it.copy(isInterruptedBySystemCall = interrupted) }
+                if (interrupted && !wasInterrupted) {
+                    _effect.send(CallSideEffect.ShowSnackbar("Cuộc gọi bị tạm dừng do cuộc gọi hệ thống"))
+                } else if (!interrupted && wasInterrupted) {
+                    _effect.send(CallSideEffect.ShowSnackbar("Đã khôi phục âm thanh cuộc gọi"))
+                }
+                wasInterrupted = interrupted
+            }
+        }
     }
 
     fun onIntent(intent: CallIntent) {
@@ -117,8 +154,34 @@ class CallViewModel(
             is CallIntent.InitCall -> loadExchangeAndStartCall(intent.exchangeId, intent.isVideo)
             is CallIntent.ToggleMute -> toggleMute()
             is CallIntent.ToggleSpeaker -> toggleSpeaker()
+            is CallIntent.SelectAudioDevice -> selectAudioDevice(intent.device)
+            is CallIntent.BluetoothPermissionResult -> handleBluetoothPermissionResult(intent.granted)
             is CallIntent.EndCall -> endCall()
             is CallIntent.Retry -> retryCall()
+        }
+    }
+
+    private fun selectAudioDevice(device: AppAudioDevice) {
+        if (device == AppAudioDevice.BLUETOOTH) {
+            val success = callEngine.selectAudioDevice(device)
+            if (!success) {
+                viewModelScope.launch {
+                    _effect.send(CallSideEffect.RequestBluetoothPermission)
+                }
+            }
+        } else {
+            callEngine.selectAudioDevice(device)
+        }
+    }
+
+    private fun handleBluetoothPermissionResult(granted: Boolean) {
+        callEngine.setBluetoothPermission(granted)
+        if (granted) {
+            callEngine.selectAudioDevice(AppAudioDevice.BLUETOOTH)
+        } else {
+            viewModelScope.launch {
+                _effect.send(CallSideEffect.ShowSnackbar("Quyền Bluetooth bị từ chối. Tiếp tục cuộc gọi bằng loa."))
+            }
         }
     }
 
@@ -178,7 +241,7 @@ class CallViewModel(
                     // Bắt đầu timeout 30s đổ chuông nếu đối tác không nhấc máy
                     startRingingTimeout()
                     // Kết nối tới CallEngine
-                    callEngine.connect(token.url, token.roomName, token.token)
+                    callEngine.connect(token.url, token.roomName, token.token, isVideo)
                 },
                 onFailure = { error ->
                     handleCallError(error)
@@ -230,7 +293,7 @@ class CallViewModel(
                         )
                     }
                     // Kết nối tới CallEngine
-                    callEngine.connect(token.url, token.roomName, token.token)
+                    callEngine.connect(token.url, token.roomName, token.token, isVideo)
                     // Báo cho server biết receiver đã kết nối
                     callRepository.notifyConnected(sessionId)
                 },
@@ -319,8 +382,16 @@ class CallViewModel(
     }
 
     private fun toggleSpeaker() {
-        val newSpeaker = !_state.value.isSpeakerOn
-        callEngine.setSpeakerphoneEnabled(newSpeaker)
+        val currentDevice = _state.value.selectedAudioDevice
+        val available = _state.value.availableAudioDevices
+        val target = if (currentDevice == AppAudioDevice.SPEAKER) {
+            if (available.contains(AppAudioDevice.EARPIECE)) AppAudioDevice.EARPIECE
+            else if (available.contains(AppAudioDevice.WIRED)) AppAudioDevice.WIRED
+            else AppAudioDevice.SPEAKER
+        } else {
+            AppAudioDevice.SPEAKER
+        }
+        selectAudioDevice(target)
     }
 
     private fun endCall() {
