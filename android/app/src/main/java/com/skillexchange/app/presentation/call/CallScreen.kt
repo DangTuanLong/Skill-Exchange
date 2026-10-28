@@ -22,6 +22,15 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.domain.model.call.CallUiStatus
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,6 +41,26 @@ fun CallScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            showPermissionRationaleDialog = true
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val hasRecordAudio = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PermissionChecker.PERMISSION_GRANTED
+        if (!hasRecordAudio) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
@@ -287,5 +316,31 @@ fun CallScreen(
                 }
             }
         }
+    }
+
+    if (showPermissionRationaleDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationaleDialog = false },
+            title = { Text("Quyền sử dụng Microphone") },
+            text = { Text("Ứng dụng cần quyền Microphone để đàm thoại trong cuộc gọi. Vui lòng cấp quyền trong Cài đặt của thiết bị.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPermissionRationaleDialog = false
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Text("Mở Cài đặt")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationaleDialog = false }) {
+                    Text("Đóng")
+                }
+            }
+        )
     }
 }

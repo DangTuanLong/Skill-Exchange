@@ -43,6 +43,9 @@ android {
             enableUnitTestCoverage = true
             val debugUrl = overrideBaseUrl?.takeIf { it.isNotBlank() } ?: "http://10.0.2.2:8080"
             buildConfigField("String", "BASE_URL", "\"$debugUrl\"")
+            ndk {
+                abiFilters.addAll(listOf("x86_64", "arm64-v8a"))
+            }
         }
         release {
             optimization {
@@ -128,6 +131,9 @@ dependencies {
 
     // ML Kit
     implementation(libs.mlkit.text.recognition)
+
+    // LiveKit WebRTC SFU (DEC-026, TASK-075)
+    implementation(libs.livekit.android)
 
     // Testing
     testImplementation(libs.junit)

@@ -43,6 +43,9 @@ mlkitTextRecognition = "16.0.1"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 
+# LiveKit WebRTC SFU (DEC-026, TASK-075)
+livekit = "2.29.0"
+
 [libraries]
 # ML Kit Text Recognition (Bundled)
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
@@ -105,6 +108,9 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+
+# LiveKit WebRTC SFU (DEC-026, TASK-075)
+livekit-android = { group = "io.livekit", name = "livekit-android", version.ref = "livekit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

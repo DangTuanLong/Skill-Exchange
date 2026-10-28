@@ -61,7 +61,8 @@ fun SkillExchangeNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Onboarding.route,
     deepLinkRoute: String? = null,
-    tokenManager: TokenManager = koinInject()
+    tokenManager: TokenManager = koinInject(),
+    inAppCallManager: com.skillexchange.app.core.call.InAppCallManager = koinInject()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -288,12 +289,20 @@ fun SkillExchangeNavHost(
             )
         }
 
-        // ── In-app Calling (DEC-026, TASK-074) ────────────────────────
+        // ── In-app Calling (DEC-026, TASK-074, TASK-075) ─────────────
         composable(
             route = Screen.Call.route,
             arguments = listOf(
                 navArgument("exchangeId") { type = NavType.StringType },
                 navArgument("isVideo") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
+                navArgument("sessionId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("isIncoming") {
                     type = NavType.BoolType
                     defaultValue = false
                 }
@@ -456,5 +465,20 @@ fun SkillExchangeNavHost(
                 }
             }
         }
+
+        // Hộp thoại nhận cuộc gọi đến khi app đang mở (DEC-026, TASK-075)
+        com.skillexchange.app.presentation.call.IncomingCallHost(
+            inAppCallManager = inAppCallManager,
+            onCallAccepted = { data ->
+                navController.navigate(
+                    Screen.Call.createRoute(
+                        exchangeId = data.exchangeId,
+                        isVideo = (data.callType == "VIDEO"),
+                        sessionId = data.sessionId,
+                        isIncoming = true
+                    )
+                )
+            }
+        )
     }
 }

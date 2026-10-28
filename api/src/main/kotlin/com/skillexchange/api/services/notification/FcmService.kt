@@ -31,10 +31,16 @@ data class FcmMessagePayload(
 )
 
 @Serializable
+data class FcmAndroidConfig(
+    val priority: String = "HIGH"
+)
+
+@Serializable
 data class FcmMessage(
     val token: String,
-    val notification: FcmNotification,
-    val data: Map<String, String> = emptyMap()
+    val notification: FcmNotification? = null,
+    val data: Map<String, String> = emptyMap(),
+    val android: FcmAndroidConfig? = null
 )
 
 @Serializable
@@ -143,6 +149,36 @@ open class FcmService(
     }
 
     /**
+     * Gửi FCM data-only push bất đồng bộ (không có notification block, ưu tiên HIGH cho cuộc gọi).
+     */
+    open fun sendDataPushAsync(
+        targetToken: String,
+        data: Map<String, String>,
+        priority: String = "HIGH"
+    ) {
+        coroutineScope.launch {
+            sendDataPushDirect(targetToken, data, priority)
+        }
+    }
+
+    /**
+     * Gửi FCM data-only trực tiếp qua FCM HTTP v1 API.
+     */
+    open suspend fun sendDataPushDirect(
+        targetToken: String,
+        data: Map<String, String>,
+        priority: String = "HIGH"
+    ): Boolean {
+        val message = FcmMessage(
+            token = targetToken,
+            notification = null,
+            data = data,
+            android = FcmAndroidConfig(priority = priority)
+        )
+        return sendMessageDirect(message)
+    }
+
+    /**
      * Gửi trực tiếp qua FCM HTTP v1 API.
      */
     open suspend fun sendPushDirect(
@@ -151,6 +187,15 @@ open class FcmService(
         body: String,
         data: Map<String, String> = emptyMap()
     ): Boolean {
+        val message = FcmMessage(
+            token = targetToken,
+            notification = FcmNotification(title = title, body = body),
+            data = data
+        )
+        return sendMessageDirect(message)
+    }
+
+    private suspend fun sendMessageDirect(message: FcmMessage): Boolean {
         try {
             val projectId = credentialsProvider.getProjectId()
             if (projectId.isNullOrBlank()) {
@@ -165,13 +210,7 @@ open class FcmService(
             }
 
             val url = "$fcmBaseUrl/v1/projects/$projectId/messages:send"
-            val payload = FcmMessagePayload(
-                message = FcmMessage(
-                    token = targetToken,
-                    notification = FcmNotification(title = title, body = body),
-                    data = data
-                )
-            )
+            val payload = FcmMessagePayload(message = message)
 
             val response = httpClient.post(url) {
                 header(HttpHeaders.Authorization, "Bearer $accessToken")
@@ -191,13 +230,13 @@ open class FcmService(
                 responseBody.contains("NOT_FOUND")
             ) {
                 logger.warn("FCM token không còn hợp lệ hoặc chưa đăng ký (UNREGISTERED/404). Tiến hành xóa khỏi thiết bị.")
-                deviceService.deleteTokenDirect(targetToken)
+                deviceService.deleteTokenDirect(message.token)
             } else {
                 logger.error("Gửi FCM thất bại với mã HTTP ${response.status.value}")
             }
             return false
         } catch (e: Exception) {
-            logger.error("Ngoại lệ khi gửi FCM notification: ${e.message}")
+            logger.error("Ngoại lệ khi gửi FCM message: ${e.message}")
             return false
         }
     }

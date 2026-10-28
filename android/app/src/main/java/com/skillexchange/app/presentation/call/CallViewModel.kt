@@ -35,10 +35,15 @@ class CallViewModel(
     private val isVideoArg: Boolean = savedStateHandle.get<Boolean>("isVideo")
         ?: savedStateHandle.get<String>("isVideo")?.toBooleanStrictOrNull()
         ?: false
+    private val sessionIdArg: String = savedStateHandle["sessionId"] ?: ""
+    private val isIncomingArg: Boolean = savedStateHandle.get<Boolean>("isIncoming")
+        ?: savedStateHandle.get<String>("isIncoming")?.toBooleanStrictOrNull()
+        ?: false
 
     private val _state = MutableStateFlow(
         CallState(
             exchangeId = exchangeIdArg,
+            sessionId = sessionIdArg.ifBlank { null },
             isVideo = isVideoArg
         )
     )
@@ -52,7 +57,9 @@ class CallViewModel(
 
     init {
         observeEngine()
-        if (exchangeIdArg.isNotBlank()) {
+        if (isIncomingArg && sessionIdArg.isNotBlank()) {
+            loadExchangeAndJoinCall(exchangeIdArg, sessionIdArg, isVideoArg)
+        } else if (exchangeIdArg.isNotBlank()) {
             loadExchangeAndStartCall(exchangeIdArg, isVideoArg)
         }
     }
@@ -180,6 +187,67 @@ class CallViewModel(
         }
     }
 
+    private fun loadExchangeAndJoinCall(exchangeId: String, sessionId: String, isVideo: Boolean) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    exchangeId = exchangeId,
+                    sessionId = sessionId,
+                    isVideo = isVideo,
+                    uiStatus = CallUiStatus.RINGING,
+                    errorMessage = null,
+                    canRetry = false
+                )
+            }
+
+            // 1. Tải thông tin exchange để hiển thị tên đối tác
+            val currentUserId = tokenManager.getUserId() ?: ""
+            if (exchangeId.isNotBlank()) {
+                val exchangeResult = exchangeRepository.getExchangeRequest(exchangeId)
+                val exchange = exchangeResult.getOrNull()
+                if (exchange != null) {
+                    val partnerName = exchange.otherUserName(currentUserId)
+                    val partnerAvatar = exchange.otherUserAvatar(currentUserId)
+                    val skillName = exchange.teachSkillName(currentUserId)
+                    _state.update {
+                        it.copy(
+                            partnerName = partnerName,
+                            partnerAvatar = partnerAvatar,
+                            skillName = skillName
+                        )
+                    }
+                }
+            }
+
+            // 2. Lấy token phòng cuộc gọi từ server
+            val tokenResult = callRepository.joinCall(sessionId)
+            tokenResult.fold(
+                onSuccess = { token ->
+                    _state.update {
+                        it.copy(
+                            sessionId = token.sessionId,
+                            uiStatus = CallUiStatus.RINGING
+                        )
+                    }
+                    // Kết nối tới CallEngine
+                    callEngine.connect(token.url, token.roomName, token.token)
+                    // Báo cho server biết receiver đã kết nối
+                    callRepository.notifyConnected(sessionId)
+                },
+                onFailure = { error ->
+                    _state.update {
+                        it.copy(
+                            uiStatus = CallUiStatus.ENDED,
+                            errorMessage = "Cuộc gọi đã kết thúc hoặc không thể tham gia.",
+                            canRetry = false
+                        )
+                    }
+                    _effect.send(CallSideEffect.ShowSnackbar("Cuộc gọi đã kết thúc"))
+                }
+            )
+        }
+    }
+
     private fun handleCallError(error: Throwable) {
         val message = when (error) {
             is ApiException -> {
@@ -278,7 +346,11 @@ class CallViewModel(
     }
 
     private fun retryCall() {
-        loadExchangeAndStartCall(_state.value.exchangeId, _state.value.isVideo)
+        if (isIncomingArg && sessionIdArg.isNotBlank()) {
+            loadExchangeAndJoinCall(_state.value.exchangeId, sessionIdArg, _state.value.isVideo)
+        } else {
+            loadExchangeAndStartCall(_state.value.exchangeId, _state.value.isVideo)
+        }
     }
 
     override fun onCleared() {

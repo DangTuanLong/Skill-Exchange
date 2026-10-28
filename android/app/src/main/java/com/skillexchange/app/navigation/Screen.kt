@@ -52,8 +52,13 @@ sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object SkillGraph : Screen("skill_graph")
 
-    // In-app Calling (DEC-026, TASK-074)
-    data object Call : Screen("call/{exchangeId}?isVideo={isVideo}") {
-        fun createRoute(exchangeId: String, isVideo: Boolean = false) = "call/$exchangeId?isVideo=$isVideo"
+    // In-app Calling (DEC-026, TASK-074, TASK-075)
+    data object Call : Screen("call/{exchangeId}?isVideo={isVideo}&sessionId={sessionId}&isIncoming={isIncoming}") {
+        fun createRoute(
+            exchangeId: String,
+            isVideo: Boolean = false,
+            sessionId: String? = null,
+            isIncoming: Boolean = false
+        ) = "call/$exchangeId?isVideo=$isVideo&sessionId=${sessionId ?: ""}&isIncoming=$isIncoming"
     }
 }

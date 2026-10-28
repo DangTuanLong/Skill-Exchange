@@ -21,8 +21,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -78,11 +78,35 @@ class CallViewModelTest {
         )
     )
 
+    private var joinCallResult: Result<CallToken> = Result.success(
+        CallToken(
+            url = "wss://skillexchange.livekit.cloud",
+            roomName = "call_test_room",
+            token = "dummy_token",
+            callType = CallType.VOICE,
+            sessionId = "session_incoming_456"
+        )
+    )
+
     private var endCallInvoked = false
     private val mockCallRepo = object : ICallRepository {
         override suspend fun initiateCall(exchangeId: String, callType: CallType): Result<CallToken> = initiateCallResult
-        override suspend fun joinCall(sessionId: String): Result<CallToken> = error("Not used")
-        override suspend fun notifyConnected(sessionId: String): Result<CallSession> = error("Not used")
+        override suspend fun joinCall(sessionId: String): Result<CallToken> = joinCallResult
+        override suspend fun notifyConnected(sessionId: String): Result<CallSession> = Result.success(
+            CallSession(
+                id = sessionId,
+                exchangeId = "ex_123",
+                callerId = "user_caller",
+                receiverId = "user_receiver",
+                roomName = "call_test_room",
+                callType = CallType.VOICE,
+                status = "CONNECTED",
+                startedAt = "2026-10-28T00:00:00Z",
+                connectedAt = "2026-10-28T00:00:00Z",
+                endedAt = null,
+                durationSeconds = 0
+            )
+        )
         override suspend fun rejectCall(sessionId: String): Result<CallSession> = error("Not used")
         override suspend fun endCall(sessionId: String): Result<Int> {
             endCallInvoked = true
@@ -104,6 +128,15 @@ class CallViewModelTest {
                 sessionId = "session_123"
             )
         )
+        joinCallResult = Result.success(
+            CallToken(
+                url = "wss://skillexchange.livekit.cloud",
+                roomName = "call_test_room",
+                token = "dummy_token",
+                callType = CallType.VOICE,
+                sessionId = "session_incoming_456"
+            )
+        )
     }
 
     @After
@@ -114,9 +147,14 @@ class CallViewModelTest {
     private fun createViewModel(
         exchangeId: String = "ex_123",
         isVideo: Boolean = false,
+        sessionId: String? = null,
+        isIncoming: Boolean = false,
         fakeEngine: FakeCallEngine = FakeCallEngine(autoConnect = true)
     ): CallViewModel {
-        val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to exchangeId, "isVideo" to isVideo))
+        val args = mutableMapOf<String, Any>("exchangeId" to exchangeId, "isVideo" to isVideo)
+        sessionId?.let { args["sessionId"] = it }
+        if (isIncoming) args["isIncoming"] = true
+        val savedStateHandle = SavedStateHandle(args)
         return CallViewModel(
             savedStateHandle = savedStateHandle,
             callRepository = mockCallRepo,
@@ -131,7 +169,7 @@ class CallViewModelTest {
         val fakeEngine = FakeCallEngine(autoConnect = true)
         val viewModel = createViewModel(fakeEngine = fakeEngine)
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals("session_123", state.sessionId)
@@ -141,7 +179,10 @@ class CallViewModelTest {
 
         // Advance 3 seconds -> duration increases
         advanceTimeBy(3100L)
+        testScheduler.runCurrent()
         assertTrue(viewModel.state.value.durationSeconds >= 3)
+
+        viewModel.onIntent(CallIntent.EndCall)
     }
 
     @Test
@@ -149,7 +190,7 @@ class CallViewModelTest {
         sampleExchange = sampleExchange.copy(status = ExchangeStatus.PENDING)
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals(CallUiStatus.ERROR, state.uiStatus)
@@ -164,7 +205,7 @@ class CallViewModelTest {
         )
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals(CallUiStatus.BUSY, state.uiStatus)
@@ -178,7 +219,7 @@ class CallViewModelTest {
         )
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals(CallUiStatus.ERROR, state.uiStatus)
@@ -193,7 +234,7 @@ class CallViewModelTest {
         )
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals(CallUiStatus.ERROR, state.uiStatus)
@@ -205,7 +246,7 @@ class CallViewModelTest {
         initiateCallResult = Result.failure(IOException("Không thể kết nối đến máy chủ"))
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val state = viewModel.state.value
         assertEquals(CallUiStatus.ERROR, state.uiStatus)
@@ -216,41 +257,45 @@ class CallViewModelTest {
     fun testToggleMute_TogglesEngineState() = runTest(testDispatcher) {
         val fakeEngine = FakeCallEngine()
         val viewModel = createViewModel(fakeEngine = fakeEngine)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         assertFalse(viewModel.state.value.isMuted)
 
         viewModel.onIntent(CallIntent.ToggleMute)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
         assertTrue(viewModel.state.value.isMuted)
 
         viewModel.onIntent(CallIntent.ToggleMute)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
         assertFalse(viewModel.state.value.isMuted)
+
+        viewModel.onIntent(CallIntent.EndCall)
     }
 
     @Test
     fun testToggleSpeaker_TogglesEngineState() = runTest(testDispatcher) {
         val fakeEngine = FakeCallEngine()
         val viewModel = createViewModel(fakeEngine = fakeEngine)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         assertFalse(viewModel.state.value.isSpeakerOn)
 
         viewModel.onIntent(CallIntent.ToggleSpeaker)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
         assertTrue(viewModel.state.value.isSpeakerOn)
 
         viewModel.onIntent(CallIntent.ToggleSpeaker)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
         assertFalse(viewModel.state.value.isSpeakerOn)
+
+        viewModel.onIntent(CallIntent.EndCall)
     }
 
     @Test
     fun testEndCall_DisconnectsEngineAndNavigatesBack() = runTest(testDispatcher) {
         val fakeEngine = FakeCallEngine()
         val viewModel = createViewModel(fakeEngine = fakeEngine)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         var sideEffect: CallSideEffect? = null
         val job = launch {
@@ -258,7 +303,7 @@ class CallViewModelTest {
         }
 
         viewModel.onIntent(CallIntent.EndCall)
-        advanceUntilIdle()
+        testScheduler.runCurrent()
 
         assertTrue(endCallInvoked)
         assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
@@ -272,14 +317,54 @@ class CallViewModelTest {
         val fakeEngine = FakeCallEngine(autoConnect = false)
         val viewModel = createViewModel(fakeEngine = fakeEngine)
 
-        advanceTimeBy(100L)
+        testScheduler.runCurrent()
         assertEquals(CallUiStatus.RINGING, viewModel.state.value.uiStatus)
 
         // Advance 31 seconds -> triggers 30s timeout
         advanceTimeBy(31_000L)
+        testScheduler.runCurrent()
 
         assertEquals(CallUiStatus.MISSED, viewModel.state.value.uiStatus)
         assertTrue(viewModel.state.value.errorMessage?.contains("Quá 30 giây") == true)
         assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
+    }
+
+    @Test
+    fun testIncomingCall_Success_JoinsAndConnectsEngine() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(
+            exchangeId = "ex_123",
+            sessionId = "session_incoming_456",
+            isIncoming = true,
+            fakeEngine = fakeEngine
+        )
+
+        testScheduler.runCurrent()
+
+        assertEquals("session_incoming_456", viewModel.state.value.sessionId)
+        assertEquals(CallUiStatus.CONNECTED, viewModel.state.value.uiStatus)
+        assertEquals(CallEngineStatus.CONNECTED, fakeEngine.status.value)
+
+        // Dọn dẹp duration timer
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testIncomingCall_CallAlreadyEnded_ShowsErrorWithoutCrash() = runTest(testDispatcher) {
+        joinCallResult = Result.failure(ApiException(status = 409, code = "CONFLICT", message = "Cuộc gọi đã kết thúc"))
+        val fakeEngine = FakeCallEngine(autoConnect = false)
+        val viewModel = createViewModel(
+            exchangeId = "ex_123",
+            sessionId = "session_incoming_456",
+            isIncoming = true,
+            fakeEngine = fakeEngine
+        )
+
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.ENDED, viewModel.state.value.uiStatus)
+        assertTrue(viewModel.state.value.errorMessage?.contains("kết thúc") == true)
+        assertEquals(CallEngineStatus.IDLE, fakeEngine.status.value)
     }
 }

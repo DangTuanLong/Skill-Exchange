@@ -150,8 +150,9 @@ val appModule = module {
     }
     viewModelOf(::DashboardViewModel)
 
-    // ── In-app Calling (DEC-026, TASK-074) ────────────────────────────
-    single<com.skillexchange.app.core.call.CallEngine> { com.skillexchange.app.core.call.FakeCallEngine() }
+    // ── In-app Calling (DEC-026, TASK-074, TASK-075) ─────────────────
+    single<com.skillexchange.app.core.call.CallEngine> { com.skillexchange.app.core.call.LiveKitCallEngine(androidContext()) }
+    single { com.skillexchange.app.core.call.InAppCallManager(callRepository = get()) }
     single { com.skillexchange.app.data.remote.call.CallRemoteDataSource(get()) }
     single<com.skillexchange.app.domain.repository.ICallRepository> {
         com.skillexchange.app.data.repository.CallRepositoryImpl(get())

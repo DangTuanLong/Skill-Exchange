@@ -26,7 +26,9 @@ open class CallRateLimitException(message: String, val errorCode: String = Error
 
 open class CallService(
     private val liveKitTokenService: LiveKitTokenService,
-    private val firestoreChatService: IFirestoreChatService? = null
+    private val firestoreChatService: IFirestoreChatService? = null,
+    private val deviceService: com.skillexchange.api.services.device.DeviceService? = null,
+    private val fcmService: com.skillexchange.api.services.notification.FcmService? = null
 ) {
     private val logger = LoggerFactory.getLogger(CallService::class.java)
 
@@ -68,7 +70,7 @@ open class CallService(
 
         checkRateLimit(callerId)
 
-        return transaction {
+        val (result, targetReceiverId, callerName) = transaction {
             // 1. Kiểm tra exchange tồn tại & quyền thành viên
             val exchangeRow = ExchangeRequestsTable.selectAll()
                 .where { ExchangeRequestsTable.id eq exchangeUuid }
@@ -182,14 +184,37 @@ open class CallService(
 
             val token = liveKitTokenService.createJoinToken(callerId, callerName, roomName)
 
-            CallTokenResponse(
+            val resp = CallTokenResponse(
                 url = liveKitTokenService.getServerUrl(),
                 roomName = roomName,
                 token = token,
                 callType = callTypeEnum.name,
                 sessionId = newSessionId.toString()
             )
+            Triple(resp, targetReceiverId, callerName)
         }
+
+        // Gửi FCM High-Priority Data Push báo cuộc gọi đến (không chứa token hay dữ liệu nhạy cảm)
+        try {
+            val tokens = deviceService?.getTokensForUser(targetReceiverId).orEmpty()
+            if (tokens.isNotEmpty() && fcmService != null) {
+                val callData = mapOf(
+                    "type" to "INCOMING_CALL",
+                    "sessionId" to result.sessionId,
+                    "exchangeId" to req.exchangeId,
+                    "callerId" to callerId,
+                    "callerName" to callerName,
+                    "callType" to result.callType
+                )
+                tokens.forEach { token ->
+                    fcmService.sendDataPushAsync(token, callData, priority = "HIGH")
+                }
+            }
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi gửi FCM incoming call push cho receiver $targetReceiverId: ${e.message}")
+        }
+
+        return result
     }
 
     /**
@@ -332,11 +357,18 @@ open class CallService(
         return dto
     }
 
+    private data class EndCallInternalResult(
+        val dto: CallSessionDto,
+        val exchangeId: String,
+        val needRecordHistory: Boolean,
+        val wasUnconnected: Boolean
+    )
+
     /**
      * Kết thúc cuộc gọi (Caller hoặc Receiver cúp máy) - Idempotent
      */
     open fun endCall(userId: String, sessionId: String): CallSessionDto {
-        val (dto, exchangeId, needRecordHistory) = transaction {
+        val result = transaction {
             val sessionUuid = try { UUID.fromString(sessionId) } catch (_: Exception) {
                 throw ValidationException("sessionId không hợp lệ")
             }
@@ -353,8 +385,9 @@ open class CallService(
             }
 
             val currentStatus = row[CallSessionsTable.status]
+            val wasUnconnected = currentStatus in listOf(CallStatus.DIALING.name, CallStatus.RINGING.name)
             if (currentStatus in CallStatus.terminalStatuses()) {
-                return@transaction Triple(row.toDto(), row[CallSessionsTable.exchangeId].toString(), false)
+                return@transaction EndCallInternalResult(row.toDto(), row[CallSessionsTable.exchangeId].toString(), false, false)
             }
 
             val now = LocalDateTime.now()
@@ -373,25 +406,44 @@ open class CallService(
             }
 
             val updatedRow = CallSessionsTable.selectAll().where { CallSessionsTable.id eq sessionUuid }.first()
-            Triple(updatedRow.toDto(), updatedRow[CallSessionsTable.exchangeId].toString(), true)
+            EndCallInternalResult(updatedRow.toDto(), updatedRow[CallSessionsTable.exchangeId].toString(), true, wasUnconnected)
         }
 
-        if (needRecordHistory) {
+        if (result.needRecordHistory) {
             try {
                 firestoreChatService?.recordSystemCallMessageAsync(
-                    exchangeId = exchangeId,
-                    callType = dto.callType,
+                    exchangeId = result.exchangeId,
+                    callType = result.dto.callType,
                     callStatus = CallStatus.ENDED.name,
-                    durationSeconds = dto.durationSeconds,
-                    callerId = dto.callerId,
-                    receiverId = dto.receiverId
+                    durationSeconds = result.dto.durationSeconds,
+                    callerId = result.dto.callerId,
+                    receiverId = result.dto.receiverId
                 )
             } catch (e: Throwable) {
                 logger.error("Lỗi khi ghi nhận SYSTEM_CALL cho cuộc gọi kết thúc $sessionId: ${e.message}")
             }
         }
 
-        return dto
+        // Nếu cuộc gọi bị hủy trước khi kết nối (chưa nhấc máy), gửi FCM CALL_CANCELLED cho đối phương
+        if (result.wasUnconnected) {
+            try {
+                val partnerId = if (userId == result.dto.callerId) result.dto.receiverId else result.dto.callerId
+                val tokens = deviceService?.getTokensForUser(partnerId).orEmpty()
+                if (tokens.isNotEmpty() && fcmService != null) {
+                    val cancelData = mapOf(
+                        "type" to "CALL_CANCELLED",
+                        "sessionId" to sessionId
+                    )
+                    tokens.forEach { token ->
+                        fcmService.sendDataPushAsync(token, cancelData, priority = "HIGH")
+                    }
+                }
+            } catch (e: Throwable) {
+                logger.error("Lỗi khi gửi FCM CALL_CANCELLED cho đối tác $sessionId: ${e.message}")
+            }
+        }
+
+        return result.dto
     }
 
     /**

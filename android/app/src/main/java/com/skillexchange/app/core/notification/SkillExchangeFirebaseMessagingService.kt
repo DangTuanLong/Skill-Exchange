@@ -27,6 +27,7 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
 
     private val deviceRepository: IDeviceRepository by inject()
     private val tokenManager: TokenManager by inject()
+    private val inAppCallManager: com.skillexchange.app.core.call.InAppCallManager by inject()
 
     companion object {
         const val CHANNEL_ID = "exchange_requests"
@@ -61,6 +62,32 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
         val entityId = remoteMessage.data["entityId"]
 
         Log.d(tag, "FCM onMessageReceived: title=$title, type=$type, entityId=$entityId")
+
+        // Xử lý báo hiệu cuộc gọi đến khi app đang mở (TASK-075)
+        if (type == "INCOMING_CALL") {
+            val sessionId = remoteMessage.data["sessionId"]
+            val callerId = remoteMessage.data["callerId"] ?: ""
+            val callerName = remoteMessage.data["callerName"] ?: "Đối tác"
+            val callType = remoteMessage.data["callType"] ?: "VOICE"
+            val exchangeId = remoteMessage.data["exchangeId"] ?: ""
+
+            if (!sessionId.isNullOrBlank() && AppLifecycleTracker.isForeground) {
+                inAppCallManager.onIncomingCallPushReceived(
+                    sessionId = sessionId,
+                    callerId = callerId,
+                    callerName = callerName,
+                    callType = callType,
+                    exchangeId = exchangeId
+                )
+                return
+            }
+        } else if (type == "CALL_CANCELLED") {
+            val sessionId = remoteMessage.data["sessionId"]
+            if (!sessionId.isNullOrBlank() && AppLifecycleTracker.isForeground) {
+                inAppCallManager.onCallCancelledPushReceived(sessionId)
+                return
+            }
+        }
 
         // Nếu app đang mở ở foreground -> phát sự kiện hiển thị in-app banner
         if (AppLifecycleTracker.isForeground) {
