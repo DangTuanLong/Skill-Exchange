@@ -81,7 +81,15 @@ class MainActivity : ComponentActivity() {
     private fun parseDeepLink(intent: Intent?): String? {
         val type = intent?.getStringExtra("type")
         val entityId = intent?.getStringExtra("entityId")
-        return DeepLinkParser.parse(type, entityId, tokenManager.isLoggedIn())
+        val sessionId = intent?.getStringExtra("sessionId")
+        val isVideo = intent?.getBooleanExtra("isVideo", false) ?: false
+        return DeepLinkParser.parse(
+            type = type,
+            entityId = entityId,
+            isLoggedIn = tokenManager.isLoggedIn(),
+            sessionId = sessionId,
+            isVideo = isVideo
+        )
     }
 
     private fun askNotificationPermission() {

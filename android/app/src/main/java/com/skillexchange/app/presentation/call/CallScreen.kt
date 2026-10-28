@@ -72,6 +72,12 @@ fun CallScreen(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            com.skillexchange.app.core.service.CallForegroundService.stopService(context)
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
             when (effect) {
@@ -86,6 +92,7 @@ fun CallScreen(
                     }
                 }
                 is CallSideEffect.NavigateBack -> {
+                    com.skillexchange.app.core.service.CallForegroundService.stopService(context)
                     onNavigateBack()
                 }
             }

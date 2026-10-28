@@ -9,7 +9,13 @@ object DeepLinkParser {
      * Bắt buộc kiểm tra đăng nhập (isLoggedIn) trước khi điều hướng.
      * Payload deep link chỉ gồm type và entityId.
      */
-    fun parse(type: String?, entityId: String?, isLoggedIn: Boolean): String? {
+    fun parse(
+        type: String?,
+        entityId: String?,
+        isLoggedIn: Boolean,
+        sessionId: String? = null,
+        isVideo: Boolean = false
+    ): String? {
         if (!isLoggedIn) return null
         if (entityId.isNullOrBlank()) return null
 
@@ -20,6 +26,12 @@ object DeepLinkParser {
             "REQUEST_REJECTED",
             "APPOINTMENT_REMINDER" -> Screen.BookingDetail.createRoute(entityId)
             "RATING_REMINDER" -> Screen.Rating.createRoute(entityId)
+            "CALL" -> Screen.Call.createRoute(
+                exchangeId = entityId,
+                isVideo = isVideo,
+                sessionId = sessionId,
+                isIncoming = true
+            )
             else -> null
         }
     }

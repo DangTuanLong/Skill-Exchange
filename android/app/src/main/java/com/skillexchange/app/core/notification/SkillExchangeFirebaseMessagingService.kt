@@ -14,6 +14,7 @@ import com.skillexchange.app.MainActivity
 import com.skillexchange.app.R
 import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.domain.repository.IDeviceRepository
+import com.skillexchange.app.presentation.call.IncomingCallActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,8 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
     private val deviceRepository: IDeviceRepository by inject()
     private val tokenManager: TokenManager by inject()
     private val inAppCallManager: com.skillexchange.app.core.call.InAppCallManager by inject()
+
+    private val callRepository: com.skillexchange.app.domain.repository.ICallRepository by inject()
 
     companion object {
         const val CHANNEL_ID = "exchange_requests"
@@ -63,7 +66,7 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(tag, "FCM onMessageReceived: title=$title, type=$type, entityId=$entityId")
 
-        // Xử lý báo hiệu cuộc gọi đến khi app đang mở (TASK-075)
+        // Xử lý cuộc gọi đến (TASK-075 & TASK-077)
         if (type == "INCOMING_CALL") {
             val sessionId = remoteMessage.data["sessionId"]
             val callerId = remoteMessage.data["callerId"] ?: ""
@@ -71,20 +74,71 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
             val callType = remoteMessage.data["callType"] ?: "VOICE"
             val exchangeId = remoteMessage.data["exchangeId"] ?: ""
 
-            if (!sessionId.isNullOrBlank() && AppLifecycleTracker.isForeground) {
-                inAppCallManager.onIncomingCallPushReceived(
-                    sessionId = sessionId,
-                    callerId = callerId,
-                    callerName = callerName,
-                    callType = callType,
-                    exchangeId = exchangeId
+            if (!sessionId.isNullOrBlank()) {
+                val isBusy = (inAppCallManager.incomingCall.value != null) ||
+                    com.skillexchange.app.core.service.CallForegroundService.isRunning
+
+                val action = com.skillexchange.app.core.call.IncomingCallDecisionLogic.decidePushAction(
+                    isBusy = isBusy,
+                    isLoggedIn = tokenManager.isLoggedIn(),
+                    isForeground = AppLifecycleTracker.isForeground
                 )
-                return
+
+                when (action) {
+                    com.skillexchange.app.core.call.IncomingPushAction.IGNORE -> return
+                    com.skillexchange.app.core.call.IncomingPushAction.REJECT_BUSY -> {
+                        Log.d(tag, "Người dùng đang trong cuộc gọi khác (BUSY), tự động từ chối sessionId: $sessionId")
+                        serviceScope.launch {
+                            callRepository.rejectCall(sessionId)
+                        }
+                        showSystemNotification(
+                            title = "Cuộc gọi nhỡ",
+                            body = "Cuộc gọi nhỡ từ ${callerName.ifBlank { "Đối tác" }}",
+                            type = "CALL",
+                            entityId = exchangeId
+                        )
+                        return
+                    }
+                    com.skillexchange.app.core.call.IncomingPushAction.SHOW_IN_APP_DIALOG -> {
+                        inAppCallManager.onIncomingCallPushReceived(
+                            sessionId = sessionId,
+                            callerId = callerId,
+                            callerName = callerName,
+                            callType = callType,
+                            exchangeId = exchangeId
+                        )
+                        return
+                    }
+                    com.skillexchange.app.core.call.IncomingPushAction.SHOW_SYSTEM_NOTIFICATION -> {
+                        Log.d(tag, "Nhận cuộc gọi khi app ở background/killed, kích hoạt IncomingCallNotification")
+                        IncomingCallNotificationHelper.showIncomingCallNotification(
+                            context = this,
+                            sessionId = sessionId,
+                            callerId = callerId,
+                            callerName = callerName,
+                            callType = callType,
+                            exchangeId = exchangeId
+                        )
+                        return
+                    }
+                }
             }
         } else if (type == "CALL_CANCELLED") {
             val sessionId = remoteMessage.data["sessionId"]
-            if (!sessionId.isNullOrBlank() && AppLifecycleTracker.isForeground) {
-                inAppCallManager.onCallCancelledPushReceived(sessionId)
+            if (!sessionId.isNullOrBlank()) {
+                Log.d(tag, "Nhận thông báo CALL_CANCELLED cho sessionId: $sessionId")
+                // Hủy thông báo in-app nếu app đang foreground
+                if (AppLifecycleTracker.isForeground) {
+                    inAppCallManager.onCallCancelledPushReceived(sessionId)
+                }
+                // Hủy thông báo cuộc gọi nền (dừng chuông/rung)
+                IncomingCallNotificationHelper.cancelIncomingCallNotification(this)
+                // Phát broadcast đóng IncomingCallActivity nếu đang hiển thị trên màn hình khóa
+                val cancelIntent = Intent(IncomingCallNotificationHelper.ACTION_CALL_CANCELLED_BROADCAST).apply {
+                    setPackage(packageName)
+                    putExtra(IncomingCallActivity.EXTRA_SESSION_ID, sessionId)
+                }
+                sendBroadcast(cancelIntent)
                 return
             }
         }
