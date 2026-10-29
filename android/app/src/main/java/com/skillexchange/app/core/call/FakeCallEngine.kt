@@ -47,6 +47,11 @@ class FakeCallEngine(
         lastConnectedRoomName = roomName
         lastConnectedToken = token
         lastConnectedIsVideo = isVideo
+        _isMuted.value = false
+        _isSpeakerphoneOn.value = isVideo
+        _selectedAudioDevice.value = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        _isMutedByAudioFocus.value = false
+        _isInterruptedBySystemCall.value = false
         audioRoutingManager = AudioRoutingManager(
             isVideo = isVideo,
             initialAvailableDevices = _availableAudioDevices.value,
@@ -62,6 +67,11 @@ class FakeCallEngine(
 
     override fun disconnect() {
         _status.value = CallEngineStatus.DISCONNECTED
+        _isMuted.value = false
+        _isSpeakerphoneOn.value = false
+        _selectedAudioDevice.value = AppAudioDevice.EARPIECE
+        _isMutedByAudioFocus.value = false
+        _isInterruptedBySystemCall.value = false
     }
 
     override fun setMicrophoneMuted(muted: Boolean) {

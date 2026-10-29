@@ -125,8 +125,8 @@ class IncomingCallActivity : ComponentActivity() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == IncomingCallNotificationHelper.ACTION_CALL_CANCELLED_BROADCAST) {
                     val incomingSessionId = intent.getStringExtra(EXTRA_SESSION_ID)
-                    if (incomingSessionId == currentSessionId) {
-                        Log.d(tag, "Nhận được broadcast CALL_CANCELLED, đóng IncomingCallActivity")
+                    if (incomingSessionId == currentSessionId && currentSessionId.isNotBlank()) {
+                        Log.d(tag, "Nhận được broadcast CALL_CANCELLED khớp sessionId=$currentSessionId, đóng IncomingCallActivity")
                         Toast.makeText(this@IncomingCallActivity, "Người gọi đã hủy cuộc gọi", Toast.LENGTH_SHORT).show()
                         IncomingCallNotificationHelper.cancelIncomingCallNotification(this@IncomingCallActivity)
                         finish()
@@ -135,18 +135,20 @@ class IncomingCallActivity : ComponentActivity() {
             }
         }
         val filter = IntentFilter(IncomingCallNotificationHelper.ACTION_CALL_CANCELLED_BROADCAST)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(callCancelledReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(callCancelledReceiver, filter)
-        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            callCancelledReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     private fun handleRejectCall(sessionId: String) {
         Log.d(tag, "Người dùng bấm Từ chối trên IncomingCallActivity: $sessionId")
         IncomingCallNotificationHelper.cancelIncomingCallNotification(this)
-        // Gọi rejectCall trong coroutine
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        // Sử dụng Application CoroutineScope tiêm qua Koin để tránh rò rỉ hoặc bị hủy theo vòng đời Activity
+        val applicationScope: kotlinx.coroutines.CoroutineScope = org.koin.core.context.GlobalContext.get().get()
+        applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 callRepository.rejectCall(sessionId)
             } catch (e: Exception) {
@@ -170,6 +172,9 @@ class IncomingCallActivity : ComponentActivity() {
     ) {
         Log.d(tag, "Trả lời thành công, khởi động ForegroundService và điều hướng tới CallScreen")
         IncomingCallNotificationHelper.cancelIncomingCallNotification(this)
+
+        // Cấp quyền nội bộ cho sessionId trước khi điều hướng sang MainActivity -> CallScreen
+        com.skillexchange.app.core.call.InternalCallAuth.authorize(sessionId)
 
         // Khởi động Foreground Service giữ kết nối âm thanh cuộc gọi
         CallForegroundService.startService(
@@ -198,6 +203,10 @@ class IncomingCallActivity : ComponentActivity() {
             try {
                 unregisterReceiver(it)
             } catch (_: Exception) {}
+        }
+        // Không hủy thông báo nếu Activity bị hủy do đổi cấu hình (xoay màn hình, gập/mở máy)
+        if (!isChangingConfigurations) {
+            IncomingCallNotificationHelper.cancelIncomingCallNotification(this)
         }
     }
 }

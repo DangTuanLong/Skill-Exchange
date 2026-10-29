@@ -7,14 +7,13 @@ object DeepLinkParser {
     /**
      * Phân tích payload deep link theo BUSINESS_RULES.md §6.
      * Bắt buộc kiểm tra đăng nhập (isLoggedIn) trước khi điều hướng.
-     * Payload deep link chỉ gồm type và entityId.
+     * Payload deep link chỉ gồm type và entityId. Tuyệt đối không nhận sessionId/isVideo từ Intent ngoài.
+     * Deep link type=CALL không tự quay số, trả về null để ngăn chặn unsolicited network calls/redirection.
      */
     fun parse(
         type: String?,
         entityId: String?,
-        isLoggedIn: Boolean,
-        sessionId: String? = null,
-        isVideo: Boolean = false
+        isLoggedIn: Boolean
     ): String? {
         if (!isLoggedIn) return null
         if (entityId.isNullOrBlank()) return null
@@ -27,12 +26,7 @@ object DeepLinkParser {
             "REQUEST_REJECTED",
             "APPOINTMENT_REMINDER" -> Screen.BookingDetail.createRoute(entityId)
             "RATING_REMINDER" -> Screen.Rating.createRoute(entityId)
-            "CALL" -> Screen.Call.createRoute(
-                exchangeId = entityId,
-                isVideo = isVideo,
-                sessionId = sessionId,
-                isIncoming = true
-            )
+            "CALL" -> null // Tuyệt đối không tự quay số hoặc chuyển hướng trực tiếp vào CallScreen từ deep link ngoài
             else -> null
         }
     }

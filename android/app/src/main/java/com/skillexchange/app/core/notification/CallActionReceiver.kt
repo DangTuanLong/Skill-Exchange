@@ -30,12 +30,14 @@ class CallActionReceiver : BroadcastReceiver() {
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val callRepository = GlobalContext.get().get<ICallRepository>()
-                        val result = callRepository.rejectCall(sessionId)
-                        result.onSuccess {
-                            Log.d(TAG, "Gửi từ chối cuộc gọi lên server thành công: $sessionId")
-                        }.onFailure { err ->
-                            Log.w(TAG, "Lỗi khi gửi từ chối cuộc gọi lên server: ${err.message}")
+                        kotlinx.coroutines.withTimeoutOrNull(8000L) {
+                            val callRepository = GlobalContext.get().get<ICallRepository>()
+                            val result = callRepository.rejectCall(sessionId)
+                            result.onSuccess {
+                                Log.d(TAG, "Gửi từ chối cuộc gọi lên server thành công: $sessionId")
+                            }.onFailure { err ->
+                                Log.w(TAG, "Lỗi khi gửi từ chối cuộc gọi lên server: ${err.message}")
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Ngoại lệ khi thực thi rejectCall (ví dụ: mất kết nối mạng): ${e.message}")

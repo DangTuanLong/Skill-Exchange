@@ -82,13 +82,24 @@ class MainActivity : ComponentActivity() {
         val type = intent?.getStringExtra("type")
         val entityId = intent?.getStringExtra("entityId")
         val sessionId = intent?.getStringExtra("sessionId")
-        val isVideo = intent?.getBooleanExtra("isVideo", false) ?: false
+
+        // Chỉ cho phép điều hướng vào Screen.Call nếu sessionId đã được cấp quyền nội bộ
+        // (từ IncomingCallActivity sau khi bấm Trả lời, hoặc từ CallForegroundService ongoing notification)
+        if (type == "CALL" && !entityId.isNullOrBlank() && com.skillexchange.app.core.call.InternalCallAuth.isAuthorized(sessionId) && tokenManager.isLoggedIn()) {
+            val isVideo = intent.getBooleanExtra("isVideo", false)
+            return com.skillexchange.app.navigation.Screen.Call.createRoute(
+                exchangeId = entityId,
+                isVideo = isVideo,
+                sessionId = sessionId,
+                isIncoming = true
+            )
+        }
+
+        // Mọi Intent từ ngoài chỉ nhận type và entityId qua DeepLinkParser
         return DeepLinkParser.parse(
             type = type,
             entityId = entityId,
-            isLoggedIn = tokenManager.isLoggedIn(),
-            sessionId = sessionId,
-            isVideo = isVideo
+            isLoggedIn = tokenManager.isLoggedIn()
         )
     }
 

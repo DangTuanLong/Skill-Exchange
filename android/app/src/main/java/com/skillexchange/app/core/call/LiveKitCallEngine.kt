@@ -76,6 +76,12 @@ class LiveKitCallEngine(
             return
         }
 
+        // Reset trạng thái ở đầu connect() (TASK-080 Mục 3)
+        _isMuted.value = false
+        _isSpeakerphoneOn.value = isVideo
+        _selectedAudioDevice.value = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        _isMutedByAudioFocus.value = false
+        _isInterruptedBySystemCall.value = false
         _status.value = CallEngineStatus.CONNECTING
 
         coroutineScope.launch {
@@ -90,26 +96,36 @@ class LiveKitCallEngine(
                 _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
                 _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
 
-                // Khởi tạo AudioSwitchHandler của LiveKit SDK với cấu hình ưu tiên
-                val handler = AudioSwitchHandler(context.applicationContext).apply {
-                    loggingEnabled = true
-                    preferredDeviceList = if (isVideo) {
-                        listOf(
-                            AudioDevice.BluetoothHeadset::class.java,
-                            AudioDevice.WiredHeadset::class.java,
-                            AudioDevice.Speakerphone::class.java,
-                            AudioDevice.Earpiece::class.java
-                        )
-                    } else {
-                        listOf(
-                            AudioDevice.BluetoothHeadset::class.java,
-                            AudioDevice.WiredHeadset::class.java,
-                            AudioDevice.Earpiece::class.java,
-                            AudioDevice.Speakerphone::class.java
-                        )
+                // Khởi tạo AudioSwitchHandler và nạp native WebRTC C++ (LiveKit.create) trên Dispatchers.IO (TASK-080 Mục 2)
+                val (handler, currentRoom) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val h = AudioSwitchHandler(context.applicationContext).apply {
+                        loggingEnabled = true
+                        preferredDeviceList = if (isVideo) {
+                            listOf(
+                                AudioDevice.BluetoothHeadset::class.java,
+                                AudioDevice.WiredHeadset::class.java,
+                                AudioDevice.Speakerphone::class.java,
+                                AudioDevice.Earpiece::class.java
+                            )
+                        } else {
+                            listOf(
+                                AudioDevice.BluetoothHeadset::class.java,
+                                AudioDevice.WiredHeadset::class.java,
+                                AudioDevice.Earpiece::class.java,
+                                AudioDevice.Speakerphone::class.java
+                            )
+                        }
                     }
+                    val r = LiveKit.create(
+                        appContext = context.applicationContext,
+                        overrides = LiveKitOverrides(
+                            audioOptions = AudioOptions(audioHandler = h)
+                        )
+                    )
+                    Pair(h, r)
                 }
                 audioSwitchHandler = handler
+                room = currentRoom
 
                 // Lắng nghe thay đổi thiết bị từ AudioSwitchHandler
                 handler.registerAudioDeviceChangeListener { devices, selected ->
@@ -129,26 +145,16 @@ class LiveKitCallEngine(
                     if (audioRoutingManager.isMutedByAudioFocus.value) {
                         // Tạm ngắt microphone khi cuộc gọi SIM chen ngang
                         launch {
-                            runCatching { room?.localParticipant?.setMicrophoneEnabled(false) }
+                            runCatching { currentRoom.localParticipant?.setMicrophoneEnabled(false) }
                         }
                     } else {
                         // Khôi phục lại trạng thái microphone ban đầu
                         if (!_isMuted.value) {
                             launch {
-                                runCatching { room?.localParticipant?.setMicrophoneEnabled(true) }
+                                runCatching { currentRoom.localParticipant?.setMicrophoneEnabled(true) }
                             }
                         }
                     }
-                }
-
-                // Khởi tạo LiveKit Room kèm AudioSwitchHandler
-                val currentRoom = LiveKit.create(
-                    appContext = context.applicationContext,
-                    overrides = LiveKitOverrides(
-                        audioOptions = AudioOptions(audioHandler = handler)
-                    )
-                ).also {
-                    room = it
                 }
 
                 // Hủy lắng nghe cũ nếu có
@@ -202,13 +208,22 @@ class LiveKitCallEngine(
         eventsJob?.cancel()
         eventsJob = null
 
+        // Reset trạng thái trong disconnect() (TASK-080 Mục 3)
+        _isMuted.value = false
+        _isSpeakerphoneOn.value = false
+        _selectedAudioDevice.value = AppAudioDevice.EARPIECE
+        _isMutedByAudioFocus.value = false
+        _isInterruptedBySystemCall.value = false
+
         coroutineScope.launch {
-            runCatching {
-                audioSwitchHandler?.stop()
-                audioSwitchHandler = null
-                room?.disconnect()
-                room?.release()
-                room = null
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    audioSwitchHandler?.stop()
+                    audioSwitchHandler = null
+                    room?.disconnect()
+                    room?.release()
+                    room = null
+                }
             }
         }
     }
@@ -253,7 +268,6 @@ class LiveKitCallEngine(
             is AudioDevice.Earpiece -> AppAudioDevice.EARPIECE
             is AudioDevice.WiredHeadset -> AppAudioDevice.WIRED
             is AudioDevice.BluetoothHeadset -> AppAudioDevice.BLUETOOTH
-            else -> null
         }
     }
 }

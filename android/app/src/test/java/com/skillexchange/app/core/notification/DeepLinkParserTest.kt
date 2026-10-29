@@ -78,6 +78,39 @@ class DeepLinkParserTest {
     }
 
     @Test
+    fun parse_WhenMissedCall_ReturnsChatDetailRoute() {
+        // TASK-080 Mục 6/7: MISSED_CALL điều hướng đến ChatDetail để người dùng xem và gọi lại chủ động
+        val route = DeepLinkParser.parse(
+            type = "MISSED_CALL",
+            entityId = "exchange-call-123",
+            isLoggedIn = true
+        )
+        assertEquals("chat_detail/exchange-call-123", route)
+    }
+
+    @Test
+    fun parse_WhenCallDeepLink_ReturnsNullAndDoesNotDial() {
+        // TASK-080 Mục 1: Deep link type=CALL từ bên ngoài không tự quay số hay điều hướng trực tiếp
+        val route = DeepLinkParser.parse(
+            type = "CALL",
+            entityId = "exchange-call-456",
+            isLoggedIn = true
+        )
+        assertNull("Deep link CALL từ nguồn ngoài phải trả về null để ngăn tự ý quay số", route)
+    }
+
+    @Test
+    fun parse_WhenFakeCallIntent_NeverReturnsCallRoute() {
+        // Kiểm thử Intent giả mạo từ ứng dụng bên thứ 3
+        val route = DeepLinkParser.parse(
+            type = "call",
+            entityId = "fake-exchange-id",
+            isLoggedIn = true
+        )
+        assertNull(route)
+    }
+
+    @Test
     fun parse_WhenUnknownType_ReturnsNull() {
         val route = DeepLinkParser.parse(
             type = "UNKNOWN_EVENT",

@@ -94,19 +94,22 @@ class CallForegroundService : Service() {
             ACTION_STOP_CALL -> {
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
                 Log.d(TAG, "Nhận yêu cầu dừng CallForegroundService cho sessionId=$sessionId")
-                if (!sessionId.isNullOrBlank()) {
-                    serviceScope.launch {
+                serviceScope.launch {
+                    if (!sessionId.isNullOrBlank()) {
                         try {
-                            val callRepository = GlobalContext.get().get<ICallRepository>()
-                            callRepository.endCall(sessionId)
+                            // Chờ endCall tối đa 3 giây; server tự dọn phiên gọi sau timeout là lưới an toàn nếu mạng ngắt
+                            kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                                val callRepository = GlobalContext.get().get<ICallRepository>()
+                                callRepository.endCall(sessionId)
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Lỗi khi gọi endCall từ FGS: ${e.message}")
                         }
                     }
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    isRunning = false
                 }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                isRunning = false
             }
         }
 

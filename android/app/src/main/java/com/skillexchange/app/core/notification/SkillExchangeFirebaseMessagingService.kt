@@ -94,7 +94,7 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
                         showSystemNotification(
                             title = "Cuộc gọi nhỡ",
                             body = "Cuộc gọi nhỡ từ ${callerName.ifBlank { "Đối tác" }}",
-                            type = "CALL",
+                            type = "MISSED_CALL",
                             entityId = exchangeId
                         )
                         return

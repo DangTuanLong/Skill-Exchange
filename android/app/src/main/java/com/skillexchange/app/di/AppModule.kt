@@ -41,6 +41,11 @@ import org.koin.dsl.module
 val appModule = module {
     includes(NetworkModule.module)
 
+    // ── Application Coroutine Scope ────────────────────────────────────
+    single<kotlinx.coroutines.CoroutineScope> {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default + kotlinx.coroutines.SupervisorJob())
+    }
+
     // ── Security & Database ───────────────────────────────────────────
     single { TokenManager(androidContext()) }
 
