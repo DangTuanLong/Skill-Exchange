@@ -13,7 +13,12 @@ data class ChatMessage(
     val isFailed: Boolean = false,
     val fileUrl: String? = null,
     val fileName: String? = null,
-    val fileSize: Long? = null
+    val fileSize: Long? = null,
+    val callType: String? = null,
+    val callStatus: String? = null,
+    val durationSeconds: Int = 0,
+    val callerId: String? = null,
+    val receiverId: String? = null
 ) {
     fun isFromMe(currentUserId: String): Boolean = senderId == currentUserId
     val isRead: Boolean get() = readAt != null

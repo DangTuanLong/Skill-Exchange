@@ -651,5 +651,54 @@ class ChatDetailViewModelTest {
         advanceUntilIdle()
         assertFalse(viewModel.state.value.isOtherUserTyping)
     }
+
+    @Test
+    fun `call again when room is accepted navigates to call screen`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        roomFlow.emit(sampleRoom.copy(status = "ACCEPTED"))
+        advanceUntilIdle()
+
+        var capturedEffect: ChatDetailEffect? = null
+        val effectJob = launch {
+            viewModel.effect.collect { capturedEffect = it }
+        }
+
+        viewModel.onIntent(ChatDetailIntent.CallAgain(isVideo = true))
+        advanceUntilIdle()
+
+        assertNotNull(capturedEffect)
+        assertTrue(capturedEffect is ChatDetailEffect.NavigateToCall)
+        val callEffect = capturedEffect as ChatDetailEffect.NavigateToCall
+        assertEquals("chat_123", callEffect.exchangeId)
+        assertTrue(callEffect.isVideo)
+
+        effectJob.cancel()
+    }
+
+    @Test
+    fun `call again when room is not accepted shows error snackbar`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle(mapOf("chatId" to "chat_123"))
+        val viewModel = ChatDetailViewModel(handle, fakeChatRepository, tokenManager, fakeExchangeRepository)
+
+        roomFlow.emit(sampleRoom.copy(status = "COMPLETED"))
+        advanceUntilIdle()
+
+        var capturedEffect: ChatDetailEffect? = null
+        val effectJob = launch {
+            viewModel.effect.collect { capturedEffect = it }
+        }
+
+        viewModel.onIntent(ChatDetailIntent.CallAgain(isVideo = false))
+        advanceUntilIdle()
+
+        assertNotNull(capturedEffect)
+        assertTrue(capturedEffect is ChatDetailEffect.ShowSnackbar)
+        val snackbarEffect = capturedEffect as ChatDetailEffect.ShowSnackbar
+        assertEquals("Buổi trao đổi chưa được chấp nhận hoặc đã kết thúc.", snackbarEffect.message)
+
+        effectJob.cancel()
+    }
 }
 

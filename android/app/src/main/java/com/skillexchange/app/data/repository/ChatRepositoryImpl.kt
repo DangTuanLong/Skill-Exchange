@@ -307,6 +307,11 @@ class ChatRepositoryImpl(
         val fileUrl = getString("fileUrl")
         val fileName = getString("fileName")
         val fileSize = getLong("fileSize")
+        val callType = getString("callType")
+        val callStatus = getString("callStatus")
+        val durationSeconds = getLong("durationSeconds")?.toInt() ?: 0
+        val callerId = getString("callerId")
+        val receiverId = getString("receiverId")
 
         @Suppress("UNCHECKED_CAST")
         val participants = (get("participants") as? List<String>) ?: emptyList()
@@ -325,7 +330,12 @@ class ChatRepositoryImpl(
             isFailed = false,
             fileUrl = fileUrl,
             fileName = fileName,
-            fileSize = fileSize
+            fileSize = fileSize,
+            callType = callType,
+            callStatus = callStatus,
+            durationSeconds = durationSeconds,
+            callerId = callerId,
+            receiverId = receiverId
         )
     }
 }

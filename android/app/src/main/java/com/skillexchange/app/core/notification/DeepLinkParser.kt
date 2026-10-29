@@ -20,7 +20,8 @@ object DeepLinkParser {
         if (entityId.isNullOrBlank()) return null
 
         return when (type?.trim()?.uppercase()) {
-            "NEW_MESSAGE" -> Screen.ChatDetail.createRoute(entityId)
+            "NEW_MESSAGE",
+            "MISSED_CALL" -> Screen.ChatDetail.createRoute(entityId)
             "NEW_REQUEST",
             "REQUEST_ACCEPTED",
             "REQUEST_REJECTED",

@@ -28,7 +28,8 @@ open class CallService(
     private val liveKitTokenService: LiveKitTokenService,
     private val firestoreChatService: IFirestoreChatService? = null,
     private val deviceService: com.skillexchange.api.services.device.DeviceService? = null,
-    private val fcmService: com.skillexchange.api.services.notification.FcmService? = null
+    private val fcmService: com.skillexchange.api.services.notification.FcmService? = null,
+    private val notificationService: com.skillexchange.api.services.notification.NotificationService? = null
 ) {
     private val logger = LoggerFactory.getLogger(CallService::class.java)
 
@@ -143,7 +144,13 @@ open class CallService(
                 it[updatedAt] = now
             }
 
-            // 5. Kiểm tra xem caller hoặc receiver có cuộc gọi nào đang active không
+            // 5. Lấy tên người gọi (cần cho BUSY notification và JWT)
+            val callerProfile = ProfilesTable.selectAll()
+                .where { ProfilesTable.userId eq callerId }
+                .firstOrNull()
+            val callerName = callerProfile?.get(ProfilesTable.fullName)?.ifBlank { "Đối tác" } ?: "Đối tác"
+
+            // 6. Kiểm tra xem caller hoặc receiver có cuộc gọi nào đang active không
             val activeCalls = CallSessionsTable.selectAll()
                 .where {
                     ((CallSessionsTable.callerId inList listOf(callerId, targetReceiverId)) or
@@ -152,14 +159,30 @@ open class CallService(
                 }.toList()
 
             if (activeCalls.isNotEmpty()) {
+                try {
+                    val exIdStr = exchangeUuid.toString()
+                    firestoreChatService?.recordSystemCallMessageAsync(
+                        exchangeId = exIdStr,
+                        callType = callTypeEnum.name,
+                        callStatus = CallStatus.BUSY.name,
+                        durationSeconds = 0,
+                        callerId = callerId,
+                        receiverId = targetReceiverId
+                    )
+                    notificationService?.createNotification(
+                        userId = targetReceiverId,
+                        type = "MISSED_CALL",
+                        title = "Cuộc gọi nhỡ",
+                        body = "$callerName đã gọi cho bạn (Máy bận)",
+                        entityId = exIdStr
+                    )
+                } catch (e: Throwable) {
+                    logger.error("Lỗi khi ghi nhận SYSTEM_CALL BUSY cho cuộc gọi: ${e.message}")
+                }
                 throw CallBusyException("Đối tác hoặc bạn hiện đang trong một cuộc gọi khác", ErrorCodes.USER_BUSY)
             }
 
-            // 6. Lấy tên người gọi để nhúng vào LiveKit JWT
-            val callerProfile = ProfilesTable.selectAll()
-                .where { ProfilesTable.userId eq callerId }
-                .firstOrNull()
-            val callerName = callerProfile?.get(ProfilesTable.fullName)?.ifBlank { "Đối tác" } ?: "Đối tác"
+            // 7. Tên người gọi đã có ở trên (callerName) — dùng để nhúng vào LiveKit JWT
 
             // 7. Tạo phiên gọi mới
             val newSessionId = UUID.randomUUID()
@@ -410,11 +433,12 @@ open class CallService(
         }
 
         if (result.needRecordHistory) {
+            val historyStatus = if (result.wasUnconnected) CallStatus.MISSED.name else CallStatus.ENDED.name
             try {
                 firestoreChatService?.recordSystemCallMessageAsync(
                     exchangeId = result.exchangeId,
                     callType = result.dto.callType,
-                    callStatus = CallStatus.ENDED.name,
+                    callStatus = historyStatus,
                     durationSeconds = result.dto.durationSeconds,
                     callerId = result.dto.callerId,
                     receiverId = result.dto.receiverId
@@ -425,6 +449,7 @@ open class CallService(
         }
 
         // Nếu cuộc gọi bị hủy trước khi kết nối (chưa nhấc máy), gửi FCM CALL_CANCELLED cho đối phương
+        // VÀ gửi thông báo cuộc gọi nhỡ (MISSED_CALL)
         if (result.wasUnconnected) {
             try {
                 val partnerId = if (userId == result.dto.callerId) result.dto.receiverId else result.dto.callerId
@@ -438,8 +463,23 @@ open class CallService(
                         fcmService.sendDataPushAsync(token, cancelData, priority = "HIGH")
                     }
                 }
+
+                // Gửi thông báo cuộc gọi nhỡ (MISSED_CALL) nếu caller là người cúp máy
+                if (userId == result.dto.callerId && notificationService != null) {
+                    val callerProfile = transaction {
+                        ProfilesTable.selectAll().where { ProfilesTable.userId eq userId }.firstOrNull()
+                    }
+                    val callerName = callerProfile?.get(ProfilesTable.fullName)?.ifBlank { "Đối tác" } ?: "Đối tác"
+                    notificationService.createNotification(
+                        userId = partnerId,
+                        type = "MISSED_CALL",
+                        title = "Cuộc gọi nhỡ",
+                        body = "$callerName đã gọi cho bạn (Cuộc gọi nhỡ)",
+                        entityId = result.exchangeId
+                    )
+                }
             } catch (e: Throwable) {
-                logger.error("Lỗi khi gửi FCM CALL_CANCELLED cho đối tác $sessionId: ${e.message}")
+                logger.error("Lỗi khi gửi FCM CALL_CANCELLED hoặc thông báo cuộc gọi nhỡ cho đối tác $sessionId: ${e.message}")
             }
         }
 
@@ -448,34 +488,91 @@ open class CallService(
 
     /**
      * Dọn dẹp các cuộc gọi bị treo quá hạn (Tích hợp trong ReminderSchedulerService)
+     * NOTE: Firestore và notification calls phải nằm NGOÀI transaction {} vì chúng là async I/O.
      */
-    open fun cleanupExpiredCalls(): Int = transaction {
+    open fun cleanupExpiredCalls(): Int {
         val now = LocalDateTime.now()
         val thirtySecondsAgo = now.minusSeconds(30)
         val twoHoursAgo = now.minusHours(2)
 
-        // 1. DIALING/RINGING quá 30 giây -> MISSED
-        val missedCount = CallSessionsTable.update({
-            (CallSessionsTable.status inList listOf(CallStatus.DIALING.name, CallStatus.RINGING.name)) and
-            (CallSessionsTable.createdAt less thirtySecondsAgo)
-        }) {
-            it[status] = CallStatus.MISSED.name
-            it[endedAt] = now
-            it[updatedAt] = now
+        // 1. Query expired DIALING/RINGING rows và UPDATE -> MISSED, tất cả trong transaction
+        data class ExpiredCallInfo(val exchangeId: String, val callerId: String, val receiverId: String, val callType: String)
+        val expiredCallInfos = mutableListOf<ExpiredCallInfo>()
+
+        val (missedCount, endedCount) = transaction {
+            val expiredRows = CallSessionsTable.selectAll().where {
+                (CallSessionsTable.status inList listOf(CallStatus.DIALING.name, CallStatus.RINGING.name)) and
+                (CallSessionsTable.createdAt less thirtySecondsAgo)
+            }.toList()
+
+            expiredRows.forEach { row ->
+                expiredCallInfos.add(
+                    ExpiredCallInfo(
+                        exchangeId = row[CallSessionsTable.exchangeId].toString(),
+                        callerId = row[CallSessionsTable.callerId],
+                        receiverId = row[CallSessionsTable.receiverId],
+                        callType = row[CallSessionsTable.callType]
+                    )
+                )
+            }
+
+            val missed = CallSessionsTable.update({
+                (CallSessionsTable.status inList listOf(CallStatus.DIALING.name, CallStatus.RINGING.name)) and
+                (CallSessionsTable.createdAt less thirtySecondsAgo)
+            }) {
+                it[status] = CallStatus.MISSED.name
+                it[endedAt] = now
+                it[updatedAt] = now
+            }
+
+            // 2. CONNECTED quá 2 giờ -> ENDED
+            val ended = CallSessionsTable.update({
+                (CallSessionsTable.status eq CallStatus.CONNECTED.name) and
+                (CallSessionsTable.connectedAt less twoHoursAgo)
+            }) {
+                it[status] = CallStatus.ENDED.name
+                it[endedAt] = now
+                it[durationSeconds] = 7200
+                it[updatedAt] = now
+            }
+
+            Pair(missed, ended)
         }
 
-        // 2. CONNECTED quá 2 giờ -> ENDED
-        val endedCount = CallSessionsTable.update({
-            (CallSessionsTable.status eq CallStatus.CONNECTED.name) and
-            (CallSessionsTable.connectedAt less twoHoursAgo)
-        }) {
-            it[status] = CallStatus.ENDED.name
-            it[endedAt] = now
-            it[durationSeconds] = 7200
-            it[updatedAt] = now
+        // 3. Ghi Firestore + notification NGOÀI transaction (async I/O không được gọi trong DB transaction)
+        expiredCallInfos.forEach { info ->
+            try {
+                firestoreChatService?.recordSystemCallMessageAsync(
+                    exchangeId = info.exchangeId,
+                    callType = info.callType,
+                    callStatus = CallStatus.MISSED.name,
+                    durationSeconds = 0,
+                    callerId = info.callerId,
+                    receiverId = info.receiverId
+                )
+            } catch (e: Throwable) {
+                logger.error("Lỗi khi ghi SYSTEM_CALL Firestore cho expired call ${info.exchangeId}: ${e.message}")
+            }
+            try {
+                if (notificationService != null) {
+                    val callerProfile = transaction {
+                        ProfilesTable.selectAll().where { ProfilesTable.userId eq info.callerId }.firstOrNull()
+                    }
+                    val callerName = callerProfile?.get(ProfilesTable.fullName)?.ifBlank { "Đối tác" } ?: "Đối tác"
+                    notificationService.createNotification(
+                        userId = info.receiverId,
+                        type = "MISSED_CALL",
+                        title = "Cuộc gọi nhỡ",
+                        body = "$callerName đã gọi cho bạn (Cuộc gọi nhỡ)",
+                        entityId = info.exchangeId
+                    )
+                }
+            } catch (e: Throwable) {
+                logger.error("Lỗi khi gửi MISSED_CALL notification cho ${info.receiverId}: ${e.message}")
+            }
         }
 
-        missedCount + endedCount
+        return missedCount + endedCount
     }
 
     private fun ResultRow.toDto(): CallSessionDto {

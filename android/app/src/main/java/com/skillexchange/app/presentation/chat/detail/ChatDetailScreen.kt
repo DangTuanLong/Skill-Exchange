@@ -173,6 +173,9 @@ fun ChatDetailScreen(
                 is ChatDetailEffect.NavigateToBooking -> {
                     onNavigateToBookingDetail(effect.exchangeId)
                 }
+                is ChatDetailEffect.NavigateToCall -> {
+                    handleCallClick(effect.isVideo)
+                }
                 is ChatDetailEffect.ScrollToBottom -> {
                     listState.animateScrollToItem(0)
                 }
@@ -487,11 +490,27 @@ fun ChatDetailScreen(
                             if (shouldShowDaySeparator) {
                                 DaySeparator(timestamp = msg.createdAt)
                             }
-                            MessageBubble(
-                                message = msg,
-                                isFromMe = isFromMe,
-                                onResend = { viewModel.onIntent(ChatDetailIntent.ResendMessage(it)) }
-                            )
+                            if (msg.type == "SYSTEM_CALL") {
+                                com.skillexchange.app.presentation.chat.detail.components.SystemCallMessageItem(
+                                    message = msg,
+                                    currentUserId = state.currentUserId,
+                                    isExchangeAccepted = (state.room?.status ?: "ACCEPTED") == "ACCEPTED",
+                                    onCallAgain = { isVideo ->
+                                        handleCallClick(isVideo)
+                                    },
+                                    onCannotCallAgain = {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Buổi trao đổi chưa được chấp nhận hoặc đã kết thúc.")
+                                        }
+                                    }
+                                )
+                            } else {
+                                MessageBubble(
+                                    message = msg,
+                                    isFromMe = isFromMe,
+                                    onResend = { viewModel.onIntent(ChatDetailIntent.ResendMessage(it)) }
+                                )
+                            }
                             Spacer(modifier = Modifier.height(6.dp))
                         }
                     }

@@ -50,7 +50,7 @@ val appModule = module {
     }
     single { com.skillexchange.api.services.notification.NotificationService(fcmService = get(), deviceService = get()) }
     single { com.skillexchange.api.services.call.LiveKitTokenService() }
-    single { com.skillexchange.api.services.call.CallService(liveKitTokenService = get(), firestoreChatService = get(), deviceService = get(), fcmService = get()) }
+    single { com.skillexchange.api.services.call.CallService(liveKitTokenService = get(), firestoreChatService = get(), deviceService = get(), fcmService = get(), notificationService = get()) }
     single { com.skillexchange.api.services.notification.ReminderSchedulerService(notificationService = get(), callService = get()) }
     single<IExchangeNotificationHook> {
         FcmExchangeNotificationHook(

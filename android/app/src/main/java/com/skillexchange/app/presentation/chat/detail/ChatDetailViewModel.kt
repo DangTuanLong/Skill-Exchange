@@ -67,6 +67,7 @@ sealed interface ChatDetailIntent {
         val isImage: Boolean
     ) : ChatDetailIntent
     data class ResendMessage(val messageId: String) : ChatDetailIntent
+    data class CallAgain(val isVideo: Boolean) : ChatDetailIntent
     data object NavigateToBookingDetail : ChatDetailIntent
     data object Retry : ChatDetailIntent
 }
@@ -74,6 +75,7 @@ sealed interface ChatDetailIntent {
 sealed interface ChatDetailEffect {
     data class ShowSnackbar(val message: String) : ChatDetailEffect
     data class NavigateToBooking(val exchangeId: String) : ChatDetailEffect
+    data class NavigateToCall(val exchangeId: String, val isVideo: Boolean) : ChatDetailEffect
     data object ScrollToBottom : ChatDetailEffect
 }
 
@@ -160,6 +162,19 @@ class ChatDetailViewModel(
             }
             is ChatDetailIntent.ResendMessage -> {
                 resendMessage(intent.messageId)
+            }
+            is ChatDetailIntent.CallAgain -> {
+                val roomStatus = _state.value.room?.status ?: "ACCEPTED"
+                if (roomStatus == "ACCEPTED") {
+                    val exchangeId = _state.value.room?.exchangeId ?: chatId
+                    viewModelScope.launch {
+                        _effect.send(ChatDetailEffect.NavigateToCall(exchangeId, intent.isVideo))
+                    }
+                } else {
+                    viewModelScope.launch {
+                        _effect.send(ChatDetailEffect.ShowSnackbar("Buổi trao đổi chưa được chấp nhận hoặc đã kết thúc."))
+                    }
+                }
             }
             is ChatDetailIntent.NavigateToBookingDetail -> {
                 viewModelScope.launch {
