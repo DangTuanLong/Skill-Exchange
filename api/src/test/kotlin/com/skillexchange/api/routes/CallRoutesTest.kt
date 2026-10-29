@@ -396,4 +396,114 @@ class CallRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertTrue(response.bodyAsText().contains("BAD_REQUEST"))
     }
+
+    @Test
+    fun testJoinCall_CallerForbidden_Returns403() = testApplication {
+        setupCallRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        coEvery { mockCallService.joinCall("caller-id", "session-123") } throws CallForbiddenException(
+            "Chỉ người nhận mới có quyền tham gia cuộc gọi",
+            com.skillexchange.api.models.ErrorCodes.FORBIDDEN
+        )
+
+        val response = client.post("/api/calls/token/join") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("caller-id")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"sessionId":"session-123"}""")
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertTrue(response.bodyAsText().contains("FORBIDDEN"))
+    }
+
+    @Test
+    fun testJoinCall_RateLimitExceeded_Returns429() = testApplication {
+        setupCallRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        coEvery { mockCallService.joinCall("user-receiver", "session-123") } throws CallRateLimitException(
+            "Quá nhiều yêu cầu thao tác cuộc gọi",
+            com.skillexchange.api.models.ErrorCodes.RATE_LIMITED
+        )
+
+        val response = client.post("/api/calls/token/join") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-receiver")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"sessionId":"session-123"}""")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertTrue(response.bodyAsText().contains("RATE_LIMITED"))
+    }
+
+    @Test
+    fun testConnected_RateLimitExceeded_Returns429() = testApplication {
+        setupCallRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        coEvery { mockCallService.acceptConnected("user-receiver", "session-123") } throws CallRateLimitException(
+            "Quá nhiều yêu cầu thao tác cuộc gọi",
+            com.skillexchange.api.models.ErrorCodes.RATE_LIMITED
+        )
+
+        val response = client.post("/api/calls/connected") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-receiver")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"sessionId":"session-123"}""")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertTrue(response.bodyAsText().contains("RATE_LIMITED"))
+    }
+
+    @Test
+    fun testRejectCall_RateLimitExceeded_Returns429() = testApplication {
+        setupCallRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        coEvery { mockCallService.rejectCall("user-receiver", "session-123") } throws CallRateLimitException(
+            "Quá nhiều yêu cầu thao tác cuộc gọi",
+            com.skillexchange.api.models.ErrorCodes.RATE_LIMITED
+        )
+
+        val response = client.post("/api/calls/reject") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-receiver")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"sessionId":"session-123"}""")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertTrue(response.bodyAsText().contains("RATE_LIMITED"))
+    }
+
+    @Test
+    fun testEndCall_RateLimitExceeded_Returns429() = testApplication {
+        setupCallRoutesModule()
+        val client = createClient {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+
+        coEvery { mockCallService.endCall("user-caller", "session-123") } throws CallRateLimitException(
+            "Quá nhiều yêu cầu thao tác cuộc gọi",
+            com.skillexchange.api.models.ErrorCodes.RATE_LIMITED
+        )
+
+        val response = client.post("/api/calls/end") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-caller")}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"sessionId":"session-123"}""")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertTrue(response.bodyAsText().contains("RATE_LIMITED"))
+    }
 }

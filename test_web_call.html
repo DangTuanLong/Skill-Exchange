@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillExchange — Web Call Test Tool (TASK-080)</title>
+    <!-- LiveKit JS Client SDK từ CDN chính thức -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.6.0/dist/livekit-client.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: #f0f2f5; color: #1c1e21; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); padding: 24px; }
+        h1 { margin-top: 0; color: #1a73e8; font-size: 24px; display: flex; align-items: center; gap: 8px; }
+        .badge { background: #e8f0fe; color: #1a73e8; font-size: 13px; font-weight: 600; padding: 4px 8px; border-radius: 6px; }
+        .notice { background: #e6f4ea; border-left: 4px solid #137333; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; }
+        .section { margin-bottom: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; }
+        .section-title { font-weight: 600; margin-bottom: 12px; color: #333; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #555; }
+        input, select { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+        button { background: #1a73e8; color: #fff; border: none; padding: 10px 18px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1557b0; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.danger { background: #ea4335; }
+        button.danger:hover { background: #d93025; }
+        button.secondary { background: #5f6368; }
+        button.secondary:hover { background: #494c50; }
+        .video-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+        .video-box { background: #000; border-radius: 8px; overflow: hidden; position: relative; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+        .video-box video { width: 100%; height: 100%; object-fit: cover; }
+        .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        #logs { background: #1e1e1e; color: #a9b7c6; font-family: monospace; font-size: 12px; padding: 12px; border-radius: 8px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; margin-top: 16px; }
+        .log-entry { margin-bottom: 4px; }
+        .log-time { color: #808080; }
+        .log-info { color: #4ec9b0; }
+        .log-error { color: #f48771; }
+        .log-success { color: #6a9955; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>
+        📞 SkillExchange Call Test
+        <span class="badge">DEC-026 • TASK-080</span>
+    </h1>
+
+    <div class="notice">
+        🔒 <strong>Bảo mật Zero-Secret:</strong> Trang web này <strong>không chứa bất kỳ API Key hay Secret nào của LiveKit</strong>. Người kiểm thử đăng nhập tài khoản demo và gọi API backend để nhận JWT room token có thời hạn ngắn (10 phút).
+    </div>
+
+    <!-- Bước 1: Cấu hình & Đăng nhập -->
+    <div class="section">
+        <div class="section-title">Bước 1: Kết nối Backend & Đăng nhập tài khoản B</div>
+        <div class="form-group">
+            <label>API Base URL:</label>
+            <input type="text" id="apiUrl" value="http://localhost:8080">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label>Email tài khoản B (Receiver):</label>
+                <input type="email" id="email" value="receiver@seed.skillexchange.test">
+            </div>
+            <div class="form-group">
+                <label>Mật khẩu:</label>
+                <input type="password" id="password" value="Demo@123456">
+            </div>
+        </div>
+        <div class="btn-group">
+            <button id="btnLogin" onclick="login()">1. Đăng nhập lấy Token</button>
+            <span id="authStatus" style="font-size: 13px; align-self: center; color: #555;">Chưa đăng nhập</span>
+        </div>
+    </div>
+
+    <!-- Bước 2: Tham gia cuộc gọi -->
+    <div class="section">
+        <div class="section-title">Bước 2: Nhận cuộc gọi hoặc Gọi đi</div>
+        <div class="form-group">
+            <label>Session ID (Lấy từ thông báo cuộc gọi hoặc log Android Emulator):</label>
+            <input type="text" id="sessionId" placeholder="Ví dụ: e5a1d7f2-1234-abcd-5678-90ef12345678">
+        </div>
+        <div class="btn-group">
+            <button id="btnJoin" onclick="joinCall()" disabled>2. Tham gia phòng (`/api/calls/token/join`)</button>
+            <button id="btnReject" class="danger" onclick="rejectCall()" disabled>Từ chối (`/api/calls/reject`)</button>
+            <button id="btnEnd" class="danger" onclick="endCall()" disabled>Cúp máy (`/api/calls/end`)</button>
+        </div>
+    </div>
+
+    <!-- Bước 3: Điều khiển Media -->
+    <div class="section">
+        <div class="section-title">Bước 3: Media & Video Preview</div>
+        <div class="btn-group">
+            <button id="btnToggleMic" class="secondary" onclick="toggleMic()" disabled>Tắt Mic</button>
+            <button id="btnToggleCam" class="secondary" onclick="toggleCam()" disabled>Bật Camera</button>
+        </div>
+
+        <div class="video-container">
+            <div class="video-box" id="localVideoBox">
+                <span>Camera của tôi</span>
+                <div class="video-label">Local</div>
+            </div>
+            <div class="video-box" id="remoteVideoBox">
+                <span>Chờ video từ Android Emulator...</span>
+                <div class="video-label">Remote (Android)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nhật ký hoạt động -->
+    <div class="section">
+        <div class="section-title">Nhật ký hoạt động (Logs)</div>
+        <div id="logs"></div>
+    </div>
+</div>
+
+<script>
+    let appToken = null;
+    let currentRoom = null;
+    let currentSessionId = null;
+    let isMicEnabled = true;
+    let isCamEnabled = false;
+
+    function log(msg, type = 'info') {
+        const logsDiv = document.getElementById('logs');
+        const now = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="log-time">[${now}]</span> <span class="log-${type}">${msg}</span>`;
+        logsDiv.appendChild(entry);
+        logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    async function login() {
+        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value.trim();
+
+        log(`Đang đăng nhập vào ${apiUrl}/api/auth/login...`);
+        try {
+            const res = await fetch(`${apiUrl}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (res.ok && data.data && data.data.token) {
+                appToken = data.data.token;
+                document.getElementById('authStatus').innerHTML = `✅ Đã đăng nhập: <strong>${data.data.user.fullName || email}</strong>`;
+                document.getElementById('btnJoin').disabled = false;
+                document.getElementById('btnReject').disabled = false;
+                log(`Đăng nhập thành công! User ID: ${data.data.user.id}`, 'success');
+            } else {
+                log(`Đăng nhập thất bại: ${data.message || res.statusText}`, 'error');
+            }
+        } catch (e) {
+            log(`Lỗi kết nối tới backend: ${e.message}`, 'error');
+        }
+    }
+
+    async function joinCall() {
+        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const sessionId = document.getElementById('sessionId').value.trim();
+        if (!sessionId) {
+            alert('Vui lòng nhập Session ID!');
+            return;
+        }
+        currentSessionId = sessionId;
+
+        log(`Đang xin token phòng LiveKit cho sessionId=${sessionId}...`);
+        try {
+            const res = await fetch(`${apiUrl}/api/calls/token/join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appToken}`
+                },
+                body: JSON.stringify({ sessionId })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.data) {
+                log(`Không thể lấy LiveKit token: ${data.message || res.statusText}`, 'error');
+                return;
+            }
+
+            const { url, roomName, token } = data.data;
+            log(`Đã nhận LiveKit Token! Room: ${roomName}. Đang kết nối tới ${url}...`, 'success');
+
+            await connectLiveKitRoom(url, token);
+
+            // Báo server là receiver đã kết nối
+            fetch(`${apiUrl}/api/calls/connected`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appToken}`
+                },
+                body: JSON.stringify({ sessionId })
+            }).catch(e => console.warn('notify connected err', e));
+
+        } catch (e) {
+            log(`Lỗi khi tham gia cuộc gọi: ${e.message}`, 'error');
+        }
+    }
+
+    async function connectLiveKitRoom(url, token) {
+        try {
+            const room = new LivekitClient.Room({
+                adaptiveStream: true,
+                dynacast: true,
+                audioCaptureDefaults: { autoGainControl: true, echoCancellation: true, noiseSuppression: true }
+            });
+            currentRoom = room;
+
+            room.on(LivekitClient.RoomEvent.Connected, () => {
+                log(`✅ Đã kết nối phòng LiveKit thành công!`, 'success');
+                document.getElementById('btnEnd').disabled = false;
+                document.getElementById('btnToggleMic').disabled = false;
+                document.getElementById('btnToggleCam').disabled = false;
+            });
+
+            room.on(LivekitClient.RoomEvent.Disconnected, () => {
+                log(`Cuộc gọi đã ngắt kết nối.`, 'info');
+                cleanupMedia();
+            });
+
+            room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                log(`Nhận media track từ đối tác: ${track.kind} (${participant.identity})`, 'info');
+                if (track.kind === LivekitClient.Track.Kind.Video) {
+                    const videoEl = track.attach();
+                    const box = document.getElementById('remoteVideoBox');
+                    box.innerHTML = '';
+                    box.appendChild(videoEl);
+                } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                    const audioEl = track.attach();
+                    document.body.appendChild(audioEl);
+                }
+            });
+
+            room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+                track.detach();
+            });
+
+            await room.connect(url, token);
+            await room.localParticipant.setMicrophoneEnabled(true);
+            log(`Đã kích hoạt micro trên máy tính.`, 'info');
+
+        } catch (e) {
+            log(`Lỗi kết nối LiveKit Room: ${e.message}`, 'error');
+        }
+    }
+
+    async function toggleMic() {
+        if (!currentRoom) return;
+        isMicEnabled = !isMicEnabled;
+        await currentRoom.localParticipant.setMicrophoneEnabled(isMicEnabled);
+        document.getElementById('btnToggleMic').innerText = isMicEnabled ? 'Tắt Mic' : 'Bật Mic';
+        log(`Micro: ${isMicEnabled ? 'Bật' : 'Tắt'}`);
+    }
+
+    async function toggleCam() {
+        if (!currentRoom) return;
+        isCamEnabled = !isCamEnabled;
+        await currentRoom.localParticipant.setCameraEnabled(isCamEnabled);
+        document.getElementById('btnToggleCam').innerText = isCamEnabled ? 'Tắt Camera' : 'Bật Camera';
+        log(`Camera: ${isCamEnabled ? 'Bật' : 'Tắt'}`);
+
+        const box = document.getElementById('localVideoBox');
+        if (isCamEnabled) {
+            const track = currentRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera)?.videoTrack;
+            if (track) {
+                box.innerHTML = '';
+                box.appendChild(track.attach());
+            }
+        } else {
+            box.innerHTML = '<span>Camera của tôi (Đang tắt)</span><div class="video-label">Local</div>';
+        }
+    }
+
+    async function rejectCall() {
+        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const sessionId = document.getElementById('sessionId').value.trim();
+        if (!sessionId) return;
+
+        try {
+            const res = await fetch(`${apiUrl}/api/calls/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appToken}`
+                },
+                body: JSON.stringify({ sessionId })
+            });
+            log(`Đã gửi yêu cầu Từ chối cuộc gọi (${res.status}).`, 'info');
+        } catch (e) {
+            log(`Lỗi khi từ chối cuộc gọi: ${e.message}`, 'error');
+        }
+    }
+
+    async function endCall() {
+        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const sessionId = currentSessionId || document.getElementById('sessionId').value.trim();
+        if (!sessionId) return;
+
+        log(`Đang kết thúc cuộc gọi...`);
+        try {
+            await fetch(`${apiUrl}/api/calls/end`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${appToken}`
+                },
+                body: JSON.stringify({ sessionId })
+            });
+            log(`Đã kết thúc cuộc gọi trên server.`, 'success');
+        } catch (e) {
+            log(`Lỗi khi gọi endCall: ${e.message}`, 'error');
+        }
+
+        if (currentRoom) {
+            await currentRoom.disconnect();
+            currentRoom = null;
+        }
+        cleanupMedia();
+    }
+
+    function cleanupMedia() {
+        document.getElementById('btnEnd').disabled = true;
+        document.getElementById('btnToggleMic').disabled = true;
+        document.getElementById('btnToggleCam').disabled = true;
+        document.getElementById('remoteVideoBox').innerHTML = '<span>Chờ video từ Android Emulator...</span><div class="video-label">Remote (Android)</div>';
+        document.getElementById('localVideoBox').innerHTML = '<span>Camera của tôi</span><div class="video-label">Local</div>';
+    }
+</script>
+</body>
+</html>

@@ -151,7 +151,8 @@ class CallViewModelTest {
         isVideo: Boolean = false,
         sessionId: String? = null,
         isIncoming: Boolean = false,
-        fakeEngine: FakeCallEngine = FakeCallEngine(autoConnect = true)
+        fakeEngine: FakeCallEngine = FakeCallEngine(autoConnect = true),
+        callRepo: ICallRepository = mockCallRepo
     ): CallViewModel {
         val args = mutableMapOf<String, Any>("exchangeId" to exchangeId, "isVideo" to isVideo)
         sessionId?.let { args["sessionId"] = it }
@@ -159,7 +160,7 @@ class CallViewModelTest {
         val savedStateHandle = SavedStateHandle(args)
         return CallViewModel(
             savedStateHandle = savedStateHandle,
-            callRepository = mockCallRepo,
+            callRepository = callRepo,
             callEngine = fakeEngine,
             exchangeRepository = mockExchangeRepo,
             tokenManager = tokenManager
@@ -468,6 +469,58 @@ class CallViewModelTest {
 
         assertFalse(viewModel.state.value.isInterruptedBySystemCall)
         assertFalse(viewModel.state.value.isMutedByAudioFocus)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testCallNotification_EngineAlreadyConnected_RetainsConnectedStateWithoutDuplicateJoin() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        // Mô phỏng engine đã kết nối sẵn trong app (chạy ngầm FGS)
+        fakeEngine.connect("wss://skillexchange.livekit.cloud", "call_test_room", "dummy_token", false)
+        testScheduler.runCurrent()
+        assertEquals(CallEngineStatus.CONNECTED, fakeEngine.status.value)
+
+        var joinCallCalled = false
+        val customCallRepo = object : ICallRepository {
+            override suspend fun initiateCall(exchangeId: String, callType: CallType): Result<CallToken> = error("Not used")
+            override suspend fun joinCall(sessionId: String): Result<CallToken> {
+                joinCallCalled = true
+                return Result.success(CallToken("url", "room", "token", CallType.VOICE, sessionId))
+            }
+            override suspend fun notifyConnected(sessionId: String): Result<CallSession> = Result.success(
+                CallSession(
+                    id = sessionId,
+                    exchangeId = "ex_123",
+                    callerId = "user_caller",
+                    receiverId = "user_receiver",
+                    roomName = "call_test_room",
+                    callType = CallType.VOICE,
+                    status = "CONNECTED",
+                    startedAt = "2026-10-28T00:00:00Z",
+                    connectedAt = "2026-10-28T00:00:00Z",
+                    endedAt = null,
+                    durationSeconds = 0
+                )
+            )
+            override suspend fun rejectCall(sessionId: String): Result<CallSession> = error("Not used")
+            override suspend fun endCall(sessionId: String): Result<Int> = Result.success(120)
+        }
+
+        val viewModel = createViewModel(
+            exchangeId = "ex_123",
+            sessionId = "session_123",
+            isIncoming = true,
+            fakeEngine = fakeEngine,
+            callRepo = customCallRepo
+        )
+        testScheduler.runCurrent()
+
+        // BUG-SEC-06: Giữ nguyên trạng thái CONNECTED và không gọi joinCall lại
+        assertEquals(CallUiStatus.CONNECTED, viewModel.state.value.uiStatus)
+        assertEquals("session_123", viewModel.state.value.sessionId)
+        assertFalse(joinCallCalled)
 
         viewModel.onIntent(CallIntent.EndCall)
         testScheduler.runCurrent()

@@ -282,6 +282,17 @@ class CallViewModel(
                 }
             }
 
+            // BUG-SEC-06: Nếu engine đã ở trạng thái CONNECTED (người dùng quay lại từ background notification), giữ nguyên trạng thái
+            if (callEngine.status.value == CallEngineStatus.CONNECTED) {
+                _state.update {
+                    it.copy(
+                        sessionId = sessionId,
+                        uiStatus = CallUiStatus.CONNECTED
+                    )
+                }
+                return@launch
+            }
+
             // 2. Lấy token phòng cuộc gọi từ server
             val tokenResult = callRepository.joinCall(sessionId)
             tokenResult.fold(

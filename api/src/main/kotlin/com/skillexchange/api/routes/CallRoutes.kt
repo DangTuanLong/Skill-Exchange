@@ -160,6 +160,15 @@ fun Route.callRoutes(callService: CallService) {
                             message = e.message ?: "Dịch vụ gọi trực tiếp chưa sẵn sàng"
                         )
                     )
+                } catch (e: CallRateLimitException) {
+                    call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = HttpStatusCode.TooManyRequests.value,
+                            code = e.errorCode,
+                            message = e.message ?: "Quá giới hạn tần suất thao tác"
+                        )
+                    )
                 }
             }
 
@@ -209,6 +218,15 @@ fun Route.callRoutes(callService: CallService) {
                             message = e.message ?: "Không tìm thấy cuộc gọi"
                         )
                     )
+                } catch (e: CallRateLimitException) {
+                    call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = HttpStatusCode.TooManyRequests.value,
+                            code = e.errorCode,
+                            message = e.message ?: "Quá giới hạn tần suất thao tác"
+                        )
+                    )
                 }
             }
 
@@ -247,6 +265,15 @@ fun Route.callRoutes(callService: CallService) {
                             status = HttpStatusCode.NotFound.value,
                             code = e.errorCode,
                             message = e.message ?: "Không tìm thấy cuộc gọi"
+                        )
+                    )
+                } catch (e: CallRateLimitException) {
+                    call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = HttpStatusCode.TooManyRequests.value,
+                            code = e.errorCode,
+                            message = e.message ?: "Quá giới hạn tần suất thao tác"
                         )
                     )
                 }
@@ -292,6 +319,15 @@ fun Route.callRoutes(callService: CallService) {
                             status = HttpStatusCode.NotFound.value,
                             code = e.errorCode,
                             message = e.message ?: "Không tìm thấy cuộc gọi"
+                        )
+                    )
+                } catch (e: CallRateLimitException) {
+                    call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = HttpStatusCode.TooManyRequests.value,
+                            code = e.errorCode,
+                            message = e.message ?: "Quá giới hạn tần suất thao tác"
                         )
                     )
                 }

@@ -145,6 +145,8 @@ class CallForegroundService : Service() {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("type", "CALL")
             putExtra("entityId", exchangeId)
+            putExtra("sessionId", sessionId)
+            putExtra("isVideo", callType.equals("VIDEO", ignoreCase = true))
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             this,
