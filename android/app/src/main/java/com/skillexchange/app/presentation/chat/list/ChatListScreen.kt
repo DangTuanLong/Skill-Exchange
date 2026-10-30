@@ -56,11 +56,8 @@ import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.core.ui.theme.TextPrimaryLight
 import com.skillexchange.app.core.ui.theme.TextSecondaryLight
 import com.skillexchange.app.domain.model.chat.ChatRoom
+import com.skillexchange.app.presentation.chat.ChatDateFormatter
 import org.koin.androidx.compose.koinViewModel
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ChatListScreen(
@@ -222,7 +219,8 @@ fun ChatListScreen(
                     ) {
                         items(
                             items = state.filteredRooms,
-                            key = { it.id }
+                            key = { it.id },
+                            contentType = { "ChatRoomItem" }
                         ) { room ->
                             ChatRoomItem(
                                 room = room,
@@ -375,20 +373,5 @@ private fun ChatRoomItem(
     }
 }
 
-private fun formatTime(timestamp: Long?): String {
-    if (timestamp == null || timestamp <= 0) return ""
-    val messageDate = Date(timestamp)
-    val now = Calendar.getInstance()
-    val msgCal = Calendar.getInstance().apply { time = messageDate }
-
-    val isToday = now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
-            now.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
-
-    val isThisYear = now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
-
-    return when {
-        isToday -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(messageDate)
-        isThisYear -> SimpleDateFormat("dd/MM", Locale.getDefault()).format(messageDate)
-        else -> SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(messageDate)
-    }
-}
+private fun formatTime(timestamp: Long?): String =
+    ChatDateFormatter.formatChatListTime(timestamp)

@@ -11,11 +11,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -270,7 +273,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp)
                     ) {
-                        item {
+                        item(key = "all", contentType = "CategoryChip") {
                             FilterChip(
                                 selected = state.selectedCategoryIds.isEmpty(),
                                 onClick = { viewModel.onIntent(HomeIntent.ClearCategories) },
@@ -281,7 +284,7 @@ fun HomeScreen(
                                 )
                             )
                         }
-                        items(orderedCategories, key = { it.id }) { cat ->
+                        items(orderedCategories, key = { it.id }, contentType = { "CategoryChip" }) { cat ->
                             val isSelected = state.selectedCategoryIds.contains(cat.id)
                             FilterChip(
                                 selected = isSelected,
@@ -424,7 +427,7 @@ fun HomeScreen(
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                items(state.displayedUsers, key = { it.userId }) { user ->
+                items(state.displayedUsers, key = { it.userId }, contentType = { "UserCard" }) { user ->
                     Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         UserCardItem(
                             user = user,
@@ -527,9 +530,11 @@ fun HomeScreen(
                 // City filter
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Thành phố", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimaryLight)
-                    val cities = listOf("Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Cần Thơ", "Hải Phòng")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(cities) { city ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        FILTER_CITIES.forEach { city ->
                             val selected = (state.selectedCity == null && city == "Tất cả") || state.selectedCity == city
                             FilterChip(
                                 selected = selected,
@@ -659,7 +664,9 @@ private fun ShimmerCandidateCard() {
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { this.alpha = alpha },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
@@ -676,20 +683,20 @@ private fun ShimmerCandidateCard() {
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
-                        .background(Color.Gray.copy(alpha = alpha))
+                        .background(Color(0xFFE2E8F0))
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(
                         modifier = Modifier
                             .size(width = 140.dp, height = 16.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Gray.copy(alpha = alpha))
+                            .background(Color(0xFFE2E8F0))
                     )
                     Box(
                         modifier = Modifier
                             .size(width = 80.dp, height = 12.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Gray.copy(alpha = alpha))
+                            .background(Color(0xFFE2E8F0))
                     )
                 }
             }
@@ -698,8 +705,10 @@ private fun ShimmerCandidateCard() {
                     .fillMaxWidth()
                     .height(32.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Gray.copy(alpha = alpha))
+                    .background(Color(0xFFE2E8F0))
             )
         }
     }
 }
+
+private val FILTER_CITIES = listOf("Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Cần Thơ", "Hải Phòng")

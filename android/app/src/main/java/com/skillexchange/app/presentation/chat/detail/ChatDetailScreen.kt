@@ -90,12 +90,10 @@ import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.core.ui.theme.TextPrimaryLight
 import com.skillexchange.app.core.ui.theme.TextSecondaryLight
 import com.skillexchange.app.domain.model.chat.ChatMessage
+import com.skillexchange.app.presentation.chat.ChatDateFormatter
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.io.ByteArrayOutputStream
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -478,7 +476,8 @@ fun ChatDetailScreen(
                 ) {
                     itemsIndexed(
                         items = reversedMessages,
-                        key = { _, msg -> msg.id }
+                        key = { _, msg -> msg.id },
+                        contentType = { _, msg -> msg.type }
                     ) { index, msg ->
                         val isFromMe = msg.isFromMe(state.currentUserId)
 
@@ -567,7 +566,7 @@ private fun MessageBubble(
     onResend: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt))
+    val timeStr = ChatDateFormatter.formatMessageTime(message.createdAt)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -861,28 +860,8 @@ private fun DaySeparator(timestamp: Long) {
     }
 }
 
-private fun isSameDay(time1: Long, time2: Long): Boolean {
-    val cal1 = Calendar.getInstance().apply { timeInMillis = time1 }
-    val cal2 = Calendar.getInstance().apply { timeInMillis = time2 }
-    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
-}
+private fun isSameDay(time1: Long, time2: Long): Boolean =
+    ChatDateFormatter.isSameDay(time1, time2)
 
-private fun getDaySeparatorText(timestamp: Long): String {
-    val date = Date(timestamp)
-    val now = Calendar.getInstance()
-    val msgCal = Calendar.getInstance().apply { time = date }
-
-    val isToday = now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
-            now.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
-
-    val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-    val isYesterday = yesterday.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
-            yesterday.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
-
-    return when {
-        isToday -> "Hôm nay"
-        isYesterday -> "Hôm qua"
-        else -> SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)
-    }
-}
+private fun getDaySeparatorText(timestamp: Long): String =
+    ChatDateFormatter.getDaySeparatorText(timestamp)

@@ -160,6 +160,43 @@ class ChatListViewModelTest {
     }
 
     @Test
+    fun `filteredRooms updates automatically when rooms flow emits while search query is active`() = runTest(testDispatcher) {
+        val viewModel = ChatListViewModel(fakeChatRepository, tokenManager)
+        roomsFlow.emit(sampleRooms)
+        advanceUntilIdle()
+
+        viewModel.onIntent(ChatListIntent.SearchQueryChanged("Nguyễn"))
+        advanceUntilIdle()
+        assertEquals(1, viewModel.state.value.filteredRooms.size)
+
+        val updatedRooms = sampleRooms + ChatRoom(
+            id = "chat_3",
+            exchangeId = "chat_3",
+            senderId = "user_other_3",
+            receiverId = "user_me",
+            senderName = "Nguyễn Văn C",
+            receiverName = "Tôi",
+            senderAvatarUrl = null,
+            receiverAvatarUrl = null,
+            skillOfferedName = "Java",
+            skillWantedName = "Python",
+            status = "ACCEPTED",
+            lastMessage = "Chào",
+            lastMessageAt = 3000L,
+            lastSenderId = "user_other_3",
+            unreadCount = 0,
+            participants = listOf("user_other_3", "user_me")
+        )
+        roomsFlow.emit(updatedRooms)
+        advanceUntilIdle()
+
+        val filteredAfterEmit = viewModel.state.value.filteredRooms
+        assertEquals(2, filteredAfterEmit.size)
+        assertEquals("chat_1", filteredAfterEmit[0].id)
+        assertEquals("chat_3", filteredAfterEmit[1].id)
+    }
+
+    @Test
     fun `OpenChat intent emits NavigateToChat effect`() = runTest(testDispatcher) {
         val viewModel = ChatListViewModel(fakeChatRepository, tokenManager)
         var emittedEffect: ChatListEffect? = null

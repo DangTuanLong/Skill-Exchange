@@ -17,23 +17,11 @@ import kotlinx.coroutines.launch
 data class ChatListState(
     val isLoading: Boolean = true,
     val rooms: List<ChatRoom> = emptyList(),
+    val filteredRooms: List<ChatRoom> = emptyList(),
     val searchQuery: String = "",
     val error: String? = null,
     val currentUserId: String = ""
-) {
-    val filteredRooms: List<ChatRoom>
-        get() = if (searchQuery.isBlank()) {
-            rooms
-        } else {
-            val query = searchQuery.trim().lowercase()
-            rooms.filter {
-                it.getOtherPartyName(currentUserId).lowercase().contains(query) ||
-                (it.lastMessage?.lowercase()?.contains(query) == true) ||
-                it.skillOfferedName.lowercase().contains(query) ||
-                it.skillWantedName.lowercase().contains(query)
-            }
-        }
-}
+)
 
 sealed interface ChatListIntent {
     data class SearchQueryChanged(val query: String) : ChatListIntent
@@ -58,14 +46,24 @@ class ChatListViewModel(
 
     init {
         val uid = tokenManager.getUserId() ?: ""
-        _state.update { it.copy(currentUserId = uid) }
+        _state.update {
+            it.copy(
+                currentUserId = uid,
+                filteredRooms = filterRooms(it.rooms, it.searchQuery, uid)
+            )
+        }
         observeChatRooms()
     }
 
     fun onIntent(intent: ChatListIntent) {
         when (intent) {
             is ChatListIntent.SearchQueryChanged -> {
-                _state.update { it.copy(searchQuery = intent.query) }
+                _state.update {
+                    it.copy(
+                        searchQuery = intent.query,
+                        filteredRooms = filterRooms(it.rooms, intent.query, it.currentUserId)
+                    )
+                }
             }
             is ChatListIntent.Retry -> {
                 observeChatRooms()
@@ -75,6 +73,17 @@ class ChatListViewModel(
                     _effect.send(ChatListEffect.NavigateToChat(intent.chatId))
                 }
             }
+        }
+    }
+
+    private fun filterRooms(rooms: List<ChatRoom>, query: String, currentUserId: String): List<ChatRoom> {
+        if (query.isBlank()) return rooms
+        val q = query.trim().lowercase()
+        return rooms.filter {
+            it.getOtherPartyName(currentUserId).lowercase().contains(q) ||
+                (it.lastMessage?.lowercase()?.contains(q) == true) ||
+                it.skillOfferedName.lowercase().contains(q) ||
+                it.skillWantedName.lowercase().contains(q)
         }
     }
 
@@ -95,6 +104,7 @@ class ChatListViewModel(
                         it.copy(
                             isLoading = false,
                             rooms = rooms,
+                            filteredRooms = filterRooms(rooms, it.searchQuery, it.currentUserId),
                             error = null
                         )
                     }

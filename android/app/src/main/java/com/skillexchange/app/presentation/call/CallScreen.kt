@@ -124,275 +124,39 @@ fun CallScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // 1. Header & Cảnh báo quyền riêng tư (UI_SPEC §4.20)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Surface(
-                        color = Color(0x3338BDF8),
-                        shape = RoundedCornerShape(20.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6638BDF8))
-                    ) {
-                        Text(
-                            text = "🔒 Cuộc gọi đi qua máy chủ trung gian của LiveKit, ứng dụng không ghi âm.",
-                            color = Color(0xFFBAE6FD),
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
+                // 1. Header & Cảnh báo quyền riêng tư
+                CallHeaderSection(
+                    isVideo = state.isVideo,
+                    partnerName = state.partnerName,
+                    skillName = state.skillName,
+                    uiStatus = state.uiStatus,
+                    formattedDuration = state.formattedDuration,
+                    isInterruptedBySystemCall = state.isInterruptedBySystemCall,
+                    isMutedByAudioFocus = state.isMutedByAudioFocus
+                )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                // 2. Avatar lớn ở trung tâm (kèm hiệu ứng sóng âm khi kết nối)
+                CallAvatarSection(
+                    partnerAvatar = state.partnerAvatar,
+                    partnerName = state.partnerName,
+                    isConnected = state.uiStatus == CallUiStatus.CONNECTED
+                )
 
-                    Text(
-                        text = if (state.isVideo) "CUỘC GỌI VIDEO" else "CUỘC GỌI THOẠI",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = state.partnerName,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-
-                    if (state.skillName.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Kỹ năng: ${state.skillName}",
-                            color = Color(0xFFCBD5E1),
-                            fontSize = 14.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Hiển thị trạng thái hoặc thời lượng
-                    if (state.uiStatus == CallUiStatus.CONNECTED) {
-                        Surface(
-                            color = Color(0x2210B981),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
-                        ) {
-                            Text(
-                                text = state.formattedDuration,
-                                color = Color(0xFF34D399),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = state.uiStatus.label,
-                            color = when (state.uiStatus) {
-                                CallUiStatus.RINGING, CallUiStatus.DIALING -> Color(0xFF38BDF8)
-                                CallUiStatus.BUSY, CallUiStatus.MISSED, CallUiStatus.REJECTED -> Color(0xFFF87171)
-                                CallUiStatus.ENDED -> Color(0xFF94A3B8)
-                                CallUiStatus.ERROR -> Color(0xFFEF4444)
-                                else -> Color.White
-                            },
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    // Thông báo gián đoạn Audio Focus (Cuộc gọi hệ thống chen vào)
-                    if (state.isInterruptedBySystemCall) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            color = Color(0x33F59E0B),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.PhoneCallback, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Cuộc gọi bị tạm dừng do có cuộc gọi hệ thống", color = Color(0xFFFEF3C7), fontSize = 12.sp)
-                            }
-                        }
-                    } else if (state.isMutedByAudioFocus) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            color = Color(0x33F59E0B),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.MicOff, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Micro tạm ngắt do ứng dụng khác chiếm âm thanh", color = Color(0xFFFEF3C7), fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-
-                // 2. Avatar lớn ở trung tâm kèm hiệu ứng sóng âm khi kết nối
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(200.dp)
-                ) {
-                    if (state.uiStatus == CallUiStatus.CONNECTED) {
-                        // Vòng hào quang pulsing giả lập sóng âm
-                        Box(
-                            modifier = Modifier
-                                .size(170.dp)
-                                .clip(CircleShape)
-                                .background(Color(0x2238BDF8))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(150.dp)
-                                .clip(CircleShape)
-                                .background(Color(0x3338BDF8))
-                        )
-                    }
-
-                    if (state.partnerAvatar != null) {
-                        AsyncImage(
-                            model = state.partnerAvatar,
-                            contentDescription = state.partnerName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape)
-                                .border(3.dp, Color(0xFF38BDF8), CircleShape)
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF334155))
-                                .border(3.dp, Color(0xFF38BDF8), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = state.partnerName.take(1).uppercase(),
-                                color = Color.White,
-                                fontSize = 44.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                // 3. Thông báo lỗi hoặc nút Thử lại (nếu có)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (state.errorMessage != null && state.uiStatus != CallUiStatus.CONNECTED) {
-                        Text(
-                            text = state.errorMessage ?: "",
-                            color = Color(0xFFF87171),
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                    }
-
-                    if (state.canRetry) {
-                        Button(
-                            onClick = { viewModel.onIntent(CallIntent.Retry) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Brand500),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Thử gọi lại", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Nút Tắt/Bật Micro
-                        IconButton(
-                            onClick = { viewModel.onIntent(CallIntent.ToggleMute) },
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(if (state.isMuted) Color(0xFFEF4444) else Color(0xFF334155))
-                        ) {
-                            Icon(
-                                imageVector = if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                                contentDescription = if (state.isMuted) "Bật micro" else "Tắt micro",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-
-                        // Nút Kết thúc cuộc gọi (Nút tròn đỏ lớn chính giữa)
-                        IconButton(
-                            onClick = { viewModel.onIntent(CallIntent.EndCall) },
-                            enabled = !state.isActionLoading,
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFDC2626))
-                        ) {
-                            if (state.isActionLoading) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.CallEnd,
-                                    contentDescription = "Kết thúc cuộc gọi",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
-                        // Nút Thiết bị âm thanh (Loa ngoài / Loa trong / Tai nghe / Bluetooth)
-                        val audioIcon = when (state.selectedAudioDevice) {
-                            AppAudioDevice.SPEAKER -> Icons.Default.VolumeUp
-                            AppAudioDevice.EARPIECE -> Icons.Default.PhoneInTalk
-                            AppAudioDevice.WIRED -> Icons.Default.Headphones
-                            AppAudioDevice.BLUETOOTH -> Icons.Default.BluetoothAudio
-                        }
-                        val isAudioHighlight = state.selectedAudioDevice == AppAudioDevice.SPEAKER || state.selectedAudioDevice == AppAudioDevice.BLUETOOTH
-
-                        IconButton(
-                            onClick = {
-                                if (state.availableAudioDevices.size > 2) {
-                                    showAudioDeviceSheet = true
-                                } else {
-                                    viewModel.onIntent(CallIntent.ToggleSpeaker)
-                                }
-                            },
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(if (isAudioHighlight) Color(0xFF38BDF8) else Color(0xFF334155))
-                        ) {
-                            Icon(
-                                imageVector = audioIcon,
-                                contentDescription = state.selectedAudioDevice.displayName,
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-                }
+                // 3. Thông báo lỗi, nút Thử lại & Điều khiển cuộc gọi
+                CallControlsSection(
+                    errorMessage = state.errorMessage,
+                    canRetry = state.canRetry,
+                    isMuted = state.isMuted,
+                    isActionLoading = state.isActionLoading,
+                    uiStatus = state.uiStatus,
+                    selectedAudioDevice = state.selectedAudioDevice,
+                    hasMultipleAudioDevices = state.availableAudioDevices.size > 2,
+                    onToggleMute = { viewModel.onIntent(CallIntent.ToggleMute) },
+                    onEndCall = { viewModel.onIntent(CallIntent.EndCall) },
+                    onToggleSpeaker = { viewModel.onIntent(CallIntent.ToggleSpeaker) },
+                    onOpenAudioDeviceSheet = { showAudioDeviceSheet = true },
+                    onRetry = { viewModel.onIntent(CallIntent.Retry) }
+                )
             }
         }
     }
@@ -479,5 +243,315 @@ fun CallScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun CallHeaderSection(
+    isVideo: Boolean,
+    partnerName: String,
+    skillName: String,
+    uiStatus: CallUiStatus,
+    formattedDuration: String,
+    isInterruptedBySystemCall: Boolean,
+    isMutedByAudioFocus: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Surface(
+            color = Color(0x3338BDF8),
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6638BDF8))
+        ) {
+            Text(
+                text = "🔒 Cuộc gọi đi qua máy chủ trung gian của LiveKit, ứng dụng không ghi âm.",
+                color = Color(0xFFBAE6FD),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = if (isVideo) "CUỘC GỌI VIDEO" else "CUỘC GỌI THOẠI",
+            color = Color(0xFF94A3B8),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = partnerName,
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        if (skillName.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Kỹ năng: $skillName",
+                color = Color(0xFFCBD5E1),
+                fontSize = 14.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (uiStatus == CallUiStatus.CONNECTED) {
+            CallDurationBadge(duration = formattedDuration)
+        } else {
+            Text(
+                text = uiStatus.label,
+                color = when (uiStatus) {
+                    CallUiStatus.RINGING, CallUiStatus.DIALING -> Color(0xFF38BDF8)
+                    CallUiStatus.BUSY, CallUiStatus.MISSED, CallUiStatus.REJECTED -> Color(0xFFF87171)
+                    CallUiStatus.ENDED -> Color(0xFF94A3B8)
+                    CallUiStatus.ERROR -> Color(0xFFEF4444)
+                    else -> Color.White
+                },
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        if (isInterruptedBySystemCall) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = Color(0x33F59E0B),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.PhoneCallback, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Cuộc gọi bị tạm dừng do có cuộc gọi hệ thống", color = Color(0xFFFEF3C7), fontSize = 12.sp)
+                }
+            }
+        } else if (isMutedByAudioFocus) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = Color(0x33F59E0B),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x88F59E0B))
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.MicOff, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Micro tạm ngắt do ứng dụng khác chiếm âm thanh", color = Color(0xFFFEF3C7), fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallDurationBadge(
+    duration: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0x2210B981),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
+        modifier = modifier
+    ) {
+        Text(
+            text = duration,
+            color = Color(0xFF34D399),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun CallAvatarSection(
+    partnerAvatar: String?,
+    partnerName: String,
+    isConnected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.size(200.dp)
+    ) {
+        if (isConnected) {
+            Box(
+                modifier = Modifier
+                    .size(170.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x2238BDF8))
+            )
+            Box(
+                modifier = Modifier
+                    .size(150.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x3338BDF8))
+            )
+        }
+
+        if (partnerAvatar != null) {
+            AsyncImage(
+                model = partnerAvatar,
+                contentDescription = partnerName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .border(3.dp, Color(0xFF38BDF8), CircleShape)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF334155))
+                    .border(3.dp, Color(0xFF38BDF8), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = partnerName.take(1).uppercase(),
+                    color = Color.White,
+                    fontSize = 44.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallControlsSection(
+    errorMessage: String?,
+    canRetry: Boolean,
+    isMuted: Boolean,
+    isActionLoading: Boolean,
+    uiStatus: CallUiStatus,
+    selectedAudioDevice: AppAudioDevice,
+    hasMultipleAudioDevices: Boolean,
+    onToggleMute: () -> Unit,
+    onEndCall: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onOpenAudioDeviceSheet: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        if (errorMessage != null && uiStatus != CallUiStatus.CONNECTED) {
+            Text(
+                text = errorMessage,
+                color = Color(0xFFF87171),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+
+        if (canRetry) {
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = Brand500),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Thử gọi lại", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Nút Tắt/Bật Micro
+            IconButton(
+                onClick = onToggleMute,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(if (isMuted) Color(0xFFEF4444) else Color(0xFF334155))
+            ) {
+                Icon(
+                    imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                    contentDescription = if (isMuted) "Bật micro" else "Tắt micro",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            // Nút Kết thúc cuộc gọi
+            IconButton(
+                onClick = onEndCall,
+                enabled = !isActionLoading,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFDC2626))
+            ) {
+                if (isActionLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CallEnd,
+                        contentDescription = "Kết thúc cuộc gọi",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+
+            // Nút Thiết bị âm thanh
+            val audioIcon = when (selectedAudioDevice) {
+                AppAudioDevice.SPEAKER -> Icons.Default.VolumeUp
+                AppAudioDevice.EARPIECE -> Icons.Default.PhoneInTalk
+                AppAudioDevice.WIRED -> Icons.Default.Headphones
+                AppAudioDevice.BLUETOOTH -> Icons.Default.BluetoothAudio
+            }
+            val isAudioHighlight = selectedAudioDevice == AppAudioDevice.SPEAKER || selectedAudioDevice == AppAudioDevice.BLUETOOTH
+
+            IconButton(
+                onClick = {
+                    if (hasMultipleAudioDevices) {
+                        onOpenAudioDeviceSheet()
+                    } else {
+                        onToggleSpeaker()
+                    }
+                },
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(if (isAudioHighlight) Color(0xFF38BDF8) else Color(0xFF334155))
+            ) {
+                Icon(
+                    imageVector = audioIcon,
+                    contentDescription = selectedAudioDevice.displayName,
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
     }
 }

@@ -1,8 +1,7 @@
 package com.skillexchange.app.presentation.chat.detail
 
 import com.skillexchange.app.domain.model.chat.ChatMessage
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.skillexchange.app.presentation.chat.ChatDateFormatter
 import java.util.Locale
 
 object SystemCallFormatter {
@@ -57,8 +56,7 @@ object SystemCallFormatter {
     }
 
     fun formatTime(timestamp: Long): String {
-        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        return sdf.format(Date(timestamp))
+        return ChatDateFormatter.formatMessageTime(timestamp)
     }
 }
 

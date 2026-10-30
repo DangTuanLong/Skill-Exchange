@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -113,7 +114,7 @@ fun BookingListScreen(
                     )
                 }
             ) {
-                BookingTab.values().forEach { tab ->
+                BookingTab.entries.forEach { tab ->
                     val count = when (tab) {
                         BookingTab.INCOMING -> state.incomingList.size
                         BookingTab.OUTGOING -> state.outgoingList.size
@@ -258,7 +259,7 @@ fun BookingListScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(state.currentList, key = { it.id }) { exchange ->
+                            items(state.currentList, key = { it.id }, contentType = { "BookingCard" }) { exchange ->
                                 BookingCard(
                                     exchange = exchange,
                                     currentUserId = state.currentUserId,
@@ -284,9 +285,7 @@ private fun BookingCard(
 
     val formattedTime = try {
         val instant = Instant.parse(exchange.scheduledAt)
-        val formatter = DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
-            .withZone(ZoneId.systemDefault())
-        formatter.format(instant)
+        BOOKING_DATE_TIME_FORMATTER.format(instant)
     } catch (e: Exception) {
         exchange.scheduledAt
     }
@@ -462,7 +461,7 @@ private fun BookingCard(
 @Composable
 private fun BookingListSkeleton() {
     val shimmerTransition = rememberInfiniteTransition(label = "shimmer")
-    val translateAnim by shimmerTransition.animateFloat(
+    val translateAnim = shimmerTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1000f,
         animationSpec = infiniteRepeatable(
@@ -470,16 +469,6 @@ private fun BookingListSkeleton() {
             repeatMode = RepeatMode.Restart
         ),
         label = "shimmerTranslate"
-    )
-
-    val shimmerBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFE2E8F0),
-            Color(0xFFF1F5F9),
-            Color(0xFFE2E8F0)
-        ),
-        start = Offset.Zero,
-        end = Offset(x = translateAnim, y = translateAnim)
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -508,7 +497,7 @@ private fun BookingListSkeleton() {
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(shimmerBrush)
+                                    .shimmerPlaceholder { translateAnim.value }
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Box(
@@ -516,7 +505,7 @@ private fun BookingListSkeleton() {
                                     .width(120.dp)
                                     .height(16.dp)
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(shimmerBrush)
+                                    .shimmerPlaceholder { translateAnim.value }
                             )
                         }
                         Box(
@@ -524,7 +513,7 @@ private fun BookingListSkeleton() {
                                 .width(70.dp)
                                 .height(22.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(shimmerBrush)
+                                .shimmerPlaceholder { translateAnim.value }
                         )
                     }
 
@@ -533,7 +522,7 @@ private fun BookingListSkeleton() {
                             .fillMaxWidth()
                             .height(30.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(shimmerBrush)
+                            .shimmerPlaceholder { translateAnim.value }
                     )
 
                     Box(
@@ -541,10 +530,30 @@ private fun BookingListSkeleton() {
                             .width(160.dp)
                             .height(14.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(shimmerBrush)
+                            .shimmerPlaceholder { translateAnim.value }
                     )
                 }
             }
         }
     }
 }
+
+private fun Modifier.shimmerPlaceholder(translateAnimProvider: () -> Float): Modifier = this.drawWithCache {
+    val colors = listOf(
+        Color(0xFFE2E8F0),
+        Color(0xFFF1F5F9),
+        Color(0xFFE2E8F0)
+    )
+    onDrawBehind {
+        val offset = translateAnimProvider()
+        val brush = Brush.linearGradient(
+            colors = colors,
+            start = Offset.Zero,
+            end = Offset(x = offset, y = offset)
+        )
+        drawRect(brush)
+    }
+}
+
+private val BOOKING_DATE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
+    .withZone(ZoneId.systemDefault())
