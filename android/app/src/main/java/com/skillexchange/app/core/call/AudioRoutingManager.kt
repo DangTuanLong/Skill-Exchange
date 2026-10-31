@@ -29,7 +29,8 @@ enum class AppAudioDevice(val displayName: String) {
 class AudioRoutingManager(
     val isVideo: Boolean,
     initialAvailableDevices: Set<AppAudioDevice> = setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER),
-    initialHasBluetoothPermission: Boolean = false
+    initialHasBluetoothPermission: Boolean = false,
+    val defaultToSpeaker: Boolean = false
 ) {
     companion object {
         const val AUDIOFOCUS_GAIN = 1
@@ -67,8 +68,8 @@ class AudioRoutingManager(
         if (devices.contains(AppAudioDevice.WIRED)) return AppAudioDevice.WIRED
         if (devices.contains(AppAudioDevice.BLUETOOTH) && bluetoothPermission) return AppAudioDevice.BLUETOOTH
 
-        // Ngược lại theo mặc định cuộc gọi: thoại = loa trong, video = loa ngoài
-        val defaultDevice = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        // Ngược lại theo mặc định cuộc gọi: thoại = loa trong, video = loa ngoài (hoặc mặc định loa ngoài khi defaultToSpeaker = true)
+        val defaultDevice = if (isVideo || defaultToSpeaker) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
         return if (devices.contains(defaultDevice)) {
             defaultDevice
         } else {
@@ -195,7 +196,7 @@ class AudioRoutingManager(
     }
 
     private fun fallbackToAvailableDevice(devices: Set<AppAudioDevice>) {
-        val defaultDevice = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        val defaultDevice = if (isVideo || defaultToSpeaker) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
         val fallback = when {
             devices.contains(AppAudioDevice.WIRED) -> AppAudioDevice.WIRED
             devices.contains(AppAudioDevice.BLUETOOTH) && _hasBluetoothPermission.value -> AppAudioDevice.BLUETOOTH

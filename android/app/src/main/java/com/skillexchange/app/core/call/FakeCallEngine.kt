@@ -30,6 +30,15 @@ class FakeCallEngine(
     private val _isInterruptedBySystemCall = MutableStateFlow(false)
     override val isInterruptedBySystemCall: StateFlow<Boolean> = _isInterruptedBySystemCall.asStateFlow()
 
+    private val _isMicPublished = MutableStateFlow(false)
+    override val isMicPublished: StateFlow<Boolean> = _isMicPublished.asStateFlow()
+
+    private val _hasRemoteParticipant = MutableStateFlow(false)
+    override val hasRemoteParticipant: StateFlow<Boolean> = _hasRemoteParticipant.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    override val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     var lastConnectedUrl: String? = null
         private set
     var lastConnectedRoomName: String? = null
@@ -52,6 +61,8 @@ class FakeCallEngine(
         _selectedAudioDevice.value = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
         _isMutedByAudioFocus.value = false
         _isInterruptedBySystemCall.value = false
+        _isMicPublished.value = true
+        _errorMessage.value = null
         audioRoutingManager = AudioRoutingManager(
             isVideo = isVideo,
             initialAvailableDevices = _availableAudioDevices.value,
@@ -62,6 +73,7 @@ class FakeCallEngine(
         _status.value = CallEngineStatus.CONNECTING
         if (autoConnect) {
             _status.value = CallEngineStatus.CONNECTED
+            _hasRemoteParticipant.value = true
         }
     }
 
@@ -72,10 +84,20 @@ class FakeCallEngine(
         _selectedAudioDevice.value = AppAudioDevice.EARPIECE
         _isMutedByAudioFocus.value = false
         _isInterruptedBySystemCall.value = false
+        _isMicPublished.value = false
+        _hasRemoteParticipant.value = false
+        _errorMessage.value = null
+    }
+
+    override fun enableMicrophone() {
+        _isMuted.value = false
+        _isMicPublished.value = true
+        _errorMessage.value = null
     }
 
     override fun setMicrophoneMuted(muted: Boolean) {
         _isMuted.value = muted
+        _isMicPublished.value = !muted
     }
 
     override fun setSpeakerphoneEnabled(enabled: Boolean) {
@@ -101,6 +123,10 @@ class FakeCallEngine(
 
     fun simulateStatus(newStatus: CallEngineStatus) {
         _status.value = newStatus
+    }
+
+    fun simulateRemoteParticipant(hasRemote: Boolean) {
+        _hasRemoteParticipant.value = hasRemote
     }
 
     fun simulateAvailableDevices(devices: Set<AppAudioDevice>) {

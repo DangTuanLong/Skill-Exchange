@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkillExchange — Web Call Test Tool (TASK-080)</title>
+    <link rel="icon" href="data:,">
     <!-- LiveKit JS Client SDK từ CDN chính thức -->
     <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.6.0/dist/livekit-client.umd.min.js"></script>
     <style>
@@ -49,6 +50,11 @@
         🔒 <strong>Bảo mật Zero-Secret:</strong> Trang web này <strong>không chứa bất kỳ API Key hay Secret nào của LiveKit</strong>. Người kiểm thử đăng nhập tài khoản demo và gọi API backend để nhận JWT room token có thời hạn ngắn (10 phút).
     </div>
 
+    <div id="fileProtocolWarning" style="display: none; background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; color: #92400e; line-height: 1.5;">
+        ⚠️ <strong>Cảnh báo CORS (Origin: null):</strong> Bạn đang mở trang web này trực tiếp từ file (<code>file:///...</code>). Trình duyệt sẽ chặn kết nối tới Backend do chính sách CORS.<br>
+        👉 <strong>Cách khắc phục:</strong> Chạy lệnh <code>python -m http.server 3000</code> trong terminal và mở link: <a href="http://localhost:3000/test_web_call.html" style="color: #1a73e8; font-weight: bold;">http://localhost:3000/test_web_call.html</a>
+    </div>
+
     <!-- Bước 1: Cấu hình & Đăng nhập -->
     <div class="section">
         <div class="section-title">Bước 1: Kết nối Backend & Đăng nhập tài khoản B</div>
@@ -69,6 +75,13 @@
         <div class="btn-group">
             <button id="btnLogin" onclick="login()">1. Đăng nhập lấy Token</button>
             <span id="authStatus" style="font-size: 13px; align-self: center; color: #555;">Chưa đăng nhập</span>
+        </div>
+        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e0e0e0;">
+            <label style="font-size: 12px; color: #666;">Hoặc dán trực tiếp JWT Access Token (nếu có sẵn):</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="manualToken" placeholder="eyJhbGciOi..." style="font-size: 12px;">
+                <button type="button" class="secondary" onclick="useManualToken()" style="white-space: nowrap;">Lưu Token</button>
+            </div>
         </div>
     </div>
 
@@ -120,6 +133,10 @@
     let isMicEnabled = true;
     let isCamEnabled = false;
 
+    if (window.location.protocol === 'file:') {
+        document.getElementById('fileProtocolWarning').style.display = 'block';
+    }
+
     function log(msg, type = 'info') {
         const logsDiv = document.getElementById('logs');
         const now = new Date().toLocaleTimeString();
@@ -130,8 +147,12 @@
         logsDiv.scrollTop = logsDiv.scrollHeight;
     }
 
+    function getApiUrl() {
+        return (document.getElementById('apiUrl').value.trim() || 'http://localhost:8080').replace(/\/+$/, '');
+    }
+
     async function login() {
-        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const apiUrl = getApiUrl();
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value.trim();
 
@@ -143,12 +164,15 @@
                 body: JSON.stringify({ email, password })
             });
             const data = await res.json();
-            if (res.ok && data.data && data.data.token) {
-                appToken = data.data.token;
-                document.getElementById('authStatus').innerHTML = `✅ Đã đăng nhập: <strong>${data.data.user.fullName || email}</strong>`;
+            const token = data.data?.access_token || data.data?.token;
+            if (res.ok && data.data && token) {
+                appToken = token;
+                const userDisplay = data.data.email || data.data.user?.fullName || email;
+                const userId = data.data.user_id || data.data.user?.id || '';
+                document.getElementById('authStatus').innerHTML = `✅ Đã đăng nhập: <strong>${userDisplay}</strong>`;
                 document.getElementById('btnJoin').disabled = false;
                 document.getElementById('btnReject').disabled = false;
-                log(`Đăng nhập thành công! User ID: ${data.data.user.id}`, 'success');
+                log(`Đăng nhập thành công! User: ${userDisplay} (ID: ${userId})`, 'success');
             } else {
                 log(`Đăng nhập thất bại: ${data.message || res.statusText}`, 'error');
             }
@@ -157,8 +181,21 @@
         }
     }
 
+    function useManualToken() {
+        const token = document.getElementById('manualToken').value.trim();
+        if (token) {
+            appToken = token;
+            document.getElementById('authStatus').innerHTML = `✅ Đã nạp Token thủ công`;
+            document.getElementById('btnJoin').disabled = false;
+            document.getElementById('btnReject').disabled = false;
+            log('Đã nạp JWT Access Token thủ công thành công!', 'success');
+        } else {
+            alert('Vui lòng dán JWT Token!');
+        }
+    }
+
     async function joinCall() {
-        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const apiUrl = getApiUrl();
         const sessionId = document.getElementById('sessionId').value.trim();
         if (!sessionId) {
             alert('Vui lòng nhập Session ID!');
@@ -277,7 +314,7 @@
     }
 
     async function rejectCall() {
-        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const apiUrl = getApiUrl();
         const sessionId = document.getElementById('sessionId').value.trim();
         if (!sessionId) return;
 
@@ -297,7 +334,7 @@
     }
 
     async function endCall() {
-        const apiUrl = document.getElementById('apiUrl').value.trim();
+        const apiUrl = getApiUrl();
         const sessionId = currentSessionId || document.getElementById('sessionId').value.trim();
         if (!sessionId) return;
 

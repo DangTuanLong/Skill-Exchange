@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.skillexchange.app.core.call.AppAudioDevice
 import com.skillexchange.app.core.call.AudioRoutingManager
 import com.skillexchange.app.core.call.CallEngineStatus
+import com.skillexchange.app.core.call.CallTonePlayer
 import com.skillexchange.app.core.call.FakeCallEngine
 import com.skillexchange.app.core.network.ApiException
 import com.skillexchange.app.core.security.TokenManager
@@ -146,13 +147,20 @@ class CallViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private class FakeCallTonePlayer : CallTonePlayer {
+        var isPlaying = false
+        override fun startRingback() { isPlaying = true }
+        override fun stop() { isPlaying = false }
+    }
+
     private fun createViewModel(
         exchangeId: String = "ex_123",
         isVideo: Boolean = false,
         sessionId: String? = null,
         isIncoming: Boolean = false,
         fakeEngine: FakeCallEngine = FakeCallEngine(autoConnect = true),
-        callRepo: ICallRepository = mockCallRepo
+        callRepo: ICallRepository = mockCallRepo,
+        tonePlayer: CallTonePlayer = FakeCallTonePlayer()
     ): CallViewModel {
         val args = mutableMapOf<String, Any>("exchangeId" to exchangeId, "isVideo" to isVideo)
         sessionId?.let { args["sessionId"] = it }
@@ -163,7 +171,8 @@ class CallViewModelTest {
             callRepository = callRepo,
             callEngine = fakeEngine,
             exchangeRepository = mockExchangeRepo,
-            tokenManager = tokenManager
+            tokenManager = tokenManager,
+            callTonePlayer = tonePlayer
         )
     }
 
@@ -524,5 +533,90 @@ class CallViewModelTest {
 
         viewModel.onIntent(CallIntent.EndCall)
         testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testRecordAudioPermission_Granted_EnablesMicrophoneAndClearsError() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        viewModel.onIntent(CallIntent.RecordAudioPermissionResult(granted = true))
+        testScheduler.runCurrent()
+
+        assertTrue(viewModel.state.value.isMicPublished)
+        assertNull(viewModel.state.value.errorMessage)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testRecordAudioPermission_Denied_ShowsErrorAndSnackbar() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        var sideEffect: CallSideEffect? = null
+        val job = launch {
+            sideEffect = viewModel.effect.first()
+        }
+
+        viewModel.onIntent(CallIntent.RecordAudioPermissionResult(granted = false))
+        testScheduler.runCurrent()
+
+        assertTrue(viewModel.state.value.errorMessage?.contains("từ chối") == true)
+        assertTrue(sideEffect is CallSideEffect.ShowSnackbar)
+        job.cancel()
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testOutgoingCall_WaitsForRemoteParticipant_PlaysRingbackTone() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = false)
+        val fakeTone = FakeCallTonePlayer()
+        val viewModel = createViewModel(fakeEngine = fakeEngine, tonePlayer = fakeTone)
+        testScheduler.runCurrent()
+
+        // 1. Khi vừa kết nối vào phòng SFU, chưa có đối tác -> Trạng thái RINGING và phát âm thanh chuông chờ
+        fakeEngine.simulateStatus(CallEngineStatus.CONNECTED)
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.RINGING, viewModel.state.value.uiStatus)
+        assertTrue(fakeTone.isPlaying)
+
+        // 2. Khi đối tác thực sự tham gia phòng -> Chuyển sang CONNECTED và dừng chuông
+        fakeEngine.simulateRemoteParticipant(true)
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.CONNECTED, viewModel.state.value.uiStatus)
+        assertFalse(fakeTone.isPlaying)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testOutgoingCall_60SecondsTimeoutWithoutAnswer_SetsMissedCallAndStopsTone() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = false)
+        val fakeTone = FakeCallTonePlayer()
+        val viewModel = createViewModel(fakeEngine = fakeEngine, tonePlayer = fakeTone)
+        testScheduler.runCurrent()
+
+        fakeEngine.simulateStatus(CallEngineStatus.CONNECTED)
+        testScheduler.runCurrent()
+        assertEquals(CallUiStatus.RINGING, viewModel.state.value.uiStatus)
+        assertTrue(fakeTone.isPlaying)
+
+        // Sau 60 giây không ai nhấc máy -> Cuộc gọi nhỡ và dừng chuông
+        advanceTimeBy(60_001L)
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.MISSED, viewModel.state.value.uiStatus)
+        assertTrue(viewModel.state.value.errorMessage?.contains("1 phút") == true)
+        assertFalse(fakeTone.isPlaying)
+        assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
     }
 }

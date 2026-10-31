@@ -29,7 +29,8 @@ class CallViewModel(
     private val callRepository: ICallRepository,
     private val callEngine: CallEngine,
     private val exchangeRepository: IExchangeRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val callTonePlayer: com.skillexchange.app.core.call.CallTonePlayer = com.skillexchange.app.core.call.AndroidCallTonePlayer()
 ) : ViewModel() {
 
     private val exchangeIdArg: String = savedStateHandle["exchangeId"] ?: ""
@@ -70,21 +71,34 @@ class CallViewModel(
             callEngine.status.collect { engineStatus ->
                 when (engineStatus) {
                     CallEngineStatus.CONNECTED -> {
-                        ringingTimeoutJob?.cancel()
-                        _state.update {
-                            it.copy(
-                                uiStatus = CallUiStatus.CONNECTED,
-                                errorMessage = null
-                            )
+                        // Khi kết nối SFU:
+                        // Nếu là người gọi đi (isIncoming == false) và chưa có remote participant:
+                        // Giữ trạng thái RINGING và phát âm thanh đổ chuông (Ringback tone)
+                        if (!isIncomingArg && !callEngine.hasRemoteParticipant.value) {
+                            _state.update { it.copy(uiStatus = CallUiStatus.RINGING) }
+                            callTonePlayer.startRingback()
+                        } else if (callEngine.hasRemoteParticipant.value) {
+                            // Nếu đã có đối tác (cuộc gọi đến đã chấp nhận):
+                            ringingTimeoutJob?.cancel()
+                            callTonePlayer.stop()
+                            _state.update {
+                                it.copy(
+                                    uiStatus = CallUiStatus.CONNECTED,
+                                    errorMessage = null
+                                )
+                            }
+                            startDurationTimer()
                         }
-                        startDurationTimer()
                     }
                     CallEngineStatus.DISCONNECTED -> {
+                        callTonePlayer.stop()
+                        ringingTimeoutJob?.cancel()
                         if (_state.value.uiStatus == CallUiStatus.CONNECTED) {
                             _state.update { it.copy(uiStatus = CallUiStatus.ENDED) }
                         }
                     }
                     CallEngineStatus.ERROR -> {
+                        callTonePlayer.stop()
                         ringingTimeoutJob?.cancel()
                         durationJob?.cancel()
                         _state.update {
@@ -96,6 +110,37 @@ class CallViewModel(
                         }
                     }
                     else -> {}
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            callEngine.hasRemoteParticipant.collect { hasRemote ->
+                if (hasRemote) {
+                    // Đối tác đã bấm nhận cuộc gọi và kết nối vào phòng!
+                    ringingTimeoutJob?.cancel()
+                    callTonePlayer.stop()
+                    if (_state.value.uiStatus != CallUiStatus.CONNECTED) {
+                        _state.update {
+                            it.copy(
+                                uiStatus = CallUiStatus.CONNECTED,
+                                errorMessage = null
+                            )
+                        }
+                        startDurationTimer()
+                    }
+                } else {
+                    // Nếu cuộc gọi đang CONNECTED mà đối tác rời phòng -> kết thúc
+                    if (_state.value.uiStatus == CallUiStatus.CONNECTED) {
+                        durationJob?.cancel()
+                        callTonePlayer.stop()
+                        _state.update {
+                            it.copy(
+                                uiStatus = CallUiStatus.ENDED,
+                                errorMessage = "Đối tác đã rời cuộc gọi."
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -136,6 +181,21 @@ class CallViewModel(
         }
 
         viewModelScope.launch {
+            callEngine.isMicPublished.collect { published ->
+                _state.update { it.copy(isMicPublished = published) }
+            }
+        }
+
+        viewModelScope.launch {
+            callEngine.errorMessage.collect { errorMsg ->
+                if (errorMsg != null) {
+                    _state.update { it.copy(errorMessage = errorMsg) }
+                    _effect.send(CallSideEffect.ShowSnackbar(errorMsg))
+                }
+            }
+        }
+
+        viewModelScope.launch {
             var wasInterrupted = false
             callEngine.isInterruptedBySystemCall.collect { interrupted ->
                 _state.update { it.copy(isInterruptedBySystemCall = interrupted) }
@@ -156,6 +216,7 @@ class CallViewModel(
             is CallIntent.ToggleSpeaker -> toggleSpeaker()
             is CallIntent.SelectAudioDevice -> selectAudioDevice(intent.device)
             is CallIntent.BluetoothPermissionResult -> handleBluetoothPermissionResult(intent.granted)
+            is CallIntent.RecordAudioPermissionResult -> handleRecordAudioPermissionResult(intent.granted)
             is CallIntent.EndCall -> endCall()
             is CallIntent.Retry -> retryCall()
         }
@@ -181,6 +242,19 @@ class CallViewModel(
         } else {
             viewModelScope.launch {
                 _effect.send(CallSideEffect.ShowSnackbar("Quyền Bluetooth bị từ chối. Tiếp tục cuộc gọi bằng loa."))
+            }
+        }
+    }
+
+    private fun handleRecordAudioPermissionResult(granted: Boolean) {
+        if (granted) {
+            _state.update { it.copy(errorMessage = null) }
+            callEngine.enableMicrophone()
+        } else {
+            val errMsg = "Quyền micro bị từ chối. Không thể truyền âm thanh."
+            _state.update { it.copy(errorMessage = errMsg) }
+            viewModelScope.launch {
+                _effect.send(CallSideEffect.ShowSnackbar(errMsg))
             }
         }
     }
@@ -323,6 +397,8 @@ class CallViewModel(
     }
 
     private fun handleCallError(error: Throwable) {
+        callTonePlayer.stop()
+        ringingTimeoutJob?.cancel()
         val message = when (error) {
             is ApiException -> {
                 when (error.code) {
@@ -363,15 +439,22 @@ class CallViewModel(
     private fun startRingingTimeout() {
         ringingTimeoutJob?.cancel()
         ringingTimeoutJob = viewModelScope.launch {
-            delay(30_000L) // 30s timeout per BUSINESS_RULES §11
+            delay(60_000L) // 1 phút (60s) timeout theo yêu cầu người dùng
             if (_state.value.uiStatus == CallUiStatus.RINGING || _state.value.uiStatus == CallUiStatus.DIALING) {
+                callTonePlayer.stop()
                 callEngine.disconnect()
                 _state.update {
                     it.copy(
                         uiStatus = CallUiStatus.MISSED,
-                        errorMessage = "Người nhận không trả lời (Quá 30 giây)",
+                        errorMessage = "Người nhận không trả lời (Quá 1 phút)",
                         canRetry = true
                     )
+                }
+                val sid = _state.value.sessionId
+                if (!sid.isNullOrBlank()) {
+                    runCatching {
+                        callRepository.endCall(sid)
+                    }
                 }
             }
         }
@@ -406,6 +489,7 @@ class CallViewModel(
     }
 
     private fun endCall() {
+        callTonePlayer.stop()
         ringingTimeoutJob?.cancel()
         durationJob?.cancel()
         callEngine.disconnect()
@@ -428,6 +512,7 @@ class CallViewModel(
     }
 
     private fun retryCall() {
+        callTonePlayer.stop()
         if (isIncomingArg && sessionIdArg.isNotBlank()) {
             loadExchangeAndJoinCall(_state.value.exchangeId, sessionIdArg, _state.value.isVideo)
         } else {
@@ -437,6 +522,7 @@ class CallViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        callTonePlayer.stop()
         ringingTimeoutJob?.cancel()
         durationJob?.cancel()
         callEngine.disconnect()

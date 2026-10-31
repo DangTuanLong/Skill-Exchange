@@ -50,6 +50,15 @@ class LiveKitCallEngine(
     private val _isInterruptedBySystemCall = MutableStateFlow(false)
     override val isInterruptedBySystemCall: StateFlow<Boolean> = _isInterruptedBySystemCall.asStateFlow()
 
+    private val _isMicPublished = MutableStateFlow(false)
+    override val isMicPublished: StateFlow<Boolean> = _isMicPublished.asStateFlow()
+
+    private val _hasRemoteParticipant = MutableStateFlow(false)
+    override val hasRemoteParticipant: StateFlow<Boolean> = _hasRemoteParticipant.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    override val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     private var room: Room? = null
     private var eventsJob: Job? = null
     private var audioSwitchHandler: AudioSwitchHandler? = null
@@ -77,21 +86,27 @@ class LiveKitCallEngine(
         }
 
         // Reset trạng thái ở đầu connect() (TASK-080 Mục 3)
+        // Trên bản DEBUG: Mặc định bật loa ngoài (SPEAKER) để máy ảo/dev phát qua loa máy tính host
+        val defaultSpeaker = isVideo || com.skillexchange.app.BuildConfig.DEBUG
         _isMuted.value = false
-        _isSpeakerphoneOn.value = isVideo
-        _selectedAudioDevice.value = if (isVideo) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
+        _isMicPublished.value = false
+        _hasRemoteParticipant.value = false
+        _errorMessage.value = null
+        _isSpeakerphoneOn.value = defaultSpeaker
+        _selectedAudioDevice.value = if (defaultSpeaker) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
         _isMutedByAudioFocus.value = false
         _isInterruptedBySystemCall.value = false
         _status.value = CallEngineStatus.CONNECTING
 
         coroutineScope.launch {
             try {
-                // Khởi tạo AudioRoutingManager theo loại cuộc gọi (thoại = earpiece, video = speaker)
+                // Khởi tạo AudioRoutingManager theo loại cuộc gọi (DEBUG = speaker, Release thoại = earpiece)
                 checkInitialBluetoothPermission()
                 audioRoutingManager = AudioRoutingManager(
                     isVideo = isVideo,
                     initialAvailableDevices = _availableAudioDevices.value,
-                    initialHasBluetoothPermission = audioRoutingManager.hasBluetoothPermission.value
+                    initialHasBluetoothPermission = audioRoutingManager.hasBluetoothPermission.value,
+                    defaultToSpeaker = com.skillexchange.app.BuildConfig.DEBUG
                 )
                 _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
                 _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
@@ -100,7 +115,7 @@ class LiveKitCallEngine(
                 val (handler, currentRoom) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val h = AudioSwitchHandler(context.applicationContext).apply {
                         loggingEnabled = true
-                        preferredDeviceList = if (isVideo) {
+                        preferredDeviceList = if (isVideo || com.skillexchange.app.BuildConfig.DEBUG) {
                             listOf(
                                 AudioDevice.BluetoothHeadset::class.java,
                                 AudioDevice.WiredHeadset::class.java,
@@ -163,14 +178,33 @@ class LiveKitCallEngine(
                     currentRoom.events.events.collect { event ->
                         when (event) {
                             is RoomEvent.Connected -> {
-                                Log.d(tag, "LiveKit Room đã kết nối thành công: ${event.room.name}")
+                                val hasRemote = currentRoom.remoteParticipants.isNotEmpty()
+                                _hasRemoteParticipant.value = hasRemote
+                                Log.d(tag, "LiveKit Room đã kết nối thành công: ${event.room.name}. Remote participants: ${currentRoom.remoteParticipants.size}. Thiết bị đang chọn: ${_selectedAudioDevice.value.displayName}")
                                 _status.value = CallEngineStatus.CONNECTED
                                 // Mặc định bật mic theo trạng thái mute hiện tại
                                 launch {
-                                    runCatching {
+                                    try {
                                         currentRoom.localParticipant.setMicrophoneEnabled(!_isMuted.value)
+                                        _isMicPublished.value = !_isMuted.value
+                                        _errorMessage.value = null
+                                        Log.d(tag, "Kích hoạt micro tại RoomEvent.Connected thành công: published=${!_isMuted.value}")
+                                    } catch (e: Exception) {
+                                        val errMsg = "Không thể kích hoạt micro khi vào phòng: ${e.localizedMessage ?: e.message}"
+                                        Log.e(tag, errMsg, e)
+                                        _errorMessage.value = errMsg
+                                        _isMicPublished.value = false
                                     }
                                 }
+                            }
+                            is RoomEvent.ParticipantConnected -> {
+                                Log.d(tag, "Đối tác đã tham gia phòng LiveKit: ${event.participant.identity}")
+                                _hasRemoteParticipant.value = true
+                            }
+                            is RoomEvent.ParticipantDisconnected -> {
+                                val remaining = currentRoom.remoteParticipants.isNotEmpty()
+                                Log.d(tag, "Đối tác đã rời phòng LiveKit: ${event.participant.identity}. Còn lại: ${currentRoom.remoteParticipants.size}")
+                                _hasRemoteParticipant.value = remaining
                             }
                             is RoomEvent.Disconnected -> {
                                 Log.d(tag, "LiveKit Room đã ngắt kết nối. Error: ${event.error?.message}")
@@ -210,8 +244,11 @@ class LiveKitCallEngine(
 
         // Reset trạng thái trong disconnect() (TASK-080 Mục 3)
         _isMuted.value = false
+        _isMicPublished.value = false
+        _hasRemoteParticipant.value = false
+        _errorMessage.value = null
         _isSpeakerphoneOn.value = false
-        _selectedAudioDevice.value = AppAudioDevice.EARPIECE
+        _selectedAudioDevice.value = if (com.skillexchange.app.BuildConfig.DEBUG) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
         _isMutedByAudioFocus.value = false
         _isInterruptedBySystemCall.value = false
 
@@ -228,11 +265,46 @@ class LiveKitCallEngine(
         }
     }
 
+    override fun enableMicrophone() {
+        _isMuted.value = false
+        coroutineScope.launch {
+            try {
+                val current = room?.localParticipant
+                if (current != null) {
+                    current.setMicrophoneEnabled(true)
+                    _isMicPublished.value = true
+                    _errorMessage.value = null
+                    Log.d(tag, "Kích hoạt micro thành công sau khi cấp quyền. Mic published: true, Thiết bị: ${_selectedAudioDevice.value.displayName}")
+                } else {
+                    Log.w(tag, "enableMicrophone gọi khi localParticipant chưa sẵn sàng (đang kết nối). Sẽ tự kích hoạt ở RoomEvent.Connected.")
+                }
+            } catch (e: Exception) {
+                val errMsg = "Không thể kích hoạt micro: ${e.localizedMessage ?: e.message}"
+                Log.e(tag, errMsg, e)
+                _errorMessage.value = errMsg
+                _isMicPublished.value = false
+            }
+        }
+    }
+
     override fun setMicrophoneMuted(muted: Boolean) {
         _isMuted.value = muted
         coroutineScope.launch {
-            runCatching {
-                room?.localParticipant?.setMicrophoneEnabled(!muted)
+            try {
+                val current = room?.localParticipant
+                if (current != null) {
+                    current.setMicrophoneEnabled(!muted)
+                    _isMicPublished.value = !muted
+                    _errorMessage.value = null
+                    Log.d(tag, "setMicrophoneMuted($muted) thành công. Published: ${!muted}, Thiết bị: ${_selectedAudioDevice.value.displayName}")
+                }
+            } catch (e: Exception) {
+                val errMsg = "Lỗi khi thay đổi trạng thái micro: ${e.localizedMessage ?: e.message}"
+                Log.e(tag, errMsg, e)
+                _errorMessage.value = errMsg
+                if (!muted) {
+                    _isMicPublished.value = false
+                }
             }
         }
     }
@@ -254,6 +326,7 @@ class LiveKitCallEngine(
                     handler.selectDevice(targetAudioDevice)
                 }
             }
+            Log.d(tag, "Đã chuyển thiết bị âm thanh sang: ${device.displayName}. Mic published: ${_isMicPublished.value}")
         }
         return success
     }

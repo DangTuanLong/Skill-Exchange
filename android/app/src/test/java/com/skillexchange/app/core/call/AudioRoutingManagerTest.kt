@@ -16,6 +16,17 @@ class AudioRoutingManagerTest {
     }
 
     @Test
+    fun testDefaultDevice_VoiceCall_WithDefaultToSpeaker_DefaultsToSpeaker() {
+        val manager = AudioRoutingManager(
+            isVideo = false,
+            initialAvailableDevices = setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER),
+            defaultToSpeaker = true
+        )
+
+        assertEquals(AppAudioDevice.SPEAKER, manager.selectedDevice.value)
+    }
+
+    @Test
     fun testDefaultDevice_VideoCall_DefaultsToSpeaker() {
         val manager = AudioRoutingManager(
             isVideo = true,

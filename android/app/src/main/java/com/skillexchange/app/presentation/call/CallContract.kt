@@ -13,6 +13,7 @@ data class CallState(
     val uiStatus: CallUiStatus = CallUiStatus.IDLE,
     val durationSeconds: Int = 0,
     val isMuted: Boolean = false,
+    val isMicPublished: Boolean = false,
     val isSpeakerOn: Boolean = false,
     val selectedAudioDevice: AppAudioDevice = AppAudioDevice.EARPIECE,
     val availableAudioDevices: Set<AppAudioDevice> = setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER),
@@ -36,6 +37,7 @@ sealed interface CallIntent {
     data object ToggleSpeaker : CallIntent
     data class SelectAudioDevice(val device: AppAudioDevice) : CallIntent
     data class BluetoothPermissionResult(val granted: Boolean) : CallIntent
+    data class RecordAudioPermissionResult(val granted: Boolean) : CallIntent
     data object EndCall : CallIntent
     data object Retry : CallIntent
 }

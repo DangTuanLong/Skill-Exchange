@@ -51,6 +51,7 @@ fun CallScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        viewModel.onIntent(CallIntent.RecordAudioPermissionResult(isGranted))
         if (!isGranted) {
             showPermissionRationaleDialog = true
         }
@@ -69,6 +70,8 @@ fun CallScreen(
         ) == PermissionChecker.PERMISSION_GRANTED
         if (!hasRecordAudio) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            viewModel.onIntent(CallIntent.RecordAudioPermissionResult(true))
         }
     }
 
@@ -131,8 +134,11 @@ fun CallScreen(
                     skillName = state.skillName,
                     uiStatus = state.uiStatus,
                     formattedDuration = state.formattedDuration,
+                    sessionId = state.sessionId,
                     isInterruptedBySystemCall = state.isInterruptedBySystemCall,
-                    isMutedByAudioFocus = state.isMutedByAudioFocus
+                    isMutedByAudioFocus = state.isMutedByAudioFocus,
+                    isMicPublished = state.isMicPublished,
+                    selectedAudioDevice = state.selectedAudioDevice
                 )
 
                 // 2. Avatar lớn ở trung tâm (kèm hiệu ứng sóng âm khi kết nối)
@@ -253,8 +259,11 @@ private fun CallHeaderSection(
     skillName: String,
     uiStatus: CallUiStatus,
     formattedDuration: String,
+    sessionId: String? = null,
     isInterruptedBySystemCall: Boolean,
     isMutedByAudioFocus: Boolean,
+    isMicPublished: Boolean = false,
+    selectedAudioDevice: AppAudioDevice = AppAudioDevice.SPEAKER,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -321,6 +330,34 @@ private fun CallHeaderSection(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
+        }
+
+        if (com.skillexchange.app.BuildConfig.DEBUG) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                color = Color(0x2238BDF8),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    if (!sessionId.isNullOrBlank()) {
+                        Text(
+                            text = "Session ID: $sessionId",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                    }
+                    Text(
+                        text = "Mic: ${if (isMicPublished) "Đã phát (Published)" else "Chưa phát"} • ${selectedAudioDevice.displayName}",
+                        color = if (isMicPublished) Color(0xFF4ADE80) else Color(0xFFF87171),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
 
         if (isInterruptedBySystemCall) {

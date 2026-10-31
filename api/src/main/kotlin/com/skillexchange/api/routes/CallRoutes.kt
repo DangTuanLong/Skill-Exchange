@@ -14,6 +14,9 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("CallRoutes")
 
 fun Route.callRoutes(callService: CallService) {
 
@@ -38,6 +41,7 @@ fun Route.callRoutes(callService: CallService) {
 
                 try {
                     val result = callService.initiateCall(callerUserId, req)
+                    logger.info("📞 [CALL] Cuộc gọi khởi tạo thành công: sessionId=${result.sessionId}, room=${result.roomName}")
                     call.respond(HttpStatusCode.OK, ApiSuccess(data = result))
                 } catch (e: ValidationException) {
                     call.respond(

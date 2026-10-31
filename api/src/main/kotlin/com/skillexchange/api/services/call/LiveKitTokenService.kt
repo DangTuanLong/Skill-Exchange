@@ -2,6 +2,7 @@ package com.skillexchange.api.services.call
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.skillexchange.api.config.EnvLoader
 import com.skillexchange.api.models.ErrorCodes
 import java.security.SecureRandom
 import java.util.Date
@@ -16,9 +17,9 @@ open class LiveKitConfigException(
  * Tài liệu tham khảo chính thức: https://docs.livekit.io/home/get-started/authentication/
  */
 open class LiveKitTokenService(
-    private val serverUrl: String? = System.getenv("LIVEKIT_URL"),
-    private val apiKey: String? = System.getenv("LIVEKIT_API_KEY"),
-    private val apiSecret: String? = System.getenv("LIVEKIT_API_SECRET"),
+    private val serverUrl: String? = EnvLoader.get("LIVEKIT_URL").takeIf { it.isNotBlank() },
+    private val apiKey: String? = EnvLoader.get("LIVEKIT_API_KEY").takeIf { it.isNotBlank() },
+    private val apiSecret: String? = EnvLoader.get("LIVEKIT_API_SECRET").takeIf { it.isNotBlank() },
     private val secureRandom: SecureRandom = SecureRandom()
 ) {
 

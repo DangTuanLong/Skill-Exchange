@@ -48,7 +48,7 @@ foreach ($name in @($Avd1, $Avd2)) {
 Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Khoi dong $Avd1 (port $Port1, gpu=$Gpu1)..." -ForegroundColor Yellow
 $launch1 = Get-Date
 $proc1 = Start-Process -FilePath $emu `
-    -ArgumentList "-avd $Avd1 -port $Port1 -no-boot-anim -no-audio -dns-server 8.8.8.8,8.8.4.4 -gpu $Gpu1" `
+    -ArgumentList "-avd $Avd1 -port $Port1 -no-boot-anim -dns-server 8.8.8.8,8.8.4.4 -gpu $Gpu1" `
     -PassThru -WindowStyle Normal
 
 Start-Sleep -Seconds 6
@@ -56,7 +56,7 @@ Start-Sleep -Seconds 6
 Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Khoi dong $Avd2 (port $Port2, gpu=$Gpu2)..." -ForegroundColor Yellow
 $launch2 = Get-Date
 $proc2 = Start-Process -FilePath $emu `
-    -ArgumentList "-avd $Avd2 -port $Port2 -no-boot-anim -no-audio -dns-server 8.8.8.8,8.8.4.4 -gpu $Gpu2" `
+    -ArgumentList "-avd $Avd2 -port $Port2 -no-boot-anim -dns-server 8.8.8.8,8.8.4.4 -gpu $Gpu2" `
     -PassThru -WindowStyle Normal
 
 Write-Host ""

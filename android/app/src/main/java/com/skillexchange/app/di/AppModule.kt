@@ -157,6 +157,7 @@ val appModule = module {
 
     // ── In-app Calling (DEC-026, TASK-074, TASK-075) ─────────────────
     single<com.skillexchange.app.core.call.CallEngine> { com.skillexchange.app.core.call.LiveKitCallEngine(androidContext()) }
+    single<com.skillexchange.app.core.call.CallTonePlayer> { com.skillexchange.app.core.call.AndroidCallTonePlayer() }
     single { com.skillexchange.app.core.call.InAppCallManager(callRepository = get()) }
     single { com.skillexchange.app.data.remote.call.CallRemoteDataSource(get()) }
     single<com.skillexchange.app.domain.repository.ICallRepository> {
