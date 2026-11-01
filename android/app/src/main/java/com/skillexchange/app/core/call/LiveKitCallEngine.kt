@@ -56,6 +56,18 @@ class LiveKitCallEngine(
     private val _hasRemoteParticipant = MutableStateFlow(false)
     override val hasRemoteParticipant: StateFlow<Boolean> = _hasRemoteParticipant.asStateFlow()
 
+    private val _isCameraEnabled = MutableStateFlow(false)
+    override val isCameraEnabled: StateFlow<Boolean> = _isCameraEnabled.asStateFlow()
+
+    private val _isFrontCamera = MutableStateFlow(true)
+    override val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
+
+    private val _localVideoTrack = MutableStateFlow<io.livekit.android.room.track.VideoTrack?>(null)
+    override val localVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _remoteVideoTrack = MutableStateFlow<io.livekit.android.room.track.VideoTrack?>(null)
+    override val remoteVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = _remoteVideoTrack.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     override val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -91,6 +103,10 @@ class LiveKitCallEngine(
         _isMuted.value = false
         _isMicPublished.value = false
         _hasRemoteParticipant.value = false
+        _isCameraEnabled.value = isVideo
+        _isFrontCamera.value = true
+        _localVideoTrack.value = null
+        _remoteVideoTrack.value = null
         _errorMessage.value = null
         _isSpeakerphoneOn.value = defaultSpeaker
         _selectedAudioDevice.value = if (defaultSpeaker) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
@@ -182,6 +198,7 @@ class LiveKitCallEngine(
                                 _hasRemoteParticipant.value = hasRemote
                                 Log.d(tag, "LiveKit Room đã kết nối thành công: ${event.room.name}. Remote participants: ${currentRoom.remoteParticipants.size}. Thiết bị đang chọn: ${_selectedAudioDevice.value.displayName}")
                                 _status.value = CallEngineStatus.CONNECTED
+
                                 // Mặc định bật mic theo trạng thái mute hiện tại
                                 launch {
                                     try {
@@ -196,15 +213,70 @@ class LiveKitCallEngine(
                                         _isMicPublished.value = false
                                     }
                                 }
+
+                                // Kích hoạt camera nếu là cuộc gọi video
+                                if (isVideo) {
+                                    launch {
+                                        try {
+                                            currentRoom.localParticipant.setCameraEnabled(true)
+                                            _isCameraEnabled.value = true
+                                            val pub = currentRoom.localParticipant.getTrackPublication(io.livekit.android.room.track.Track.Source.CAMERA)
+                                            _localVideoTrack.value = pub?.track as? io.livekit.android.room.track.VideoTrack
+                                            Log.d(tag, "Camera cục bộ đã kích hoạt thành công: track=${_localVideoTrack.value}")
+                                        } catch (e: Exception) {
+                                            val errMsg = "Không thể kích hoạt Camera: ${e.localizedMessage ?: e.message}"
+                                            Log.e(tag, errMsg, e)
+                                            _errorMessage.value = errMsg
+                                            _isCameraEnabled.value = false
+                                        }
+                                    }
+                                }
+
+                                // Kiểm tra nếu đối tác đã có sẵn video track
+                                currentRoom.remoteParticipants.values.firstOrNull()?.let { remote ->
+                                    val videoPub = remote.getTrackPublication(io.livekit.android.room.track.Track.Source.CAMERA)
+                                    (videoPub?.track as? io.livekit.android.room.track.VideoTrack)?.let { vt ->
+                                        _remoteVideoTrack.value = vt
+                                    }
+                                }
                             }
                             is RoomEvent.ParticipantConnected -> {
                                 Log.d(tag, "Đối tác đã tham gia phòng LiveKit: ${event.participant.identity}")
                                 _hasRemoteParticipant.value = true
+                                val videoPub = event.participant.getTrackPublication(io.livekit.android.room.track.Track.Source.CAMERA)
+                                (videoPub?.track as? io.livekit.android.room.track.VideoTrack)?.let { vt ->
+                                    _remoteVideoTrack.value = vt
+                                }
                             }
                             is RoomEvent.ParticipantDisconnected -> {
                                 val remaining = currentRoom.remoteParticipants.isNotEmpty()
                                 Log.d(tag, "Đối tác đã rời phòng LiveKit: ${event.participant.identity}. Còn lại: ${currentRoom.remoteParticipants.size}")
                                 _hasRemoteParticipant.value = remaining
+                                if (!remaining) {
+                                    _remoteVideoTrack.value = null
+                                }
+                            }
+                            is RoomEvent.TrackSubscribed -> {
+                                if (event.track is io.livekit.android.room.track.VideoTrack) {
+                                    Log.d(tag, "Đã nhận video track từ đối tác: ${event.participant.identity}")
+                                    _remoteVideoTrack.value = event.track as io.livekit.android.room.track.VideoTrack
+                                }
+                            }
+                            is RoomEvent.TrackUnsubscribed -> {
+                                if (event.track == _remoteVideoTrack.value) {
+                                    Log.d(tag, "Đối tác đã tắt/hủy video track")
+                                    _remoteVideoTrack.value = null
+                                }
+                            }
+                            is RoomEvent.TrackPublished -> {
+                                if (event.publication.source == io.livekit.android.room.track.Track.Source.CAMERA) {
+                                    _localVideoTrack.value = event.publication.track as? io.livekit.android.room.track.VideoTrack
+                                }
+                            }
+                            is RoomEvent.TrackUnpublished -> {
+                                if (event.publication.source == io.livekit.android.room.track.Track.Source.CAMERA) {
+                                    _localVideoTrack.value = null
+                                }
                             }
                             is RoomEvent.Disconnected -> {
                                 Log.d(tag, "LiveKit Room đã ngắt kết nối. Error: ${event.error?.message}")
@@ -246,6 +318,10 @@ class LiveKitCallEngine(
         _isMuted.value = false
         _isMicPublished.value = false
         _hasRemoteParticipant.value = false
+        _isCameraEnabled.value = false
+        _isFrontCamera.value = true
+        _localVideoTrack.value = null
+        _remoteVideoTrack.value = null
         _errorMessage.value = null
         _isSpeakerphoneOn.value = false
         _selectedAudioDevice.value = if (com.skillexchange.app.BuildConfig.DEBUG) AppAudioDevice.SPEAKER else AppAudioDevice.EARPIECE
@@ -333,6 +409,57 @@ class LiveKitCallEngine(
 
     override fun setBluetoothPermission(granted: Boolean) {
         audioRoutingManager.setBluetoothPermission(granted)
+    }
+
+    override fun setCameraEnabled(enabled: Boolean) {
+        _isCameraEnabled.value = enabled
+        coroutineScope.launch {
+            try {
+                val lp = room?.localParticipant
+                if (lp != null) {
+                    lp.setCameraEnabled(enabled)
+                    if (enabled) {
+                        val pub = lp.getTrackPublication(io.livekit.android.room.track.Track.Source.CAMERA)
+                        _localVideoTrack.value = pub?.track as? io.livekit.android.room.track.VideoTrack
+                    } else {
+                        _localVideoTrack.value = null
+                    }
+                    Log.d(tag, "setCameraEnabled($enabled) thành công. Track=${_localVideoTrack.value}")
+                }
+            } catch (e: Exception) {
+                val errMsg = "Lỗi khi bật/tắt camera: ${e.localizedMessage ?: e.message}"
+                Log.e(tag, errMsg, e)
+                _errorMessage.value = errMsg
+                _isCameraEnabled.value = !enabled
+            }
+        }
+    }
+
+    override fun flipCamera() {
+        coroutineScope.launch {
+            try {
+                val lp = room?.localParticipant
+                val localTrack = lp?.getTrackPublication(io.livekit.android.room.track.Track.Source.CAMERA)?.track as? io.livekit.android.room.track.LocalVideoTrack
+                if (localTrack != null) {
+                    localTrack.switchCamera()
+                    _isFrontCamera.value = !_isFrontCamera.value
+                    Log.d(tag, "Đã lật camera. Front camera: ${_isFrontCamera.value}")
+                } else {
+                    Log.w(tag, "flipCamera gọi khi localVideoTrack chưa khả dụng")
+                }
+            } catch (e: Exception) {
+                Log.e(tag, "Lỗi khi lật camera: ${e.message}", e)
+                _errorMessage.value = "Không thể chuyển camera: ${e.message}"
+            }
+        }
+    }
+
+    override fun initVideoRenderer(view: io.livekit.android.renderer.SurfaceViewRenderer) {
+        try {
+            room?.initVideoRenderer(view)
+        } catch (e: Exception) {
+            Log.e(tag, "Lỗi khi khởi tạo VideoRenderer: ${e.message}", e)
+        }
     }
 
     private fun AudioDevice.toAppAudioDevice(): AppAudioDevice? {

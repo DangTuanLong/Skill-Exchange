@@ -325,19 +325,19 @@ class CallViewModelTest {
     }
 
     @Test
-    fun testRingingTimeout_Exceeds30Seconds_SetsMissedState() = runTest(testDispatcher) {
+    fun testRingingTimeout_Exceeds60Seconds_SetsMissedState() = runTest(testDispatcher) {
         val fakeEngine = FakeCallEngine(autoConnect = false)
         val viewModel = createViewModel(fakeEngine = fakeEngine)
 
         testScheduler.runCurrent()
         assertEquals(CallUiStatus.RINGING, viewModel.state.value.uiStatus)
 
-        // Advance 31 seconds -> triggers 30s timeout
-        advanceTimeBy(31_000L)
+        // Advance 61 seconds -> triggers 60s timeout (1 phút)
+        advanceTimeBy(61_000L)
         testScheduler.runCurrent()
 
         assertEquals(CallUiStatus.MISSED, viewModel.state.value.uiStatus)
-        assertTrue(viewModel.state.value.errorMessage?.contains("Quá 30 giây") == true)
+        assertTrue(viewModel.state.value.errorMessage?.contains("1 phút") == true)
         assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
     }
 
@@ -618,5 +618,108 @@ class CallViewModelTest {
         assertTrue(viewModel.state.value.errorMessage?.contains("1 phút") == true)
         assertFalse(fakeTone.isPlaying)
         assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
+    }
+
+    @Test
+    fun testToggleCamera_UpdatesEngineAndState() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine, isVideo = true)
+        testScheduler.runCurrent()
+
+        // Ban đầu isVideo = true -> camera bật
+        assertTrue(viewModel.state.value.isCameraEnabled)
+        assertTrue(fakeEngine.isCameraEnabled.value)
+
+        // Bấm tắt camera
+        viewModel.onIntent(CallIntent.ToggleCamera)
+        testScheduler.runCurrent()
+
+        assertFalse(fakeEngine.isCameraEnabled.value)
+        assertFalse(viewModel.state.value.isCameraEnabled)
+
+        // Bấm bật lại camera
+        viewModel.onIntent(CallIntent.ToggleCamera)
+        testScheduler.runCurrent()
+
+        assertTrue(fakeEngine.isCameraEnabled.value)
+        assertTrue(viewModel.state.value.isCameraEnabled)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testFlipCamera_CallsEngineFlip() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine, isVideo = true)
+        testScheduler.runCurrent()
+
+        // Mặc định là camera trước
+        assertTrue(viewModel.state.value.isFrontCamera)
+        assertTrue(fakeEngine.isFrontCamera.value)
+
+        // Lật sang camera sau
+        viewModel.onIntent(CallIntent.FlipCamera)
+        testScheduler.runCurrent()
+
+        assertFalse(fakeEngine.isFrontCamera.value)
+        assertFalse(viewModel.state.value.isFrontCamera)
+
+        // Lật lại camera trước
+        viewModel.onIntent(CallIntent.FlipCamera)
+        testScheduler.runCurrent()
+
+        assertTrue(fakeEngine.isFrontCamera.value)
+        assertTrue(viewModel.state.value.isFrontCamera)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testCameraPermissionDenied_DowngradesToVoiceCallWithSnackbar() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine, isVideo = true)
+        testScheduler.runCurrent()
+
+        var sideEffect: CallSideEffect? = null
+        val job = launch {
+            sideEffect = viewModel.effect.first()
+        }
+
+        viewModel.onIntent(CallIntent.CameraPermissionResult(granted = false))
+        testScheduler.runCurrent()
+
+        assertFalse(viewModel.state.value.isVideo)
+        assertFalse(viewModel.state.value.isCameraEnabled)
+        assertFalse(fakeEngine.isCameraEnabled.value)
+        assertTrue(sideEffect is CallSideEffect.ShowSnackbar)
+        assertTrue((sideEffect as CallSideEffect.ShowSnackbar).message.contains("từ chối"))
+        job.cancel()
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun testTogglePip_TogglesLocalPipMinimizedState() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine, isVideo = true)
+        testScheduler.runCurrent()
+
+        assertFalse(viewModel.state.value.isLocalPipMinimized)
+
+        viewModel.onIntent(CallIntent.TogglePip)
+        testScheduler.runCurrent()
+
+        assertTrue(viewModel.state.value.isLocalPipMinimized)
+
+        viewModel.onIntent(CallIntent.TogglePip)
+        testScheduler.runCurrent()
+
+        assertFalse(viewModel.state.value.isLocalPipMinimized)
+
+        viewModel.onIntent(CallIntent.EndCall)
+        testScheduler.runCurrent()
     }
 }

@@ -34,6 +34,7 @@ import coil3.compose.AsyncImage
 import com.skillexchange.app.core.call.AppAudioDevice
 import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.domain.model.call.CallUiStatus
+import com.skillexchange.app.presentation.call.components.VideoTrackView
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +44,8 @@ fun CallScreen(
     viewModel: CallViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val localVideoTrack by viewModel.localVideoTrack.collectAsState()
+    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
@@ -55,6 +58,12 @@ fun CallScreen(
         if (!isGranted) {
             showPermissionRationaleDialog = true
         }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.onIntent(CallIntent.CameraPermissionResult(isGranted))
     }
 
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
@@ -72,6 +81,20 @@ fun CallScreen(
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             viewModel.onIntent(CallIntent.RecordAudioPermissionResult(true))
+        }
+    }
+
+    LaunchedEffect(state.isVideo) {
+        if (state.isVideo) {
+            val hasCamera = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PermissionChecker.PERMISSION_GRANTED
+            if (!hasCamera) {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            } else {
+                viewModel.onIntent(CallIntent.CameraPermissionResult(true))
+            }
         }
     }
 
@@ -93,6 +116,9 @@ fun CallScreen(
                     } else {
                         viewModel.onIntent(CallIntent.BluetoothPermissionResult(true))
                     }
+                }
+                is CallSideEffect.RequestCameraPermission -> {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 }
                 is CallSideEffect.NavigateBack -> {
                     com.skillexchange.app.core.service.CallForegroundService.stopService(context)
@@ -120,6 +146,29 @@ fun CallScreen(
                     )
                 )
         ) {
+            // Khi là cuộc gọi video và đang kết nối: hiển thị video đối tác toàn màn hình (nếu có track)
+            if (state.isVideo && state.uiStatus == CallUiStatus.CONNECTED && remoteVideoTrack != null) {
+                VideoTrackView(
+                    track = remoteVideoTrack,
+                    onInitRenderer = { viewModel.initVideoRenderer(it) },
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Lớp phủ gradient mỏng để text trên và nút dưới dễ nhìn trên nền video
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xB30F172A),
+                                    Color.Transparent,
+                                    Color(0xCC0F172A)
+                                )
+                            )
+                        )
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -141,12 +190,34 @@ fun CallScreen(
                     selectedAudioDevice = state.selectedAudioDevice
                 )
 
-                // 2. Avatar lớn ở trung tâm (kèm hiệu ứng sóng âm khi kết nối)
-                CallAvatarSection(
-                    partnerAvatar = state.partnerAvatar,
-                    partnerName = state.partnerName,
-                    isConnected = state.uiStatus == CallUiStatus.CONNECTED
-                )
+                // 2. Avatar lớn ở trung tâm (khi không có video từ đối tác)
+                if (!state.isVideo || state.uiStatus != CallUiStatus.CONNECTED || remoteVideoTrack == null) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CallAvatarSection(
+                            partnerAvatar = state.partnerAvatar,
+                            partnerName = state.partnerName,
+                            isConnected = state.uiStatus == CallUiStatus.CONNECTED
+                        )
+                        if (state.isVideo && state.uiStatus == CallUiStatus.CONNECTED && remoteVideoTrack == null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                color = Color(0x33334155),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "Đối tác đang tắt camera",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
 
                 // 3. Thông báo lỗi, nút Thử lại & Điều khiển cuộc gọi
                 CallControlsSection(
@@ -161,8 +232,53 @@ fun CallScreen(
                     onEndCall = { viewModel.onIntent(CallIntent.EndCall) },
                     onToggleSpeaker = { viewModel.onIntent(CallIntent.ToggleSpeaker) },
                     onOpenAudioDeviceSheet = { showAudioDeviceSheet = true },
-                    onRetry = { viewModel.onIntent(CallIntent.Retry) }
+                    onRetry = { viewModel.onIntent(CallIntent.Retry) },
+                    isVideo = state.isVideo,
+                    isCameraEnabled = state.isCameraEnabled,
+                    onToggleCamera = { viewModel.onIntent(CallIntent.ToggleCamera) },
+                    onFlipCamera = { viewModel.onIntent(CallIntent.FlipCamera) }
                 )
+            }
+
+            // 4. Khung hình PiP nổi góc trên hiển thị camera của mình
+            if (state.isVideo && state.isCameraEnabled && localVideoTrack != null && state.uiStatus == CallUiStatus.CONNECTED) {
+                if (!state.isLocalPipMinimized) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 80.dp, end = 16.dp)
+                            .size(width = 100.dp, height = 150.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, Color(0xFF38BDF8), RoundedCornerShape(12.dp))
+                            .clickable { viewModel.onIntent(CallIntent.TogglePip) }
+                    ) {
+                        VideoTrackView(
+                            track = localVideoTrack,
+                            onInitRenderer = { viewModel.initVideoRenderer(it) },
+                            mirror = state.isFrontCamera,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    Surface(
+                        color = Color(0xCC1E293B),
+                        shape = RoundedCornerShape(20.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8)),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 80.dp, end = 16.dp)
+                            .clickable { viewModel.onIntent(CallIntent.TogglePip) }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Videocam, contentDescription = "Mở PiP", tint = Color(0xFF38BDF8), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Xem camera", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
             }
         }
     }
@@ -487,6 +603,10 @@ private fun CallControlsSection(
     onToggleSpeaker: () -> Unit,
     onOpenAudioDeviceSheet: () -> Unit,
     onRetry: () -> Unit,
+    isVideo: Boolean = false,
+    isCameraEnabled: Boolean = false,
+    onToggleCamera: () -> Unit = {},
+    onFlipCamera: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -523,11 +643,11 @@ private fun CallControlsSection(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Nút Tắt/Bật Micro
+            // 1. Nút Tắt/Bật Micro
             IconButton(
                 onClick = onToggleMute,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(if (isVideo) 50.dp else 56.dp)
                     .clip(CircleShape)
                     .background(if (isMuted) Color(0xFFEF4444) else Color(0xFF334155))
             ) {
@@ -535,16 +655,34 @@ private fun CallControlsSection(
                     imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
                     contentDescription = if (isMuted) "Bật micro" else "Tắt micro",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(if (isVideo) 24.dp else 28.dp)
                 )
             }
 
-            // Nút Kết thúc cuộc gọi
+            // 2. Nút Tắt/Bật Camera (chỉ hiện khi cuộc gọi video)
+            if (isVideo) {
+                IconButton(
+                    onClick = onToggleCamera,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(if (!isCameraEnabled) Color(0xFFEF4444) else Color(0xFF334155))
+                ) {
+                    Icon(
+                        imageVector = if (isCameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                        contentDescription = if (isCameraEnabled) "Tắt camera" else "Bật camera",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            // 3. Nút Kết thúc cuộc gọi
             IconButton(
                 onClick = onEndCall,
                 enabled = !isActionLoading,
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(if (isVideo) 64.dp else 72.dp)
                     .clip(CircleShape)
                     .background(Color(0xFFDC2626))
             ) {
@@ -555,12 +693,31 @@ private fun CallControlsSection(
                         imageVector = Icons.Default.CallEnd,
                         contentDescription = "Kết thúc cuộc gọi",
                         tint = Color.White,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(if (isVideo) 32.dp else 36.dp)
                     )
                 }
             }
 
-            // Nút Thiết bị âm thanh
+            // 4. Nút Đổi Camera trước/sau (chỉ hiện khi cuộc gọi video)
+            if (isVideo) {
+                IconButton(
+                    onClick = onFlipCamera,
+                    enabled = isCameraEnabled,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(if (isCameraEnabled) Color(0xFF334155) else Color(0x66334155))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FlipCameraIos,
+                        contentDescription = "Đổi camera",
+                        tint = if (isCameraEnabled) Color.White else Color(0x88FFFFFF),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            // 5. Nút Thiết bị âm thanh
             val audioIcon = when (selectedAudioDevice) {
                 AppAudioDevice.SPEAKER -> Icons.Default.VolumeUp
                 AppAudioDevice.EARPIECE -> Icons.Default.PhoneInTalk
@@ -578,7 +735,7 @@ private fun CallControlsSection(
                     }
                 },
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(if (isVideo) 50.dp else 56.dp)
                     .clip(CircleShape)
                     .background(if (isAudioHighlight) Color(0xFF38BDF8) else Color(0xFF334155))
             ) {
@@ -586,7 +743,7 @@ private fun CallControlsSection(
                     imageVector = audioIcon,
                     contentDescription = selectedAudioDevice.displayName,
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(if (isVideo) 24.dp else 28.dp)
                 )
             }
         }

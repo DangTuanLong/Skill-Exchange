@@ -191,14 +191,22 @@ class CallForegroundService : Service() {
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
+        val hasCamera = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                // Trên Android 14+ (API 34+): Chỉ thêm MICROPHONE khi quyền RECORD_AUDIO đã được cấp
+                // Trên Android 14+ (API 34+): Chỉ thêm MICROPHONE/CAMERA khi quyền tương ứng đã được cấp
+                var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
                 if (hasRecordAudio) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                } else {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 }
+                if (callType.equals("VIDEO", ignoreCase = true) && hasCamera) {
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                }
+                types
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
             }

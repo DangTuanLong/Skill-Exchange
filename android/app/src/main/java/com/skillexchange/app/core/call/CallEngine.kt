@@ -20,6 +20,10 @@ interface CallEngine {
     val isMutedByAudioFocus: StateFlow<Boolean>
     val isInterruptedBySystemCall: StateFlow<Boolean>
     val isMicPublished: StateFlow<Boolean>
+    val isCameraEnabled: StateFlow<Boolean>
+    val isFrontCamera: StateFlow<Boolean>
+    val localVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?>
+    val remoteVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?>
     val errorMessage: StateFlow<String?>
 
     fun connect(url: String, roomName: String, token: String, isVideo: Boolean = false)
@@ -29,4 +33,7 @@ interface CallEngine {
     fun setSpeakerphoneEnabled(enabled: Boolean)
     fun selectAudioDevice(device: AppAudioDevice): Boolean
     fun setBluetoothPermission(granted: Boolean)
+    fun setCameraEnabled(enabled: Boolean)
+    fun flipCamera()
+    fun initVideoRenderer(view: io.livekit.android.renderer.SurfaceViewRenderer)
 }

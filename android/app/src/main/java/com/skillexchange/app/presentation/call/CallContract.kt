@@ -14,6 +14,9 @@ data class CallState(
     val durationSeconds: Int = 0,
     val isMuted: Boolean = false,
     val isMicPublished: Boolean = false,
+    val isCameraEnabled: Boolean = false,
+    val isFrontCamera: Boolean = true,
+    val isLocalPipMinimized: Boolean = false,
     val isSpeakerOn: Boolean = false,
     val selectedAudioDevice: AppAudioDevice = AppAudioDevice.EARPIECE,
     val availableAudioDevices: Set<AppAudioDevice> = setOf(AppAudioDevice.EARPIECE, AppAudioDevice.SPEAKER),
@@ -38,6 +41,10 @@ sealed interface CallIntent {
     data class SelectAudioDevice(val device: AppAudioDevice) : CallIntent
     data class BluetoothPermissionResult(val granted: Boolean) : CallIntent
     data class RecordAudioPermissionResult(val granted: Boolean) : CallIntent
+    data object ToggleCamera : CallIntent
+    data object FlipCamera : CallIntent
+    data class CameraPermissionResult(val granted: Boolean) : CallIntent
+    data object TogglePip : CallIntent
     data object EndCall : CallIntent
     data object Retry : CallIntent
 }
@@ -45,5 +52,6 @@ sealed interface CallIntent {
 sealed interface CallSideEffect {
     data class ShowSnackbar(val message: String) : CallSideEffect
     data object RequestBluetoothPermission : CallSideEffect
+    data object RequestCameraPermission : CallSideEffect
     data object NavigateBack : CallSideEffect
 }

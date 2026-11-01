@@ -36,6 +36,18 @@ class FakeCallEngine(
     private val _hasRemoteParticipant = MutableStateFlow(false)
     override val hasRemoteParticipant: StateFlow<Boolean> = _hasRemoteParticipant.asStateFlow()
 
+    private val _isCameraEnabled = MutableStateFlow(false)
+    override val isCameraEnabled: StateFlow<Boolean> = _isCameraEnabled.asStateFlow()
+
+    private val _isFrontCamera = MutableStateFlow(true)
+    override val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
+
+    private val _localVideoTrack = MutableStateFlow<io.livekit.android.room.track.VideoTrack?>(null)
+    override val localVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _remoteVideoTrack = MutableStateFlow<io.livekit.android.room.track.VideoTrack?>(null)
+    override val remoteVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = _remoteVideoTrack.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     override val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -62,6 +74,8 @@ class FakeCallEngine(
         _isMutedByAudioFocus.value = false
         _isInterruptedBySystemCall.value = false
         _isMicPublished.value = true
+        _isCameraEnabled.value = isVideo
+        _isFrontCamera.value = true
         _errorMessage.value = null
         audioRoutingManager = AudioRoutingManager(
             isVideo = isVideo,
@@ -86,6 +100,10 @@ class FakeCallEngine(
         _isInterruptedBySystemCall.value = false
         _isMicPublished.value = false
         _hasRemoteParticipant.value = false
+        _isCameraEnabled.value = false
+        _isFrontCamera.value = true
+        _localVideoTrack.value = null
+        _remoteVideoTrack.value = null
         _errorMessage.value = null
     }
 
@@ -119,6 +137,18 @@ class FakeCallEngine(
         audioRoutingManager.setBluetoothPermission(granted)
         _selectedAudioDevice.value = audioRoutingManager.selectedDevice.value
         _isSpeakerphoneOn.value = (_selectedAudioDevice.value == AppAudioDevice.SPEAKER)
+    }
+
+    override fun setCameraEnabled(enabled: Boolean) {
+        _isCameraEnabled.value = enabled
+    }
+
+    override fun flipCamera() {
+        _isFrontCamera.value = !_isFrontCamera.value
+    }
+
+    override fun initVideoRenderer(view: io.livekit.android.renderer.SurfaceViewRenderer) {
+        // No-op trong JVM test
     }
 
     fun simulateStatus(newStatus: CallEngineStatus) {

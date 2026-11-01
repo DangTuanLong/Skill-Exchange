@@ -51,6 +51,10 @@ class CallViewModel(
     )
     val state: StateFlow<CallState> = _state.asStateFlow()
 
+    val localVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = callEngine.localVideoTrack
+    val remoteVideoTrack: StateFlow<io.livekit.android.room.track.VideoTrack?> = callEngine.remoteVideoTrack
+    fun initVideoRenderer(view: io.livekit.android.renderer.SurfaceViewRenderer) = callEngine.initVideoRenderer(view)
+
     private val _effect = Channel<CallSideEffect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
 
@@ -187,6 +191,18 @@ class CallViewModel(
         }
 
         viewModelScope.launch {
+            callEngine.isCameraEnabled.collect { enabled ->
+                _state.update { it.copy(isCameraEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            callEngine.isFrontCamera.collect { isFront ->
+                _state.update { it.copy(isFrontCamera = isFront) }
+            }
+        }
+
+        viewModelScope.launch {
             callEngine.errorMessage.collect { errorMsg ->
                 if (errorMsg != null) {
                     _state.update { it.copy(errorMessage = errorMsg) }
@@ -217,6 +233,10 @@ class CallViewModel(
             is CallIntent.SelectAudioDevice -> selectAudioDevice(intent.device)
             is CallIntent.BluetoothPermissionResult -> handleBluetoothPermissionResult(intent.granted)
             is CallIntent.RecordAudioPermissionResult -> handleRecordAudioPermissionResult(intent.granted)
+            is CallIntent.ToggleCamera -> toggleCamera()
+            is CallIntent.FlipCamera -> flipCamera()
+            is CallIntent.CameraPermissionResult -> handleCameraPermissionResult(intent.granted)
+            is CallIntent.TogglePip -> togglePip()
             is CallIntent.EndCall -> endCall()
             is CallIntent.Retry -> retryCall()
         }
@@ -255,6 +275,32 @@ class CallViewModel(
             _state.update { it.copy(errorMessage = errMsg) }
             viewModelScope.launch {
                 _effect.send(CallSideEffect.ShowSnackbar(errMsg))
+            }
+        }
+    }
+
+    private fun toggleCamera() {
+        val newCameraState = !_state.value.isCameraEnabled
+        callEngine.setCameraEnabled(newCameraState)
+    }
+
+    private fun flipCamera() {
+        callEngine.flipCamera()
+    }
+
+    private fun togglePip() {
+        _state.update { it.copy(isLocalPipMinimized = !it.isLocalPipMinimized) }
+    }
+
+    private fun handleCameraPermissionResult(granted: Boolean) {
+        if (granted) {
+            _state.update { it.copy(isCameraEnabled = true) }
+            callEngine.setCameraEnabled(true)
+        } else {
+            _state.update { it.copy(isVideo = false, isCameraEnabled = false) }
+            callEngine.setCameraEnabled(false)
+            viewModelScope.launch {
+                _effect.send(CallSideEffect.ShowSnackbar("Quyền Camera bị từ chối. Tiếp tục cuộc gọi bằng âm thanh."))
             }
         }
     }
