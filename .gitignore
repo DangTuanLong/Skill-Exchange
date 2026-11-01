@@ -1,9 +1,23 @@
-# ─── Documentation & Internal Files ──────────────────────────────────
+# ─── AI Rules, Prompts, Tasks & Internal Docs (NEVER COMMIT TO GITHUB) ─
 docs/
+**/docs/
 AGENTS.md
-PROJECT_PLAN.md
+**/AGENTS.md
+.agents/
+**/.agents/
+.gemini/
+**/.gemini/
+.claude/
+**/.claude/
+PROJECT_PLAN*.md
 runDevice.md
-tmp.md
+tmp*.md
+*.scratch.*
+scratch/
+
+# ─── Scripts & Automation ─────────────────────────────────────────────
+scripts/
+**/scripts/
 
 # ─── Secrets, Credentials & API Keys ──────────────────────────────────
 **/*.env
@@ -13,7 +27,6 @@ tmp.md
 .env
 .env.*
 .env.example
-.agents/
 
 **/local.properties
 local.properties
@@ -35,6 +48,7 @@ api/src/test/kotlin/com/skillexchange/api/config/
 
 # ─── Build Outputs & Caches ───────────────────────────────────────────
 .gradle/
+**/.gradle/
 **/build/
 out/
 .kotlin/
