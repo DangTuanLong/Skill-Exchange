@@ -57,6 +57,23 @@ data class ExchangeRequestDto(
     @SerialName("accepted_at") val acceptedAt: String? = null,
     @SerialName("sender_completed_at") val senderCompletedAt: String? = null,
     @SerialName("receiver_completed_at") val receiverCompletedAt: String? = null,
+    @SerialName("resolved_at") val resolvedAt: String? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String
+)
+
+@Serializable
+data class ValidSkillPairDto(
+    @SerialName("skill_offered_id") val skillOfferedId: Int,
+    @SerialName("skill_offered_name") val skillOfferedName: String,
+    @SerialName("skill_wanted_id") val skillWantedId: Int,
+    @SerialName("skill_wanted_name") val skillWantedName: String,
+    @SerialName("is_active") val isActive: Boolean,
+    @SerialName("completed_count") val completedCount: Int
+)
+
+@Serializable
+data class ValidPairsResponse(
+    val pairs: List<ValidSkillPairDto>,
+    @SerialName("recently_rejected") val recentlyRejected: Boolean = false
 )

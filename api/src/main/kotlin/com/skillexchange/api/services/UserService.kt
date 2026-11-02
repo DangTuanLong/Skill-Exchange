@@ -1,5 +1,6 @@
 package com.skillexchange.api.services
 
+import com.skillexchange.api.models.db.ExchangeRequestsTable
 import com.skillexchange.api.models.db.ProfilesTable
 import com.skillexchange.api.models.db.SkillCategoriesTable
 import com.skillexchange.api.models.db.SkillsTable
@@ -17,7 +18,9 @@ data class UserSearchDto(
     val bio: String? = null,
     val city: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
-    val skills: List<UserSkillDto> = emptyList()
+    val skills: List<UserSkillDto> = emptyList(),
+    @SerialName("relationship_status") val relationshipStatus: String? = null,
+    @SerialName("completed_exchange_count") val completedExchangeCount: Int = 0
 )
 
 @Serializable
@@ -160,9 +163,45 @@ class UserService {
                 )
             }
 
+        // Bước 3.5: Lấy thông tin quan hệ giữa caller và các users trong trang bằng MỘT truy vấn tổng hợp (DEC-028)
+        val relationshipMap: Map<String, Pair<String?, Int>> = if (!excludeUserId.isNullOrBlank() && pageUserIds.isNotEmpty()) {
+            val callerUid = excludeUserId
+            val relRows = ExchangeRequestsTable.select(
+                ExchangeRequestsTable.senderId,
+                ExchangeRequestsTable.receiverId,
+                ExchangeRequestsTable.status
+            ).where {
+                (
+                    ((ExchangeRequestsTable.senderId eq callerUid) and (ExchangeRequestsTable.receiverId inList pageUserIds)) or
+                    ((ExchangeRequestsTable.receiverId eq callerUid) and (ExchangeRequestsTable.senderId inList pageUserIds))
+                )
+            }.toList()
+
+            relRows.groupBy {
+                val sId = it[ExchangeRequestsTable.senderId]
+                if (sId == callerUid) it[ExchangeRequestsTable.receiverId] else sId
+            }.mapValues { (_, reqs) ->
+                val hasActive = reqs.any { it[ExchangeRequestsTable.status] in listOf("PENDING", "ACCEPTED") }
+                val completedCount = reqs.count { it[ExchangeRequestsTable.status] == "COMPLETED" }
+                val status = when {
+                    hasActive -> "ACTIVE"
+                    completedCount > 0 -> "COMPLETED"
+                    else -> null
+                }
+                status to completedCount
+            }
+        } else {
+            emptyMap()
+        }
+
         // Bước 4: Ghép lại theo đúng thứ tự của pageUserIds
         val items = pageUserIds.mapNotNull { uid ->
-            profiles[uid]?.copy(skills = skillsMap[uid] ?: emptyList())
+            val rel = relationshipMap[uid]
+            profiles[uid]?.copy(
+                skills = skillsMap[uid] ?: emptyList(),
+                relationshipStatus = rel?.first,
+                completedExchangeCount = rel?.second ?: 0
+            )
         }
 
         UserSearchResultDto(items = items, nextCursor = nextCursor)

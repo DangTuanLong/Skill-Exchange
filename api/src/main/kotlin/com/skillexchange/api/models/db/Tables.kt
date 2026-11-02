@@ -96,6 +96,7 @@ object ExchangeRequestsTable : Table("exchange_requests") {
     val acceptedAt          = datetime("accepted_at").nullable()
     val senderCompletedAt   = datetime("sender_completed_at").nullable()
     val receiverCompletedAt = datetime("receiver_completed_at").nullable()
+    val resolvedAt          = datetime("resolved_at").nullable()
     val createdAt           = datetime("created_at").default(LocalDateTime.now())
     val updatedAt           = datetime("updated_at").default(LocalDateTime.now())
     override val primaryKey = PrimaryKey(id)

@@ -14,11 +14,25 @@ fun Route.matchingRoutes(matchingService: MatchingService) {
 
     route("/api/matching") {
         authenticate("auth-jwt") {
-            // GET /api/matching/suggestions?limit=20
+            // GET /api/matching/suggestions/potential?limit=10&cursor=...
+            get("/suggestions/potential") {
+                val callerUserId = call.getUserId()
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 50) ?: 10
+                val cursor = call.request.queryParameters["cursor"]
+                val suggestions = matchingService.getPotentialSuggestions(callerUserId, limit, cursor)
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = suggestions))
+            }
+
+            // GET /api/matching/suggestions?limit=20&cursor=...
             get("/suggestions") {
                 val callerUserId = call.getUserId()
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 50) ?: 20
-                val suggestions = matchingService.getSuggestions(callerUserId, limit)
+                val cursor = call.request.queryParameters["cursor"]
+                val suggestions = if (cursor != null) {
+                    matchingService.getSuggestions(callerUserId, limit, cursor)
+                } else {
+                    matchingService.getSuggestions(callerUserId, limit)
+                }
                 call.respond(HttpStatusCode.OK, ApiSuccess(data = suggestions))
             }
 

@@ -7,6 +7,8 @@ import com.skillexchange.api.models.db.UserSkillsTable
 import com.skillexchange.api.models.exchange.CreateExchangeRequest
 import com.skillexchange.api.models.exchange.ExchangeRequestDto
 import com.skillexchange.api.models.exchange.ExchangeStatus
+import com.skillexchange.api.models.exchange.ValidSkillPairDto
+import com.skillexchange.api.models.exchange.ValidPairsResponse
 import com.skillexchange.api.models.ValidationConstants
 import com.skillexchange.api.plugins.ValidationException
 import org.jetbrains.exposed.sql.*
@@ -20,6 +22,11 @@ import java.util.UUID
 open class ExchangeService(
     private val notificationHook: IExchangeNotificationHook = NoOpExchangeNotificationHook()
 ) {
+
+    companion object {
+        const val MAX_PENDING_PER_PAIR = 3
+        const val REJECTION_COOLDOWN_DAYS = 14L
+    }
 
     /**
      * Tạo yêu cầu trao đổi kỹ năng mới (sender -> receiver).
@@ -102,25 +109,77 @@ open class ExchangeService(
             )
         }
 
+        // 6b. Khóa dòng profile theo thứ tự ID để chống race condition khi 2 bên gửi cùng lúc (DEC-028)
+        val firstId = minOf(senderId, req.receiverId)
+        val secondId = maxOf(senderId, req.receiverId)
+        ProfilesTable.selectAll()
+            .where { ProfilesTable.userId inList listOf(firstId, secondId) }
+            .forUpdate()
+            .toList()
+
+        // 6c. Kiểm tra chặn trùng cặp kỹ năng đối xứng đang mở (PENDING hoặc ACCEPTED) (DEC-028)
+        val activePairExists = ExchangeRequestsTable.selectAll()
+            .where {
+                (ExchangeRequestsTable.status inList listOf(ExchangeStatus.PENDING.name, ExchangeStatus.ACCEPTED.name)) and
+                (
+                    ((ExchangeRequestsTable.senderId eq senderId) and 
+                     (ExchangeRequestsTable.receiverId eq req.receiverId) and 
+                     (ExchangeRequestsTable.skillOfferedId eq req.skillOfferedId) and 
+                     (ExchangeRequestsTable.skillWantedId eq req.skillWantedId))
+                    or
+                    ((ExchangeRequestsTable.senderId eq req.receiverId) and 
+                     (ExchangeRequestsTable.receiverId eq senderId) and 
+                     (ExchangeRequestsTable.skillOfferedId eq req.skillWantedId) and 
+                     (ExchangeRequestsTable.skillWantedId eq req.skillOfferedId))
+                )
+            }.count() > 0
+
+        if (activePairExists) {
+            throw PairAlreadyActiveException("Cặp kỹ năng này đang có yêu cầu chờ xử lý hoặc đang trao đổi.")
+        }
+
+        // 6d. Kiểm tra giới hạn tối đa 3 yêu cầu PENDING đồng thời giữa 2 người dùng (DEC-028)
+        val pendingCount = ExchangeRequestsTable.selectAll()
+            .where {
+                (ExchangeRequestsTable.status eq ExchangeStatus.PENDING.name) and
+                (
+                    ((ExchangeRequestsTable.senderId eq senderId) and (ExchangeRequestsTable.receiverId eq req.receiverId)) or
+                    ((ExchangeRequestsTable.senderId eq req.receiverId) and (ExchangeRequestsTable.receiverId eq senderId))
+                )
+            }.count()
+
+        if (pendingCount >= MAX_PENDING_PER_PAIR) {
+            throw PendingLimitReachedException("Đã đạt giới hạn tối đa $MAX_PENDING_PER_PAIR yêu cầu đang chờ phản hồi giữa hai người dùng.")
+        }
+
         // 7. Insert vào database
         val now = LocalDateTime.now()
         val newId = UUID.randomUUID()
 
-        ExchangeRequestsTable.insert {
-            it[id]                  = newId
-            it[this.senderId]       = senderId
-            it[this.receiverId]     = req.receiverId
-            it[skillOfferedId]      = req.skillOfferedId
-            it[skillWantedId]       = req.skillWantedId
-            it[status]              = ExchangeStatus.PENDING.name
-            it[durationMinutes]     = req.durationMinutes
-            it[meetingMode]         = upperMode
-            it[message]             = req.message?.trim().takeUnless { it.isNullOrBlank() }
-            it[scheduledAt]         = scheduledDateTime
-            it[senderCompletedAt]   = null
-            it[receiverCompletedAt] = null
-            it[createdAt]           = now
-            it[updatedAt]           = now
+        try {
+            ExchangeRequestsTable.insert {
+                it[id]                  = newId
+                it[this.senderId]       = senderId
+                it[this.receiverId]     = req.receiverId
+                it[skillOfferedId]      = req.skillOfferedId
+                it[skillWantedId]       = req.skillWantedId
+                it[status]              = ExchangeStatus.PENDING.name
+                it[durationMinutes]     = req.durationMinutes
+                it[meetingMode]         = upperMode
+                it[message]             = req.message?.trim().takeUnless { it.isNullOrBlank() }
+                it[scheduledAt]         = scheduledDateTime
+                it[senderCompletedAt]   = null
+                it[receiverCompletedAt] = null
+                it[resolvedAt]          = null
+                it[createdAt]           = now
+                it[updatedAt]           = now
+            }
+        } catch (e: Exception) {
+            if (e.message?.contains("uq_exchange_requests_active_pair", ignoreCase = true) == true ||
+                e.cause?.message?.contains("uq_exchange_requests_active_pair", ignoreCase = true) == true) {
+                throw PairAlreadyActiveException("Cặp kỹ năng này đang có yêu cầu chờ xử lý hoặc đang trao đổi.")
+            }
+            throw e
         }
 
         val dto = getExchangeRequestInternal(newId.toString())
@@ -262,8 +321,9 @@ open class ExchangeService(
 
         if (transition.isChanged) {
             ExchangeRequestsTable.update({ ExchangeRequestsTable.id eq uuid }) {
-                it[status]    = transition.newStatus.name
-                it[updatedAt] = LocalDateTime.now()
+                it[status]     = transition.newStatus.name
+                it[resolvedAt] = LocalDateTime.now()
+                it[updatedAt]  = LocalDateTime.now()
             }
         }
 
@@ -310,6 +370,7 @@ open class ExchangeService(
             ExchangeRequestsTable.update({ ExchangeRequestsTable.id eq uuid }) {
                 it[status]             = transition.newStatus.name
                 it[cancellationReason] = transition.cancellationReason
+                it[resolvedAt]         = LocalDateTime.now()
                 it[updatedAt]          = LocalDateTime.now()
             }
         }
@@ -354,6 +415,9 @@ open class ExchangeService(
                 it[status]              = transition.newStatus.name
                 it[senderCompletedAt]   = transition.senderCompletedAt
                 it[receiverCompletedAt] = transition.receiverCompletedAt
+                if (transition.newStatus == ExchangeStatus.COMPLETED) {
+                    it[resolvedAt]      = LocalDateTime.now()
+                }
                 it[updatedAt]           = LocalDateTime.now()
             }
         }
@@ -423,6 +487,7 @@ open class ExchangeService(
                 acceptedAt = r[ExchangeRequestsTable.acceptedAt]?.toString(),
                 senderCompletedAt = r[ExchangeRequestsTable.senderCompletedAt]?.toString(),
                 receiverCompletedAt = r[ExchangeRequestsTable.receiverCompletedAt]?.toString(),
+                resolvedAt = r[ExchangeRequestsTable.resolvedAt]?.toString(),
                 createdAt = r[ExchangeRequestsTable.createdAt].toString(),
                 updatedAt = r[ExchangeRequestsTable.updatedAt].toString()
             )
@@ -443,5 +508,110 @@ open class ExchangeService(
                 }
             }
         }
+    }
+    /**
+     * Lấy danh sách các cặp kỹ năng hợp lệ giữa caller và receiver còn khả dụng để đặt lịch (DEC-028).
+     * Loại bỏ các cặp đang có exchange PENDING hoặc ACCEPTED.
+     * Cặp đã COMPLETED vẫn được giữ lại để trao đổi thêm.
+     */
+    open fun getValidPairs(callerId: String, receiverId: String): ValidPairsResponse = transaction {
+        if (callerId == receiverId) {
+            return@transaction ValidPairsResponse(emptyList(), false)
+        }
+
+        // 1. Kỹ năng HAVE của caller và WANT của receiver (Caller dạy receiver)
+        val callerHaveSkills = (UserSkillsTable innerJoin SkillsTable)
+            .selectAll()
+            .where { (UserSkillsTable.userId eq callerId) and (UserSkillsTable.type eq "HAVE") }
+            .map { Triple(it[SkillsTable.id], it[SkillsTable.name], it[UserSkillsTable.proficiencyLevel]) }
+
+        val receiverWantSkills = (UserSkillsTable innerJoin SkillsTable)
+            .selectAll()
+            .where { (UserSkillsTable.userId eq receiverId) and (UserSkillsTable.type eq "WANT") }
+            .associate { it[SkillsTable.id] to Pair(it[SkillsTable.name], it[UserSkillsTable.proficiencyLevel]) }
+
+        // 2. Kỹ năng HAVE của receiver và WANT của caller (Receiver dạy caller)
+        val receiverHaveSkills = (UserSkillsTable innerJoin SkillsTable)
+            .selectAll()
+            .where { (UserSkillsTable.userId eq receiverId) and (UserSkillsTable.type eq "HAVE") }
+            .map { Triple(it[SkillsTable.id], it[SkillsTable.name], it[UserSkillsTable.proficiencyLevel]) }
+
+        val callerWantSkills = (UserSkillsTable innerJoin SkillsTable)
+            .selectAll()
+            .where { (UserSkillsTable.userId eq callerId) and (UserSkillsTable.type eq "WANT") }
+            .associate { it[SkillsTable.id] to Pair(it[SkillsTable.name], it[UserSkillsTable.proficiencyLevel]) }
+
+        // 3. Tìm các kỹ năng hợp lệ:
+        val validTeachSkills = callerHaveSkills.filter { (id, _, level) ->
+            val want = receiverWantSkills[id]
+            want != null && level >= want.second
+        }
+
+        val validLearnSkills = receiverHaveSkills.filter { (id, _, level) ->
+            val want = callerWantSkills[id]
+            want != null && level >= want.second
+        }
+
+        // 4. Lấy tất cả request giữa 2 người dùng
+        val existingRequests = ExchangeRequestsTable.selectAll()
+            .where {
+                ((ExchangeRequestsTable.senderId eq callerId) and (ExchangeRequestsTable.receiverId eq receiverId)) or
+                ((ExchangeRequestsTable.senderId eq receiverId) and (ExchangeRequestsTable.receiverId eq callerId))
+            }.toList()
+
+        // Kiểm tra xem có bị từ chối/hủy gần đây trong 14 ngày không
+        val cooldownCutoff = LocalDateTime.now().minusDays(REJECTION_COOLDOWN_DAYS)
+        val recentlyRejected = existingRequests.any { req ->
+            req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.REJECTED.name, ExchangeStatus.CANCELLED.name) &&
+            (req[ExchangeRequestsTable.resolvedAt] ?: req[ExchangeRequestsTable.updatedAt]) > cooldownCutoff
+        }
+
+        // 5. Tổ hợp các cặp hợp lệ và kiểm tra trạng thái active
+        val pairs = mutableListOf<ValidSkillPairDto>()
+        for (teach in validTeachSkills) {
+            for (learn in validLearnSkills) {
+                val teachId = teach.first
+                val teachName = teach.second
+                val learnId = learn.first
+                val learnName = learn.second
+
+                val isPairActive = existingRequests.any { req ->
+                    req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.PENDING.name, ExchangeStatus.ACCEPTED.name) &&
+                    (
+                        (req[ExchangeRequestsTable.senderId] == callerId && req[ExchangeRequestsTable.receiverId] == receiverId &&
+                         req[ExchangeRequestsTable.skillOfferedId] == teachId && req[ExchangeRequestsTable.skillWantedId] == learnId) ||
+                        (req[ExchangeRequestsTable.senderId] == receiverId && req[ExchangeRequestsTable.receiverId] == callerId &&
+                         req[ExchangeRequestsTable.skillOfferedId] == learnId && req[ExchangeRequestsTable.skillWantedId] == teachId)
+                    )
+                }
+
+                val completedCount = existingRequests.count { req ->
+                    req[ExchangeRequestsTable.status] == ExchangeStatus.COMPLETED.name &&
+                    (
+                        (req[ExchangeRequestsTable.senderId] == callerId && req[ExchangeRequestsTable.receiverId] == receiverId &&
+                         req[ExchangeRequestsTable.skillOfferedId] == teachId && req[ExchangeRequestsTable.skillWantedId] == learnId) ||
+                        (req[ExchangeRequestsTable.senderId] == receiverId && req[ExchangeRequestsTable.receiverId] == callerId &&
+                         req[ExchangeRequestsTable.skillOfferedId] == learnId && req[ExchangeRequestsTable.skillWantedId] == teachId)
+                    )
+                }
+
+                pairs.add(
+                    ValidSkillPairDto(
+                        skillOfferedId = teachId,
+                        skillOfferedName = teachName,
+                        skillWantedId = learnId,
+                        skillWantedName = learnName,
+                        isActive = isPairActive,
+                        completedCount = completedCount
+                    )
+                )
+            }
+        }
+
+        // Chỉ trả về các cặp còn khả dụng (chưa active), cặp COMPLETED vẫn khả dụng để trao đổi tiếp
+        ValidPairsResponse(
+            pairs = pairs.filter { !it.isActive },
+            recentlyRejected = recentlyRejected
+        )
     }
 }

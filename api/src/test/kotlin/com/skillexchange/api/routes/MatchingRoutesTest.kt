@@ -202,4 +202,74 @@ class MatchingRoutesTest {
         assertTrue(body.contains("Python"))
         assertTrue(body.contains("Guitar"))
     }
+
+    @Test
+    fun `GET suggestions - passes cursor parameter to service`() = testApplication {
+        val callerId = "user-caller-123"
+        val cursor = "ODVfdXNlci1jYW5kLTE"
+        every { mockMatchingService.getSuggestions(callerId, 20, cursor) } returns emptyList()
+
+        setupMatchingRoutesModule()
+
+        val response = client.get("/api/matching/suggestions?cursor=$cursor") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        verify { mockMatchingService.getSuggestions(callerId, 20, cursor) }
+    }
+
+    @Test
+    fun `GET suggestions potential - returns 401 without JWT`() = testApplication {
+        setupMatchingRoutesModule()
+
+        val response = client.get("/api/matching/suggestions/potential")
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `GET suggestions potential - returns 200 with potential matches`() = testApplication {
+        val callerId = "user-caller-123"
+        val expected = listOf(
+            PotentialMatchDto(
+                userId = "cand-pot-1",
+                fullName = "Pham C",
+                avatarUrl = null,
+                city = "Hà Nội",
+                canTeachSkill = PotentialMatchSkillDto(skillId = 1, skillName = "Kotlin", proficiencyLevel = 4),
+                suggestedWantSkill = PotentialMatchSkillDto(skillId = 5, skillName = "Design", proficiencyLevel = 3),
+                potentialScore = 78
+            )
+        )
+        every { mockMatchingService.getPotentialSuggestions(callerId, 10, null) } returns expected
+
+        setupMatchingRoutesModule()
+
+        val response = client.get("/api/matching/suggestions/potential") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("cand-pot-1"))
+        assertTrue(body.contains("Pham C"))
+        assertTrue(body.contains("78"))
+        verify { mockMatchingService.getPotentialSuggestions(callerId, 10, null) }
+    }
+
+    @Test
+    fun `GET suggestions potential - clamps limit between 1 and 50 and passes cursor`() = testApplication {
+        val callerId = "user-caller-123"
+        val cursor = "cursor123"
+        every { mockMatchingService.getPotentialSuggestions(callerId, 50, cursor) } returns emptyList()
+
+        setupMatchingRoutesModule()
+
+        val response = client.get("/api/matching/suggestions/potential?limit=100&cursor=$cursor") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        verify { mockMatchingService.getPotentialSuggestions(callerId, 50, cursor) }
+    }
 }

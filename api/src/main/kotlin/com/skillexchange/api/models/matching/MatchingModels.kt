@@ -25,7 +25,8 @@ data class MatchingScoreBreakdown(
     @SerialName("skill_match") val skillMatch: Double,
     @SerialName("proficiency_fit") val proficiencyFit: Double,
     @SerialName("location_bonus") val locationBonus: Double,
-    @SerialName("availability_overlap") val availabilityOverlap: Double
+    @SerialName("availability_overlap") val availabilityOverlap: Double,
+    @SerialName("available_pairs_count") val availablePairsCount: Int = 0
 )
 
 @Serializable
@@ -60,5 +61,36 @@ data class MatchingSuggestionDto(
     @SerialName("total_score") val totalScore: Double,
     val percentage: Int,
     val breakdown: MatchingScoreBreakdown,
-    @SerialName("matched_skills") val matchedSkills: MatchedSkillsBreakdown
+    @SerialName("matched_skills") val matchedSkills: MatchedSkillsBreakdown,
+    @SerialName("available_pairs_count") val availablePairsCount: Int = 0
+)
+
+@Serializable
+data class MatchingSuggestionsResponse(
+    val items: List<MatchingSuggestionDto>,
+    @SerialName("next_cursor") val nextCursor: String? = null
+)
+
+@Serializable
+data class PotentialMatchSkillDto(
+    @SerialName("skill_id") val skillId: Int,
+    @SerialName("skill_name") val skillName: String,
+    @SerialName("proficiency_level") val proficiencyLevel: Int
+)
+
+@Serializable
+data class PotentialMatchDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("full_name") val fullName: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    val city: String? = null,
+    @SerialName("can_teach_skill") val canTeachSkill: PotentialMatchSkillDto,
+    @SerialName("suggested_want_skill") val suggestedWantSkill: PotentialMatchSkillDto,
+    @SerialName("potential_score") val potentialScore: Int
+)
+
+@Serializable
+data class PotentialSuggestionsResponse(
+    val items: List<PotentialMatchDto>,
+    @SerialName("next_cursor") val nextCursor: String? = null
 )

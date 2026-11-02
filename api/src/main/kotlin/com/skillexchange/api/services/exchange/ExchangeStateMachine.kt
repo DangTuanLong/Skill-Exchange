@@ -5,6 +5,8 @@ import java.time.LocalDateTime
 
 class ExchangeForbiddenException(message: String) : RuntimeException(message)
 class ExchangeConflictException(message: String) : RuntimeException(message)
+class PairAlreadyActiveException(message: String = "Cặp kỹ năng này đang có yêu cầu chờ xử lý hoặc đang trao đổi.") : RuntimeException(message)
+class PendingLimitReachedException(message: String = "Đã đạt giới hạn tối đa 3 yêu cầu đang chờ phản hồi giữa hai người dùng.") : RuntimeException(message)
 
 data class TransitionResult(
     val newStatus: ExchangeStatus,

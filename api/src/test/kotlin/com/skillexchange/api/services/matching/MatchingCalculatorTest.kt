@@ -334,6 +334,7 @@ class MatchingCalculatorTest {
         assertEquals(0.75, result.breakdown.proficiencyFit)
         assertEquals(0.3, result.breakdown.locationBonus)
         assertEquals(0.0, result.breakdown.availabilityOverlap)
+        assertEquals(2, result.breakdown.availablePairsCount)
 
         assertEquals(2, result.matchedSkills.theyTeachYou.size)
         assertEquals(1, result.matchedSkills.youTeachThem.size)

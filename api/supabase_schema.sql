@@ -161,19 +161,51 @@ CREATE TABLE IF NOT EXISTS exchange_requests (
     accepted_at           TIMESTAMPTZ,     -- thời điểm chấp nhận yêu cầu (TASK-033)
     sender_completed_at   TIMESTAMPTZ,     -- sender xác nhận hoàn thành
     receiver_completed_at TIMESTAMPTZ,     -- receiver xác nhận hoàn thành
+    resolved_at           TIMESTAMPTZ,     -- thời điểm kết thúc REJECTED, CANCELLED, COMPLETED (DEC-028)
     created_at            TIMESTAMPTZ DEFAULT NOW(),
     updated_at            TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT exchange_requests_diff_users CHECK (sender_id <> receiver_id)
 );
 
+ALTER TABLE exchange_requests ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_exchange_sender   ON exchange_requests(sender_id, status);
 CREATE INDEX IF NOT EXISTS idx_exchange_receiver ON exchange_requests(receiver_id, status);
 CREATE INDEX IF NOT EXISTS idx_exchange_scheduled ON exchange_requests(scheduled_at);
+
+-- DEC-028: Index tối ưu hóa truy vấn NOT EXISTS / anti-join loại trừ đối tác trên Feed Gợi ý
+CREATE INDEX IF NOT EXISTS idx_exchange_requests_exclusion_lookup
+    ON exchange_requests (sender_id, receiver_id, status, COALESCE(resolved_at, updated_at));
+
+-- DEC-028: Chặn trùng lặp cặp kỹ năng đối xứng hai chiều đang mở (PENDING / ACCEPTED)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_exchange_requests_active_pair ON exchange_requests (
+    LEAST(sender_id, receiver_id),
+    GREATEST(sender_id, receiver_id),
+    (CASE WHEN sender_id < receiver_id THEN skill_offered_id ELSE skill_wanted_id END),
+    (CASE WHEN sender_id < receiver_id THEN skill_wanted_id ELSE skill_offered_id END)
+) WHERE status IN ('PENDING', 'ACCEPTED');
 
 CREATE OR REPLACE TRIGGER set_exchange_updated_at
     BEFORE UPDATE ON exchange_requests
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- DEC-028: Tự động gắn resolved_at khi chuyển sang trạng thái kết thúc (REJECTED, CANCELLED, COMPLETED)
+CREATE OR REPLACE FUNCTION set_exchange_resolved_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status IN ('REJECTED', 'CANCELLED', 'COMPLETED') AND (OLD.status IS DISTINCT FROM NEW.status) THEN
+        NEW.resolved_at = NOW();
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_set_exchange_resolved_at ON exchange_requests;
+CREATE TRIGGER trigger_set_exchange_resolved_at
+    BEFORE UPDATE ON exchange_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION set_exchange_resolved_at();
 
 -- ============================================================
 -- 5.1 RESCHEDULE PROPOSALS [PLANNED — DEC-025, TASK-067]

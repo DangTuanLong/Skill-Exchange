@@ -8,6 +8,8 @@ import com.skillexchange.api.plugins.ValidationException
 import com.skillexchange.api.plugins.getUserId
 import com.skillexchange.api.services.exchange.ExchangeConflictException
 import com.skillexchange.api.services.exchange.ExchangeForbiddenException
+import com.skillexchange.api.services.exchange.PairAlreadyActiveException
+import com.skillexchange.api.services.exchange.PendingLimitReachedException
 import com.skillexchange.api.services.exchange.ExchangeService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -36,6 +38,24 @@ fun Route.exchangeRoutes(exchangeService: ExchangeService) {
                 try {
                     val result = exchangeService.createExchangeRequest(callerUserId, req)
                     call.respond(HttpStatusCode.Created, ApiSuccess(data = result))
+                } catch (e: PairAlreadyActiveException) {
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        ApiError(
+                            status = 409,
+                            code = ErrorCodes.PAIR_ALREADY_ACTIVE,
+                            message = e.message ?: "Cặp kỹ năng này đang có yêu cầu chờ xử lý hoặc đang trao đổi."
+                        )
+                    )
+                } catch (e: PendingLimitReachedException) {
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        ApiError(
+                            status = 409,
+                            code = ErrorCodes.PENDING_LIMIT_REACHED,
+                            message = e.message ?: "Đã đạt giới hạn tối đa 3 yêu cầu đang chờ phản hồi giữa hai người dùng."
+                        )
+                    )
                 } catch (e: ValidationException) {
                     call.respond(
                         HttpStatusCode.UnprocessableEntity,
@@ -46,6 +66,21 @@ fun Route.exchangeRoutes(exchangeService: ExchangeService) {
                         )
                     )
                 }
+            }
+
+            // GET /api/exchange-requests/valid-pairs/{receiverId} - Danh sách cặp kỹ năng khả dụng để đặt lịch (DEC-028)
+            get("/valid-pairs/{receiverId}") {
+                val callerUserId = call.getUserId()
+                val receiverId = call.parameters["receiverId"]
+                if (receiverId.isNullOrBlank() || receiverId == callerUserId) {
+                    return@get call.respond(
+                        HttpStatusCode.BadRequest,
+                        RouteApiError(message = "receiverId không hợp lệ hoặc trùng với người gọi", code = 400)
+                    )
+                }
+
+                val result = exchangeService.getValidPairs(callerUserId, receiverId)
+                call.respond(HttpStatusCode.OK, ApiSuccess(data = result))
             }
 
             // GET /api/exchange-requests/incoming - Yêu cầu gửi đến người gọi

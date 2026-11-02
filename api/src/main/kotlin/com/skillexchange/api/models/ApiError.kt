@@ -31,6 +31,8 @@ object ErrorCodes {
     const val CALL_COOLDOWN_ACTIVE = "CALL_COOLDOWN_ACTIVE"
     const val CALL_NOT_FOUND = "CALL_NOT_FOUND"
     const val LIVEKIT_NOT_CONFIGURED = "LIVEKIT_NOT_CONFIGURED"
+    const val PAIR_ALREADY_ACTIVE = "PAIR_ALREADY_ACTIVE"
+    const val PENDING_LIMIT_REACHED = "PENDING_LIMIT_REACHED"
 
     fun fromStatus(status: Int): String = when (status) {
         400 -> BAD_REQUEST

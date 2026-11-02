@@ -98,7 +98,8 @@ object MatchingCalculator {
                 skillMatch = Math.round(skillMatch * 10000.0) / 10000.0,
                 proficiencyFit = Math.round(proficiencyFit * 10000.0) / 10000.0,
                 locationBonus = Math.round(locationBonus * 10000.0) / 10000.0,
-                availabilityOverlap = Math.round(availabilityOverlap * 10000.0) / 10000.0
+                availabilityOverlap = Math.round(availabilityOverlap * 10000.0) / 10000.0,
+                availablePairsCount = eligibleAB.size * eligibleBA.size
             ),
             matchedSkills = MatchedSkillsBreakdown(
                 theyTeachYou = eligibleAB,

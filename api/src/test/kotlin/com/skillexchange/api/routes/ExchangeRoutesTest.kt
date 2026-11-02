@@ -5,12 +5,16 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.skillexchange.api.models.exchange.CancelExchangeRequest
 import com.skillexchange.api.models.exchange.CreateExchangeRequest
 import com.skillexchange.api.models.exchange.ExchangeRequestDto
+import com.skillexchange.api.models.exchange.ValidPairsResponse
+import com.skillexchange.api.models.exchange.ValidSkillPairDto
 import com.skillexchange.api.plugins.ValidationException
 import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
 import com.skillexchange.api.services.exchange.ExchangeConflictException
 import com.skillexchange.api.services.exchange.ExchangeForbiddenException
 import com.skillexchange.api.services.exchange.ExchangeService
+import com.skillexchange.api.services.exchange.PairAlreadyActiveException
+import com.skillexchange.api.services.exchange.PendingLimitReachedException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
@@ -425,5 +429,118 @@ class ExchangeRoutesTest {
         val body = response.bodyAsText()
         assertTrue(body.contains("VALIDATION_FAILED"))
         assertTrue(body.contains("Lời nhắn không được vượt quá 1000 ký tự"))
+    }
+
+    @Test
+    fun `POST exchange-requests - returns 409 Conflict with PAIR_ALREADY_ACTIVE`() = testApplication {
+        val callerId = "user-caller-111"
+        val req = CreateExchangeRequest(
+            receiverId = "user-receiver-222",
+            skillOfferedId = 1,
+            skillWantedId = 2,
+            durationMinutes = 60,
+            meetingMode = "ONLINE",
+            scheduledAt = "2026-11-01T10:00:00",
+            message = "Trao đổi kỹ năng"
+        )
+        every {
+            mockExchangeService.createExchangeRequest(callerId, req)
+        } throws PairAlreadyActiveException("Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động")
+
+        setupExchangeRoutesModule()
+        val clientWithJson = createClient { install(ContentNegotiation) { json() } }
+
+        val response = clientWithJson.post("/api/exchange-requests") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("PAIR_ALREADY_ACTIVE"))
+        assertTrue(body.contains("Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động"))
+    }
+
+    @Test
+    fun `POST exchange-requests - returns 409 Conflict with PENDING_LIMIT_REACHED`() = testApplication {
+        val callerId = "user-caller-111"
+        val req = CreateExchangeRequest(
+            receiverId = "user-receiver-222",
+            skillOfferedId = 1,
+            skillWantedId = 2,
+            durationMinutes = 60,
+            meetingMode = "ONLINE",
+            scheduledAt = "2026-11-01T10:00:00",
+            message = "Trao đổi kỹ năng"
+        )
+        every {
+            mockExchangeService.createExchangeRequest(callerId, req)
+        } throws PendingLimitReachedException("Đã đạt giới hạn tối đa 3 yêu cầu đang chờ phản hồi giữa hai người")
+
+        setupExchangeRoutesModule()
+        val clientWithJson = createClient { install(ContentNegotiation) { json() } }
+
+        val response = clientWithJson.post("/api/exchange-requests") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("PENDING_LIMIT_REACHED"))
+        assertTrue(body.contains("Đã đạt giới hạn tối đa 3 yêu cầu đang chờ phản hồi giữa hai người"))
+    }
+
+    @Test
+    fun `GET valid-pairs - returns 401 without JWT`() = testApplication {
+        setupExchangeRoutesModule()
+        val response = client.get("/api/exchange-requests/valid-pairs/user-target-123")
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `GET valid-pairs - returns 400 when receiverId is blank or caller`() = testApplication {
+        val callerId = "user-caller-111"
+        setupExchangeRoutesModule()
+
+        val responseSameUser = client.get("/api/exchange-requests/valid-pairs/$callerId") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+        }
+        assertEquals(HttpStatusCode.BadRequest, responseSameUser.status)
+    }
+
+    @Test
+    fun `GET valid-pairs - returns 200 with valid pairs and recentlyRejected flag`() = testApplication {
+        val callerId = "user-caller-111"
+        val targetId = "user-receiver-222"
+        val expected = ValidPairsResponse(
+            pairs = listOf(
+                ValidSkillPairDto(
+                    skillOfferedId = 1,
+                    skillOfferedName = "Kotlin",
+                    skillWantedId = 2,
+                    skillWantedName = "English",
+                    isActive = false,
+                    completedCount = 0
+                )
+            ),
+            recentlyRejected = true
+        )
+        every { mockExchangeService.getValidPairs(callerId, targetId) } returns expected
+
+        setupExchangeRoutesModule()
+
+        val response = client.get("/api/exchange-requests/valid-pairs/$targetId") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt(callerId)}")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("Kotlin"))
+        assertTrue(body.contains("English"))
+        assertTrue(body.contains("\"recently_rejected\":true"))
+        verify { mockExchangeService.getValidPairs(callerId, targetId) }
     }
 }
