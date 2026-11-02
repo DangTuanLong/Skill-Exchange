@@ -1,5 +1,6 @@
 package com.skillexchange.app.domain.repository
 
+import com.skillexchange.app.domain.model.PotentialMatch
 import com.skillexchange.app.domain.model.UserDiscovery
 
 data class DiscoverySearchResult(
@@ -20,6 +21,12 @@ interface IDiscoveryRepository {
     ): Result<DiscoverySearchResult>
 
     suspend fun getMatchingSuggestions(
-        limit: Int = 20
+        limit: Int = 20,
+        cursor: String? = null
     ): Result<List<UserDiscovery>> = Result.success(emptyList())
+
+    suspend fun getPotentialSuggestions(
+        limit: Int = 20,
+        cursor: String? = null
+    ): Result<List<PotentialMatch>> = Result.success(emptyList())
 }

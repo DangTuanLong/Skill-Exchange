@@ -2,7 +2,11 @@ package com.skillexchange.app.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.skillexchange.app.core.security.TokenManager
+import com.skillexchange.app.domain.model.PotentialMatch
+import com.skillexchange.app.domain.model.PotentialMatchSkill
 import com.skillexchange.app.domain.model.SkillCategory
+import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
 import com.skillexchange.app.domain.repository.IChatRepository
 import com.skillexchange.app.domain.repository.IDiscoveryRepository
@@ -35,13 +39,21 @@ data class HomeUiState(
     val categories: List<SkillCategory> = emptyList(),
     val discoveryUsers: List<UserDiscovery> = emptyList(),
     val matchingSuggestions: List<UserDiscovery> = emptyList(),
+    val potentialMatches: List<PotentialMatch> = emptyList(),
 
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
+    val isLoadingPotential: Boolean = false,
     val nextCursor: String? = null,
     val isFilterOpen: Boolean = false,
     val unreadChatCount: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+
+    // Dialog state for adding potential skill to WANT
+    val pendingSkillToAdd: PotentialMatchSkill? = null,
+    // Undo state: holds ID of newly created user skill if created by this action
+    val pendingUndoSkillId: String? = null,
+    val pendingUndoSkillName: String? = null
 ) {
     val displayedUsers: List<UserDiscovery>
         get() = if (selectedTab == HomeTab.MATCHING) matchingSuggestions else discoveryUsers
@@ -71,18 +83,26 @@ sealed class HomeIntent {
     object PerformSearch : HomeIntent()
     object LoadMore : HomeIntent()
     object Retry : HomeIntent()
+
+    // TASK-082: Potential Matches and Undo
+    data class RequestAddPotentialSkill(val skill: PotentialMatchSkill) : HomeIntent()
+    object DismissAddSkillDialog : HomeIntent()
+    object ConfirmAddSkill : HomeIntent()
+    object UndoAddSkill : HomeIntent()
+    object ClearPendingUndo : HomeIntent()
 }
 
 // ─── Effect ───────────────────────────────────────────────────────────
 sealed class HomeEffect {
-    data class ShowSnackbar(val message: String) : HomeEffect()
+    data class ShowSnackbar(val message: String, val actionLabel: String? = null) : HomeEffect()
     data class NavigateToProfileDetail(val userId: String) : HomeEffect()
 }
 
 class HomeViewModel(
     private val discoveryRepository: IDiscoveryRepository,
     private val skillRepository: ISkillRepository,
-    private val chatRepository: IChatRepository? = null
+    private val chatRepository: IChatRepository? = null,
+    private val tokenManager: TokenManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -213,6 +233,75 @@ class HomeViewModel(
                     performSearch(resetCursor = true)
                 }
             }
+
+            is HomeIntent.RequestAddPotentialSkill -> {
+                _state.update { it.copy(pendingSkillToAdd = intent.skill) }
+            }
+
+            is HomeIntent.DismissAddSkillDialog -> {
+                _state.update { it.copy(pendingSkillToAdd = null) }
+            }
+
+            is HomeIntent.ConfirmAddSkill -> {
+                val skill = _state.value.pendingSkillToAdd ?: return
+                _state.update { it.copy(pendingSkillToAdd = null) }
+                viewModelScope.launch {
+                    val currentUserId = tokenManager?.getUserId()
+                    val existingSkills = if (!currentUserId.isNullOrBlank()) {
+                        skillRepository.getUserSkills(currentUserId).getOrNull() ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                    val alreadyHadWant = existingSkills.any { it.skillId == skill.skillId && it.type == SkillType.WANT }
+
+                    skillRepository.addUserSkill(
+                        skillId = skill.skillId,
+                        type = "WANT",
+                        proficiencyLevel = 1,
+                        note = null
+                    ).onSuccess { userSkill ->
+                        val undoId = if (!alreadyHadWant && userSkill.id.isNotBlank()) userSkill.id else null
+                        _state.update {
+                            it.copy(
+                                pendingUndoSkillId = undoId,
+                                pendingUndoSkillName = skill.skillName
+                            )
+                        }
+                        _effect.send(
+                            HomeEffect.ShowSnackbar(
+                                message = "Đã thêm \"${skill.skillName}\" vào danh sách mong muốn",
+                                actionLabel = if (undoId != null) "Hoàn tác" else null
+                            )
+                        )
+                        loadMatchingSuggestions()
+                    }.onFailure { ex ->
+                        _effect.send(
+                            HomeEffect.ShowSnackbar(
+                                message = ex.message ?: "Không thể thêm kỹ năng vào danh sách mong muốn"
+                            )
+                        )
+                    }
+                }
+            }
+
+            is HomeIntent.UndoAddSkill -> {
+                val undoId = _state.value.pendingUndoSkillId
+                val skillName = _state.value.pendingUndoSkillName
+                _state.update { it.copy(pendingUndoSkillId = null, pendingUndoSkillName = null) }
+                if (!undoId.isNullOrBlank()) {
+                    viewModelScope.launch {
+                        skillRepository.removeUserSkill(undoId)
+                            .onSuccess {
+                                _effect.send(HomeEffect.ShowSnackbar("Đã hoàn tác thêm kỹ năng \"${skillName ?: ""}\""))
+                                loadMatchingSuggestions()
+                            }
+                    }
+                }
+            }
+
+            is HomeIntent.ClearPendingUndo -> {
+                _state.update { it.copy(pendingUndoSkillId = null, pendingUndoSkillName = null) }
+            }
         }
     }
 
@@ -236,6 +325,11 @@ class HomeViewModel(
                             error = null
                         )
                     }
+                    if (suggestions.isEmpty()) {
+                        loadPotentialSuggestions()
+                    } else {
+                        _state.update { it.copy(potentialMatches = emptyList(), isLoadingPotential = false) }
+                    }
                 }
                 .onFailure { ex ->
                     _state.update {
@@ -244,6 +338,24 @@ class HomeViewModel(
                             error = ex.message ?: "Không thể tải gợi ý phù hợp"
                         )
                     }
+                }
+        }
+    }
+
+    private fun loadPotentialSuggestions() {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoadingPotential = true) }
+            discoveryRepository.getPotentialSuggestions(limit = 10)
+                .onSuccess { potentials ->
+                    _state.update {
+                        it.copy(
+                            potentialMatches = potentials,
+                            isLoadingPotential = false
+                        )
+                    }
+                }
+                .onFailure {
+                    _state.update { it.copy(isLoadingPotential = false) }
                 }
         }
     }

@@ -16,7 +16,9 @@ data class UserDiscoveryDto(
     val bio: String? = null,
     val city: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
-    val skills: List<UserSkillDto> = emptyList()
+    val skills: List<UserSkillDto> = emptyList(),
+    @SerialName("relationship_status") val relationshipStatus: String? = null,
+    @SerialName("completed_exchange_count") val completedExchangeCount: Int = 0
 )
 
 @Serializable
@@ -54,6 +56,7 @@ data class MatchingSuggestionDto(
     val city: String? = null,
     @SerialName("total_score") val totalScore: Double = 0.0,
     val percentage: Int = 0,
+    @SerialName("available_pairs_count") val availablePairsCount: Int? = null,
     @SerialName("matched_skills") val matchedSkills: MatchedSkillsBreakdownDto? = null
 )
 
@@ -61,6 +64,31 @@ data class MatchingSuggestionDto(
 data class MatchingSuggestionsResponseDto(
     val success: Boolean,
     val data: List<MatchingSuggestionDto>? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class PotentialMatchSkillDto(
+    @SerialName("skill_id") val skillId: Int,
+    @SerialName("skill_name") val skillName: String,
+    @SerialName("proficiency_level") val proficiencyLevel: Int
+)
+
+@Serializable
+data class PotentialMatchDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("full_name") val fullName: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    val city: String? = null,
+    @SerialName("can_teach_skill") val canTeachSkill: PotentialMatchSkillDto,
+    @SerialName("suggested_want_skill") val suggestedWantSkill: PotentialMatchSkillDto,
+    @SerialName("potential_score") val potentialScore: Int
+)
+
+@Serializable
+data class PotentialSuggestionsResponseDto(
+    val success: Boolean,
+    val data: List<PotentialMatchDto>? = null,
     val message: String? = null
 )
 
@@ -88,8 +116,15 @@ class DiscoveryRemoteDataSource(private val httpClient: HttpClient) {
         lastId?.takeIf { it.isNotBlank() }?.let { parameter("lastId", it) }
     }.body()
 
-    suspend fun getMatchingSuggestions(limit: Int = 20): MatchingSuggestionsResponseDto =
+    suspend fun getMatchingSuggestions(limit: Int = 20, cursor: String? = null): MatchingSuggestionsResponseDto =
         httpClient.get("${Constants.BASE_URL}/api/matching/suggestions") {
             parameter("limit", limit)
+            cursor?.takeIf { it.isNotBlank() }?.let { parameter("cursor", it) }
+        }.body()
+
+    suspend fun getPotentialSuggestions(limit: Int = 20, cursor: String? = null): PotentialSuggestionsResponseDto =
+        httpClient.get("${Constants.BASE_URL}/api/matching/suggestions/potential") {
+            parameter("limit", limit)
+            cursor?.takeIf { it.isNotBlank() }?.let { parameter("cursor", it) }
         }.body()
 }

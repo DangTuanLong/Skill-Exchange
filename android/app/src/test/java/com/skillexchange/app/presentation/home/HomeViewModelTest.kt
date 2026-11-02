@@ -1,5 +1,8 @@
 package com.skillexchange.app.presentation.home
 
+import com.skillexchange.app.core.security.TokenManager
+import com.skillexchange.app.domain.model.PotentialMatch
+import com.skillexchange.app.domain.model.PotentialMatchSkill
 import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
@@ -26,6 +29,7 @@ class HomeViewModelTest {
     private var shouldFailSearch = false
     private var shouldFailMatching = false
     private var returnEmptyUsers = false
+    private var returnEmptyMatching = false
 
     private val mockDiscoveryRepository = object : IDiscoveryRepository {
         var lastQuery: String? = null
@@ -37,6 +41,16 @@ class HomeViewModelTest {
         var lastLastId: String? = null
         var searchCallCount = 0
         var matchingCallCount = 0
+        var potentialCallCount = 0
+        var potentialMatchesToReturn = listOf(
+            PotentialMatch(
+                userId = "u_pot_1",
+                fullName = "Trần Tiềm Năng",
+                canTeachSkill = PotentialMatchSkill(skillId = 1, skillName = "Kotlin", proficiencyLevel = 4),
+                suggestedWantSkill = PotentialMatchSkill(skillId = 20, skillName = "Tiếng Nhật", proficiencyLevel = 2),
+                potentialScore = 80
+            )
+        )
 
         override suspend fun searchUsers(
             query: String?,
@@ -73,7 +87,10 @@ class HomeViewModelTest {
                         city = "Hà Nội",
                         skills = listOf(
                             UserSkill(skillId = 1, skillName = "Kotlin", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
-                        )
+                        ),
+                        relationshipStatus = "ACTIVE",
+                        completedExchangeCount = 2,
+                        availablePairsCount = 3
                     )
                 )
             } else {
@@ -84,7 +101,9 @@ class HomeViewModelTest {
                         city = "TP.HCM",
                         skills = listOf(
                             UserSkill(skillId = 2, skillName = "Figma", categoryName = "Thiết kế", type = SkillType.WANT, proficiencyLevel = 3)
-                        )
+                        ),
+                        relationshipStatus = "COMPLETED",
+                        completedExchangeCount = 1
                     )
                 )
             }
@@ -93,10 +112,13 @@ class HomeViewModelTest {
             return Result.success(DiscoverySearchResult(users = users, nextCursor = nextCursor))
         }
 
-        override suspend fun getMatchingSuggestions(limit: Int): Result<List<UserDiscovery>> {
+        override suspend fun getMatchingSuggestions(limit: Int, cursor: String?): Result<List<UserDiscovery>> {
             matchingCallCount++
             if (shouldFailMatching) {
                 return Result.failure(Exception("Lỗi tải gợi ý"))
+            }
+            if (returnEmptyMatching) {
+                return Result.success(emptyList())
             }
             return Result.success(
                 listOf(
@@ -105,6 +127,7 @@ class HomeViewModelTest {
                         fullName = "Lê Matching",
                         city = "Hà Nội",
                         matchPercentage = 95,
+                        availablePairsCount = 2,
                         skills = listOf(
                             UserSkill(skillId = 1, skillName = "Kotlin", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
                         )
@@ -112,9 +135,21 @@ class HomeViewModelTest {
                 )
             )
         }
+
+        override suspend fun getPotentialSuggestions(limit: Int, cursor: String?): Result<List<PotentialMatch>> {
+            potentialCallCount++
+            return Result.success(potentialMatchesToReturn)
+        }
     }
 
     private val mockSkillRepository = object : ISkillRepository {
+        var addedSkillId: Int? = null
+        var addedSkillType: String? = null
+        var addedSkillLevel: Int? = null
+        var removedSkillId: String? = null
+        var removeCallCount = 0
+        var userSkillsToReturn = mutableListOf<UserSkill>()
+
         override suspend fun getCategories(): Result<List<SkillCategory>> = Result.success(
             listOf(
                 SkillCategory(id = 1, name = "Lập trình", icon = "code"),
@@ -122,13 +157,35 @@ class HomeViewModelTest {
             )
         )
 
-        override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> = Result.success(emptyList())
+        override suspend fun getUserSkills(userId: String): Result<List<UserSkill>> =
+            Result.success(userSkillsToReturn)
 
         override suspend fun addUserSkill(
             skillId: Int, type: String, proficiencyLevel: Int, note: String?
-        ): Result<UserSkill> = error("Not needed")
+        ): Result<UserSkill> {
+            addedSkillId = skillId
+            addedSkillType = type
+            addedSkillLevel = proficiencyLevel
+            return Result.success(
+                UserSkill(
+                    id = "user_skill_created_123",
+                    skillId = skillId,
+                    skillName = "Kỹ năng $skillId",
+                    type = if (type == "HAVE") SkillType.HAVE else SkillType.WANT,
+                    proficiencyLevel = proficiencyLevel
+                )
+            )
+        }
 
-        override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
+        override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> {
+            removeCallCount++
+            removedSkillId = userSkillId
+            return Result.success(true)
+        }
+    }
+
+    private val testTokenManager = object : TokenManager(null) {
+        override fun getUserId(): String? = "test_current_user_id"
     }
 
     @Before
@@ -137,6 +194,14 @@ class HomeViewModelTest {
         shouldFailSearch = false
         shouldFailMatching = false
         returnEmptyUsers = false
+        returnEmptyMatching = false
+        mockDiscoveryRepository.searchCallCount = 0
+        mockDiscoveryRepository.matchingCallCount = 0
+        mockDiscoveryRepository.potentialCallCount = 0
+        mockSkillRepository.removeCallCount = 0
+        mockSkillRepository.removedSkillId = null
+        mockSkillRepository.addedSkillId = null
+        mockSkillRepository.userSkillsToReturn.clear()
     }
 
     @After
@@ -468,5 +533,148 @@ class HomeViewModelTest {
         assertEquals("", viewModel.state.value.query)
         assertNull(mockDiscoveryRepository.lastQuery)
         assertEquals(1, viewModel.state.value.discoveryUsers.size)
+    }
+
+    @Test
+    fun `search results include relationshipStatus completedExchangeCount and availablePairsCount safely`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Tab ALL_USERS
+        viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.ALL_USERS))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val users = viewModel.state.value.displayedUsers
+        assertEquals(1, users.size)
+        val user1 = users[0]
+        assertEquals("u1", user1.userId)
+        assertEquals("ACTIVE", user1.relationshipStatus)
+        assertEquals(2, user1.completedExchangeCount)
+        assertEquals(3, user1.availablePairsCount)
+    }
+
+    @Test
+    fun `empty matching suggestions at first page triggers potential suggestions fetch`() = runTest {
+        returnEmptyMatching = true
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, mockDiscoveryRepository.potentialCallCount)
+        val state = viewModel.state.value
+        assertTrue(state.matchingSuggestions.isEmpty())
+        assertEquals(1, state.potentialMatches.size)
+        assertEquals("u_pot_1", state.potentialMatches[0].userId)
+        assertEquals(80, state.potentialMatches[0].potentialScore)
+        assertEquals("Kotlin", state.potentialMatches[0].canTeachSkill.skillName)
+        assertEquals("Tiếng Nhật", state.potentialMatches[0].suggestedWantSkill.skillName)
+    }
+
+    @Test
+    fun `non-empty matching suggestions does NOT trigger potential suggestions`() = runTest {
+        returnEmptyMatching = false
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(0, mockDiscoveryRepository.potentialCallCount)
+        val state = viewModel.state.value
+        assertEquals(1, state.matchingSuggestions.size)
+        assertTrue(state.potentialMatches.isEmpty())
+    }
+
+    @Test
+    fun `requestAddPotentialSkill sets pendingSkillToAdd and dismissAddSkillDialog clears it`() = runTest {
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val skill = PotentialMatchSkill(skillId = 10, skillName = "Thiết kế đồ họa", proficiencyLevel = 3)
+        viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+        assertEquals(skill, viewModel.state.value.pendingSkillToAdd)
+
+        viewModel.onIntent(HomeIntent.DismissAddSkillDialog)
+        assertNull(viewModel.state.value.pendingSkillToAdd)
+    }
+
+    @Test
+    fun `confirmAddSkill adds skill to WANT with default level 1 and sets pendingUndoSkillId for newly created skill`() = runTest {
+        returnEmptyMatching = true
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val skill = PotentialMatchSkill(skillId = 20, skillName = "Tiếng Nhật", proficiencyLevel = 2)
+        viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+        viewModel.onIntent(HomeIntent.ConfirmAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(20, mockSkillRepository.addedSkillId)
+        assertEquals("WANT", mockSkillRepository.addedSkillType)
+        assertEquals(1, mockSkillRepository.addedSkillLevel) // Mức mặc định thấp 1/5
+        assertEquals("user_skill_created_123", viewModel.state.value.pendingUndoSkillId)
+        assertEquals("Tiếng Nhật", viewModel.state.value.pendingUndoSkillName)
+    }
+
+    @Test
+    fun `undoAddSkill deletes newly created skill and refreshes matching suggestions`() = runTest {
+        returnEmptyMatching = true
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val skill = PotentialMatchSkill(skillId = 20, skillName = "Tiếng Nhật", proficiencyLevel = 2)
+        viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+        viewModel.onIntent(HomeIntent.ConfirmAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("user_skill_created_123", viewModel.state.value.pendingUndoSkillId)
+
+        // Undo
+        viewModel.onIntent(HomeIntent.UndoAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, mockSkillRepository.removeCallCount)
+        assertEquals("user_skill_created_123", mockSkillRepository.removedSkillId)
+        assertNull(viewModel.state.value.pendingUndoSkillId)
+        assertNull(viewModel.state.value.pendingUndoSkillName)
+    }
+
+    @Test
+    fun `undoAddSkill does not delete skill if it already existed in WANT beforehand`() = runTest {
+        returnEmptyMatching = true
+        mockSkillRepository.userSkillsToReturn.add(
+            UserSkill(id = "old_skill_999", skillId = 20, skillName = "Tiếng Nhật", type = SkillType.WANT, proficiencyLevel = 2)
+        )
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val skill = PotentialMatchSkill(skillId = 20, skillName = "Tiếng Nhật", proficiencyLevel = 2)
+        viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+        viewModel.onIntent(HomeIntent.ConfirmAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Since it was already present, pendingUndoSkillId must be null
+        assertNull(viewModel.state.value.pendingUndoSkillId)
+
+        // Undo
+        viewModel.onIntent(HomeIntent.UndoAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Must NOT call removeUserSkill
+        assertEquals(0, mockSkillRepository.removeCallCount)
+    }
+
+    @Test
+    fun `clearPendingUndo clears pending undo on dispose or timeout`() = runTest {
+        returnEmptyMatching = true
+        val viewModel = HomeViewModel(mockDiscoveryRepository, mockSkillRepository, tokenManager = testTokenManager)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val skill = PotentialMatchSkill(skillId = 20, skillName = "Tiếng Nhật", proficiencyLevel = 2)
+        viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+        viewModel.onIntent(HomeIntent.ConfirmAddSkill)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("user_skill_created_123", viewModel.state.value.pendingUndoSkillId)
+
+        viewModel.onIntent(HomeIntent.ClearPendingUndo)
+        assertNull(viewModel.state.value.pendingUndoSkillId)
+        assertNull(viewModel.state.value.pendingUndoSkillName)
     }
 }

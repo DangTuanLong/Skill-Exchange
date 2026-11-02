@@ -44,6 +44,7 @@ import com.skillexchange.app.R
 import com.skillexchange.app.core.ui.theme.*
 import com.skillexchange.app.core.ui.util.CategoryIconHelper
 import com.skillexchange.app.domain.model.SkillCategory
+import com.skillexchange.app.presentation.discovery.PotentialMatchCard
 import com.skillexchange.app.presentation.discovery.UserCardItem
 import com.skillexchange.app.presentation.discovery.formatCategoryLabel
 import kotlinx.coroutines.flow.collectLatest
@@ -81,17 +82,66 @@ fun HomeScreen(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.onIntent(HomeIntent.ClearPendingUndo)
+        }
+    }
+
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
                 is HomeEffect.ShowSnackbar -> {
-                    snackbarHostState.showSnackbar(effect.message)
+                    val result = snackbarHostState.showSnackbar(
+                        message = effect.message,
+                        actionLabel = effect.actionLabel,
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.onIntent(HomeIntent.UndoAddSkill)
+                    } else {
+                        viewModel.onIntent(HomeIntent.ClearPendingUndo)
+                    }
                 }
                 is HomeEffect.NavigateToProfileDetail -> {
                     onNavigateToProfileDetail(effect.userId)
                 }
             }
         }
+    }
+
+    // Confirmation dialog for adding potential skill to WANT (TASK-082)
+    state.pendingSkillToAdd?.let { skill ->
+        AlertDialog(
+            onDismissRequest = { viewModel.onIntent(HomeIntent.DismissAddSkillDialog) },
+            title = {
+                Text(
+                    text = "Thêm kỹ năng mong muốn",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Bạn có muốn thêm kỹ năng \"${skill.skillName}\" vào danh sách mong muốn học không?\n(Mục tiêu: 1/5, có thể chỉnh sau trong Quản lý kỹ năng)",
+                    fontSize = 14.sp,
+                    color = TextSecondaryLight
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onIntent(HomeIntent.ConfirmAddSkill) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                ) {
+                    Text("Thêm kỹ năng")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onIntent(HomeIntent.DismissAddSkillDialog) }) {
+                    Text("Hủy")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -381,44 +431,113 @@ fun HomeScreen(
                     }
                 }
             } else if (state.displayedUsers.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SearchOff,
-                            contentDescription = null,
-                            tint = Color(0xFFCBD5E1),
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (state.selectedTab == HomeTab.MATCHING) "Chưa có gợi ý phù hợp" else "Không tìm thấy đối tác phù hợp",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = TextPrimaryLight
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (state.selectedTab == HomeTab.MATCHING)
-                                "Hãy cập nhật kỹ năng CÓ và MUỐN trong hồ sơ, hoặc chuyển sang 'Tất cả đối tác' để tìm kiếm."
-                            else
-                                "Thử thay đổi từ khóa hoặc đặt lại bộ lọc tìm kiếm.",
-                            fontSize = 13.sp,
-                            color = TextSecondaryLight
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (state.selectedTab == HomeTab.MATCHING) {
-                            OutlinedButton(onClick = { viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.ALL_USERS)) }) {
-                                Text("Xem tất cả đối tác", color = Brand500)
+                if (state.selectedTab == HomeTab.MATCHING && state.potentialMatches.isNotEmpty()) {
+                    // Header for potential 1-way matches (TASK-082)
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                ) {
+                                    Text(
+                                        text = "Gợi ý một chiều",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Cơ hội kết nối mới",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimaryLight
+                                )
                             }
-                        } else {
-                            OutlinedButton(onClick = { viewModel.onIntent(HomeIntent.ResetFilters) }) {
-                                Text("Xóa bộ lọc", color = Brand500)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Đối tác cần kỹ năng bạn có, nhưng dạy kỹ năng bạn chưa thêm vào mong muốn. Thêm vào mong muốn để mở trao đổi 2 chiều!",
+                                fontSize = 13.sp,
+                                color = TextSecondaryLight
+                            )
+                        }
+                    }
+
+                    items(state.potentialMatches, key = { "potential_${it.userId}" }, contentType = { "PotentialCard" }) { potential ->
+                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                            PotentialMatchCard(
+                                match = potential,
+                                onAddWantSkill = { skill ->
+                                    viewModel.onIntent(HomeIntent.RequestAddPotentialSkill(skill))
+                                },
+                                onClick = { onNavigateToProfileDetail(potential.userId) }
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = Color(0xFFCBD5E1),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (state.selectedTab == HomeTab.MATCHING)
+                                    "Hiện không còn gợi ý mới phù hợp"
+                                else
+                                    "Không tìm thấy đối tác phù hợp",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = TextPrimaryLight
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (state.selectedTab == HomeTab.MATCHING)
+                                    "Hãy tìm kiếm thêm đối tác theo tên hoặc cập nhật danh sách kỹ năng của bạn!"
+                                else
+                                    "Thử thay đổi từ khóa hoặc đặt lại bộ lọc tìm kiếm.",
+                                fontSize = 13.sp,
+                                color = TextSecondaryLight
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (state.selectedTab == HomeTab.MATCHING) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.onIntent(HomeIntent.SwitchTab(HomeTab.ALL_USERS)) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                                    ) {
+                                        Text("Tìm kiếm đối tác")
+                                    }
+                                    OutlinedButton(
+                                        onClick = onNavigateToProfileSetup
+                                    ) {
+                                        Text("Cập nhật kỹ năng", color = Brand500)
+                                    }
+                                }
+                            } else {
+                                OutlinedButton(onClick = { viewModel.onIntent(HomeIntent.ResetFilters) }) {
+                                    Text("Xóa bộ lọc", color = Brand500)
+                                }
                             }
                         }
                     }
@@ -431,7 +550,8 @@ fun HomeScreen(
                     Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         UserCardItem(
                             user = user,
-                            onClick = { onNavigateToProfileDetail(user.userId) }
+                            onClick = { onNavigateToProfileDetail(user.userId) },
+                            showRelationshipChip = (state.selectedTab == HomeTab.ALL_USERS)
                         )
                     }
                 }

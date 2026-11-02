@@ -1,6 +1,8 @@
 package com.skillexchange.app.data.repository
 
 import com.skillexchange.app.data.remote.discovery.DiscoveryRemoteDataSource
+import com.skillexchange.app.domain.model.PotentialMatch
+import com.skillexchange.app.domain.model.PotentialMatchSkill
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserDiscovery
 import com.skillexchange.app.domain.model.UserSkill
@@ -52,7 +54,9 @@ class DiscoveryRepositoryImpl(
                         proficiencyLevel = sDto.proficiencyLevel,
                         note = sDto.note
                     )
-                }
+                },
+                relationshipStatus = userDto.relationshipStatus,
+                completedExchangeCount = userDto.completedExchangeCount
             )
         }
         DiscoverySearchResult(
@@ -61,8 +65,8 @@ class DiscoveryRepositoryImpl(
         )
     }
 
-    override suspend fun getMatchingSuggestions(limit: Int): Result<List<UserDiscovery>> = runCatching {
-        val response = remoteDataSource.getMatchingSuggestions(limit)
+    override suspend fun getMatchingSuggestions(limit: Int, cursor: String?): Result<List<UserDiscovery>> = runCatching {
+        val response = remoteDataSource.getMatchingSuggestions(limit, cursor)
         if (!response.success) {
             error(response.message ?: "Không thể tải gợi ý phù hợp")
         }
@@ -99,7 +103,35 @@ class DiscoveryRepositoryImpl(
                 avatarUrl = dto.avatarUrl,
                 city = dto.city,
                 skills = skills,
-                matchPercentage = dto.percentage
+                matchPercentage = dto.percentage,
+                availablePairsCount = dto.availablePairsCount
+            )
+        }
+    }
+
+    override suspend fun getPotentialSuggestions(limit: Int, cursor: String?): Result<List<PotentialMatch>> = runCatching {
+        val response = remoteDataSource.getPotentialSuggestions(limit, cursor)
+        if (!response.success) {
+            error(response.message ?: "Không thể tải gợi ý tiềm năng")
+        }
+        val items = response.data ?: emptyList()
+        items.map { dto ->
+            PotentialMatch(
+                userId = dto.userId,
+                fullName = dto.fullName,
+                avatarUrl = dto.avatarUrl,
+                city = dto.city,
+                canTeachSkill = PotentialMatchSkill(
+                    skillId = dto.canTeachSkill.skillId,
+                    skillName = dto.canTeachSkill.skillName,
+                    proficiencyLevel = dto.canTeachSkill.proficiencyLevel
+                ),
+                suggestedWantSkill = PotentialMatchSkill(
+                    skillId = dto.suggestedWantSkill.skillId,
+                    skillName = dto.suggestedWantSkill.skillName,
+                    proficiencyLevel = dto.suggestedWantSkill.proficiencyLevel
+                ),
+                potentialScore = dto.potentialScore
             )
         }
     }

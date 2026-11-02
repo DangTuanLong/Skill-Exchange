@@ -47,6 +47,7 @@ class SkillRepositoryImpl(
         val resp = remoteDataSource.addUserSkill(token, AddUserSkillDto(skillId, type, proficiencyLevel, note))
         val data = resp.data ?: error(resp.message ?: "Thêm kỹ năng thất bại")
         UserSkill(
+            id = data.id ?: "",
             skillId = data.skillId,
             skillName = data.skillName ?: "",
             categoryName = data.categoryName ?: "",
