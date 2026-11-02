@@ -311,4 +311,107 @@ class ProfileDetailViewModelTest {
         viewModel.onIntent(ProfileDetailIntent.DismissAllReviews)
         assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
     }
+
+    @Test
+    fun `profileDetail with all active pairs disables CTA with reason and shows ACTIVE chip`() = runTest {
+        val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun getIncomingRequests() = error("")
+            override suspend fun getOutgoingRequests() = error("")
+            override suspend fun getExchangeRequest(id: String) = error("")
+            override suspend fun acceptRequest(id: String) = error("")
+            override suspend fun rejectRequest(id: String) = error("")
+            override suspend fun cancelRequest(id: String, reason: String?) = error("")
+            override suspend fun completeRequest(id: String) = error("")
+            override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                        pairs = listOf(
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = true, completedCount = 0)
+                        ),
+                        recentlyRejected = false,
+                        relationshipStatus = "ACTIVE",
+                        completedExchangeCount = 0
+                    )
+                )
+            }
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.hasValidPair)
+        assertEquals("Tất cả cặp kỹ năng phù hợp đang có yêu cầu trao đổi đang xử lý.", state.noValidPairReason)
+        assertEquals("ACTIVE", state.relationshipStatus)
+        assertFalse(state.recentlyRejected)
+    }
+
+    @Test
+    fun `profileDetail with completed exchange shows COMPLETED chip and count`() = runTest {
+        val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun getIncomingRequests() = error("")
+            override suspend fun getOutgoingRequests() = error("")
+            override suspend fun getExchangeRequest(id: String) = error("")
+            override suspend fun acceptRequest(id: String) = error("")
+            override suspend fun rejectRequest(id: String) = error("")
+            override suspend fun cancelRequest(id: String, reason: String?) = error("")
+            override suspend fun completeRequest(id: String) = error("")
+            override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                        pairs = listOf(
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = false, completedCount = 3)
+                        ),
+                        recentlyRejected = false,
+                        relationshipStatus = "COMPLETED",
+                        completedExchangeCount = 3
+                    )
+                )
+            }
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertTrue(state.hasValidPair)
+        assertNull(state.noValidPairReason)
+        assertEquals("COMPLETED", state.relationshipStatus)
+        assertEquals(3, state.completedExchangeCount)
+    }
+
+    @Test
+    fun `profileDetail with recentlyRejected sets soft warning banner flag`() = runTest {
+        val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun getIncomingRequests() = error("")
+            override suspend fun getOutgoingRequests() = error("")
+            override suspend fun getExchangeRequest(id: String) = error("")
+            override suspend fun acceptRequest(id: String) = error("")
+            override suspend fun rejectRequest(id: String) = error("")
+            override suspend fun cancelRequest(id: String, reason: String?) = error("")
+            override suspend fun completeRequest(id: String) = error("")
+            override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                        pairs = listOf(
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = false, completedCount = 0)
+                        ),
+                        recentlyRejected = true
+                    )
+                )
+            }
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertTrue(state.recentlyRejected)
+    }
 }

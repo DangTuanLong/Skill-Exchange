@@ -260,6 +260,9 @@ fun SkillExchangeNavHost(
                 },
                 onNavigateToCall = { exchangeId, isVideo ->
                     navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
+                },
+                onNavigateToBookingRequest = { partnerId ->
+                    navController.navigate(Screen.BookingRequest.createRoute(partnerId))
                 }
             )
         }

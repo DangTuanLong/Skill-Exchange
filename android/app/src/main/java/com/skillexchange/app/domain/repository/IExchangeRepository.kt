@@ -2,6 +2,7 @@ package com.skillexchange.app.domain.repository
 
 import com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto
 import com.skillexchange.app.domain.model.exchange.ExchangeRequest
+import com.skillexchange.app.domain.model.exchange.ValidPairsResult
 
 interface IExchangeRepository {
     suspend fun createExchangeRequest(dto: CreateExchangeRequestDto): Result<ExchangeRequest>
@@ -12,4 +13,6 @@ interface IExchangeRepository {
     suspend fun rejectRequest(id: String): Result<ExchangeRequest>
     suspend fun cancelRequest(id: String, reason: String? = null): Result<ExchangeRequest>
     suspend fun completeRequest(id: String): Result<ExchangeRequest>
+    suspend fun getValidPairs(receiverId: String): Result<ValidPairsResult> =
+        Result.success(ValidPairsResult(emptyList(), false))
 }

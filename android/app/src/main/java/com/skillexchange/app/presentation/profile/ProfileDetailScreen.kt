@@ -18,6 +18,10 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.skillexchange.app.domain.model.rating.Rating
@@ -286,6 +290,34 @@ fun ProfileDetailScreen(
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Cảnh báo mềm khi đối phương từng từ chối/hủy gần đây (DEC-028, TASK-083)
+                    if (state.recentlyRejected) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Cảnh báo nhẹ",
+                                    tint = Color(0xFFD97706),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Yêu cầu trao đổi gần nhất với người này đã bị từ chối/hủy. Hãy gửi tin nhắn trao đổi rõ ràng hơn để tăng cơ hội kết nối nhé!",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF92400E),
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+
                     // Profile Main Card
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -427,6 +459,59 @@ fun ProfileDetailScreen(
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                             )
                                         }
+                                    }
+                                }
+                            }
+
+                            // Chip quan hệ ngữ cảnh (DEC-028, TASK-083)
+                            if (state.relationshipStatus == "ACTIVE") {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Handshake,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Đang trao đổi",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.semantics { contentDescription = "Trạng thái: Đang trao đổi" }
+                                        )
+                                    }
+                                }
+                            } else if (state.relationshipStatus == "COMPLETED" || state.completedExchangeCount > 0) {
+                                val count = if (state.completedExchangeCount > 0) state.completedExchangeCount else 1
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color(0xFFDCFCE7),
+                                    contentColor = Color(0xFF15803D)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF15803D),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Đã trao đổi $count lần",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.semantics { contentDescription = "Trạng thái: Đã trao đổi $count lần" }
+                                        )
                                     }
                                 }
                             }

@@ -38,6 +38,7 @@ fun BookingDetailScreen(
     onNavigateToRating: ((String) -> Unit)? = null,
     onNavigateToChat: ((String) -> Unit)? = null,
     onNavigateToCall: ((exchangeId: String, isVideo: Boolean) -> Unit)? = null,
+    onNavigateToBookingRequest: ((receiverId: String) -> Unit)? = null,
     viewModel: BookingDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -570,50 +571,103 @@ fun BookingDetailScreen(
                                 }
 
                                 ExchangeStatus.COMPLETED -> {
+                                    val partnerId = if (state.isSender) state.exchange?.receiverId else state.exchange?.senderId
                                     if (state.hasRated) {
-                                        Card(
+                                        Column(
                                             modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(12.dp),
-                                            colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            Row(
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(12.dp),
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(14.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF15803D),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        "Đã đánh giá",
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF15803D),
+                                                        fontSize = 15.sp
+                                                    )
+                                                }
+                                            }
+
+                                            // Khi đã đánh giá, "Trao đổi thêm" là CTA chính duy nhất (DEC-028, TASK-083)
+                                            Button(
+                                                onClick = {
+                                                    partnerId?.let { onNavigateToBookingRequest?.invoke(it) }
+                                                },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(14.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.Center
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Brand500)
                                             ) {
                                                 Icon(
-                                                    Icons.Default.Check,
+                                                    Icons.Default.Add,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF15803D),
-                                                    modifier = Modifier.size(20.dp)
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    "Đã đánh giá",
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF15803D),
-                                                    fontSize = 15.sp
-                                                )
+                                                Text("Trao đổi thêm", fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     } else {
-                                        Button(
-                                            onClick = {
-                                                state.exchange?.let { ex ->
-                                                    onNavigateToRating?.invoke(ex.id)
-                                                }
-                                            },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Đánh giá ${state.otherPartyName}", fontWeight = FontWeight.Bold)
+                                            // CTA chính: Đánh giá
+                                            Button(
+                                                onClick = {
+                                                    state.exchange?.let { ex ->
+                                                        onNavigateToRating?.invoke(ex.id)
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                                            ) {
+                                                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Đánh giá ${state.otherPartyName}", fontWeight = FontWeight.Bold)
+                                            }
+
+                                            // Nút phụ: Trao đổi thêm (OutlinedButton per single primary CTA rule - DEC-028, TASK-083)
+                                            OutlinedButton(
+                                                onClick = {
+                                                    partnerId?.let { onNavigateToBookingRequest?.invoke(it) }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, Brand500)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Add,
+                                                    contentDescription = null,
+                                                    tint = Brand500,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Trao đổi thêm", fontWeight = FontWeight.Bold, color = Brand500)
+                                            }
                                         }
                                     }
                                 }

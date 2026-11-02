@@ -70,4 +70,9 @@ class ExchangeRemoteDataSource(private val client: HttpClient) {
         val response = client.put("${Constants.BASE_URL}/api/exchange-requests/$id/complete")
         return handleResponse(response)
     }
+
+    suspend fun getValidPairs(receiverId: String): ValidPairsResponseDto {
+        val response = client.get("${Constants.BASE_URL}/api/exchange-requests/valid-pairs/$receiverId")
+        return handleResponse(response)
+    }
 }

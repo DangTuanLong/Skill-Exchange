@@ -75,5 +75,7 @@ data class ValidSkillPairDto(
 @Serializable
 data class ValidPairsResponse(
     val pairs: List<ValidSkillPairDto>,
-    @SerialName("recently_rejected") val recentlyRejected: Boolean = false
+    @SerialName("recently_rejected") val recentlyRejected: Boolean = false,
+    @SerialName("relationship_status") val relationshipStatus: String? = null,
+    @SerialName("completed_exchange_count") val completedExchangeCount: Int = 0
 )

@@ -202,4 +202,24 @@ class BookingDetailViewModelTest {
         assertEquals(ExchangeStatus.COMPLETED, state.status)
         assertTrue(state.hasRated)
     }
+
+    @Test
+    fun `completed exchange allows rebooking partner whether user is sender or receiver`() = runTest {
+        currentExchange = currentExchange.copy(
+            status = ExchangeStatus.COMPLETED,
+            senderId = "user_sender",
+            receiverId = "user_receiver",
+            senderCompletedAt = "2026-10-15T11:00:00Z",
+            receiverCompletedAt = "2026-10-15T11:00:00Z"
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(ExchangeStatus.COMPLETED, state.status)
+        assertTrue(state.isReceiver)
+        val partnerId = if (state.isSender) state.exchange?.receiverId else state.exchange?.senderId
+        assertEquals("user_sender", partnerId)
+    }
 }

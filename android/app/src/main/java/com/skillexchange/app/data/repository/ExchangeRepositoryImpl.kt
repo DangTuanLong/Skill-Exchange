@@ -3,6 +3,7 @@ package com.skillexchange.app.data.repository
 import com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto
 import com.skillexchange.app.data.remote.exchange.ExchangeRemoteDataSource
 import com.skillexchange.app.domain.model.exchange.ExchangeRequest
+import com.skillexchange.app.domain.model.exchange.ValidPairsResult
 import com.skillexchange.app.domain.model.exchange.toDomain
 import com.skillexchange.app.domain.repository.IExchangeRepository
 
@@ -48,5 +49,10 @@ class ExchangeRepositoryImpl(
     override suspend fun completeRequest(id: String): Result<ExchangeRequest> =
         runCatching {
             remoteDataSource.completeRequest(id).toDomain()
+        }
+
+    override suspend fun getValidPairs(receiverId: String): Result<ValidPairsResult> =
+        runCatching {
+            remoteDataSource.getValidPairs(receiverId).toDomain()
         }
 }

@@ -1,6 +1,7 @@
 package com.skillexchange.app.presentation.booking
 
 import androidx.lifecycle.SavedStateHandle
+import com.skillexchange.app.core.network.ApiException
 import com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto
 import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.model.SkillCategory
@@ -9,6 +10,8 @@ import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.model.exchange.ExchangeRequest
 import com.skillexchange.app.domain.model.exchange.ExchangeStatus
 import com.skillexchange.app.domain.model.exchange.MeetingMode
+import com.skillexchange.app.domain.model.exchange.ValidPairsResult
+import com.skillexchange.app.domain.model.exchange.ValidSkillPair
 import com.skillexchange.app.domain.repository.IExchangeRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
@@ -78,6 +81,9 @@ class BookingRequestViewModelTest {
         )
     )
 
+    private var getValidPairsCalls = 0
+    private var mockValidPairsResult: Result<ValidPairsResult>? = null
+
     private val mockExchangeRepo = object : IExchangeRepository {
         override suspend fun createExchangeRequest(dto: CreateExchangeRequestDto): Result<ExchangeRequest> {
             lastCreatedDto = dto
@@ -90,11 +96,35 @@ class BookingRequestViewModelTest {
         override suspend fun rejectRequest(id: String): Result<ExchangeRequest> = error("Not used")
         override suspend fun cancelRequest(id: String, reason: String?): Result<ExchangeRequest> = error("Not used")
         override suspend fun completeRequest(id: String): Result<ExchangeRequest> = error("Not used")
+        override suspend fun getValidPairs(receiverId: String): Result<ValidPairsResult> {
+            getValidPairsCalls++
+            return mockValidPairsResult ?: Result.success(ValidPairsResult(emptyList(), false))
+        }
     }
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        getValidPairsCalls = 0
+        mockValidPairsResult = null
+        lastCreatedDto = null
+        createResult = Result.success(
+            ExchangeRequest(
+                id = "ex_123",
+                senderId = "me_user",
+                receiverId = "user_b",
+                skillOfferedId = 1,
+                skillOfferedName = "Python",
+                skillWantedId = 2,
+                skillWantedName = "Guitar",
+                status = ExchangeStatus.PENDING,
+                durationMinutes = 60,
+                meetingMode = MeetingMode.UNDECIDED,
+                scheduledAt = "2026-10-10T10:00:00Z",
+                createdAt = "2026-10-05T00:00:00Z",
+                updatedAt = "2026-10-05T00:00:00Z"
+            )
+        )
         mySkillsList = listOf(
             UserSkill(id = "1", skillId = 1, skillName = "Python", type = SkillType.HAVE, proficiencyLevel = 4),
             UserSkill(id = "2", skillId = 2, skillName = "Guitar", type = SkillType.WANT, proficiencyLevel = 2)
@@ -201,6 +231,140 @@ class BookingRequestViewModelTest {
         val navEffect = effectReceived as BookingRequestEffect.NavigateToDetail
         assertEquals("ex_123", navEffect.exchangeId)
         assertEquals("user_b", navEffect.receiverId)
+        job.cancel()
+    }
+
+    @Test
+    fun `loadData with valid pairs filters available and active pairs`() = runTest {
+        mockValidPairsResult = Result.success(
+            ValidPairsResult(
+                pairs = listOf(
+                    ValidSkillPair(1, "Python", 2, "Guitar", isActive = false, completedCount = 1),
+                    ValidSkillPair(1, "Python", 3, "Piano", isActive = true, completedCount = 0)
+                ),
+                recentlyRejected = false
+            )
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("receiverId" to "user_b"))
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(2, state.pairs.size)
+        assertEquals(1, state.availablePairs.size)
+        assertEquals(2, state.availablePairs[0].skillWantedId)
+        assertEquals(1, state.selectedSkillOfferedId)
+        assertEquals(2, state.selectedSkillWantedId)
+        assertFalse(state.recentlyRejected)
+    }
+
+    @Test
+    fun `loadData picks best ProficiencyFit pair by default`() = runTest {
+        mySkillsList = listOf(
+            UserSkill(id = "1", skillId = 1, skillName = "Python", type = SkillType.HAVE, proficiencyLevel = 4),
+            UserSkill(id = "2", skillId = 10, skillName = "Kotlin", type = SkillType.HAVE, proficiencyLevel = 5),
+            UserSkill(id = "3", skillId = 2, skillName = "Guitar", type = SkillType.WANT, proficiencyLevel = 2)
+        )
+        receiverSkillsList = listOf(
+            UserSkill(id = "4", skillId = 1, skillName = "Python", type = SkillType.WANT, proficiencyLevel = 4),
+            UserSkill(id = "5", skillId = 10, skillName = "Kotlin", type = SkillType.WANT, proficiencyLevel = 1),
+            UserSkill(id = "6", skillId = 2, skillName = "Guitar", type = SkillType.HAVE, proficiencyLevel = 3)
+        )
+        mockValidPairsResult = Result.success(
+            ValidPairsResult(
+                pairs = listOf(
+                    ValidSkillPair(10, "Kotlin", 2, "Guitar", isActive = false, completedCount = 0),
+                    ValidSkillPair(1, "Python", 2, "Guitar", isActive = false, completedCount = 0)
+                ),
+                recentlyRejected = false
+            )
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("receiverId" to "user_b"))
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(1, state.selectedSkillOfferedId)
+        assertEquals(2, state.selectedSkillWantedId)
+    }
+
+    @Test
+    fun `loadData sets recentlyRejected flag for soft warning banner`() = runTest {
+        mockValidPairsResult = Result.success(
+            ValidPairsResult(
+                pairs = listOf(ValidSkillPair(1, "Python", 2, "Guitar", isActive = false, completedCount = 0)),
+                recentlyRejected = true
+            )
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("receiverId" to "user_b"))
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertTrue(state.recentlyRejected)
+    }
+
+    @Test
+    fun `submitRequest with PAIR_ALREADY_ACTIVE error shows Vietnamese message and reloads valid pairs`() = runTest {
+        createResult = Result.failure(
+            ApiException(
+                status = 409,
+                code = ApiException.CODE_PAIR_ALREADY_ACTIVE,
+                message = "Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động."
+            )
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("receiverId" to "user_b"))
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val initialCalls = getValidPairsCalls
+
+        viewModel.onIntent(BookingRequestIntent.SetScheduledDate(System.currentTimeMillis() + 86400000L))
+        var snackbarMsg: String? = null
+        val job = launch {
+            val eff = viewModel.effect.first()
+            if (eff is BookingRequestEffect.ShowSnackbar) {
+                snackbarMsg = eff.message
+            }
+        }
+
+        viewModel.onIntent(BookingRequestIntent.SubmitRequest)
+        advanceUntilIdle()
+
+        assertEquals("Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động.", snackbarMsg)
+        assertTrue(getValidPairsCalls > initialCalls)
+        job.cancel()
+    }
+
+    @Test
+    fun `submitRequest with PENDING_LIMIT_REACHED error shows Vietnamese message and reloads valid pairs`() = runTest {
+        createResult = Result.failure(
+            ApiException(
+                status = 409,
+                code = ApiException.CODE_PENDING_LIMIT_REACHED,
+                message = "Bạn đang có 3 yêu cầu chờ phản hồi với người này."
+            )
+        )
+        val savedStateHandle = SavedStateHandle(mapOf("receiverId" to "user_b"))
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val initialCalls = getValidPairsCalls
+
+        viewModel.onIntent(BookingRequestIntent.SetScheduledDate(System.currentTimeMillis() + 86400000L))
+        var snackbarMsg: String? = null
+        val job = launch {
+            val eff = viewModel.effect.first()
+            if (eff is BookingRequestEffect.ShowSnackbar) {
+                snackbarMsg = eff.message
+            }
+        }
+
+        viewModel.onIntent(BookingRequestIntent.SubmitRequest)
+        advanceUntilIdle()
+
+        assertEquals("Bạn đang có 3 yêu cầu chờ phản hồi với người này.", snackbarMsg)
+        assertTrue(getValidPairsCalls > initialCalls)
         job.cancel()
     }
 }

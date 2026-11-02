@@ -28,6 +28,9 @@ data class ProfileDetailUiState(
     val reputation: com.skillexchange.app.domain.model.rating.Reputation? = null,
     val reviews: List<com.skillexchange.app.domain.model.rating.Rating> = emptyList(),
     val showAllReviewsBottomSheet: Boolean = false,
+    val relationshipStatus: String? = null, // "ACTIVE", "COMPLETED", null (DEC-028, TASK-083)
+    val completedExchangeCount: Int = 0,
+    val recentlyRejected: Boolean = false,
     val error: String? = null
 ) {
     val suggestedSkill: UserSkill?
@@ -52,7 +55,8 @@ class ProfileDetailViewModel(
     private val profileRepository: IProfileRepository,
     private val skillRepository: ISkillRepository,
     private val tokenManager: TokenManager,
-    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository
+    private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository,
+    private val exchangeRepository: com.skillexchange.app.domain.repository.IExchangeRepository? = null
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
@@ -135,7 +139,6 @@ class ProfileDetailViewModel(
                 val want = myWants.find { it.skillId == have.skillId }
                 want != null && have.proficiencyLevel >= want.proficiencyLevel
             }
-            val hasValidPair = !isOwn && validTeach && validLearn
 
             // Tiềm năng 1 chiều: Mình dạy được cho đối phương, nhưng đối phương dạy kỹ năng mình chưa có trong WANT
             val suggestedSkills = if (!isOwn && validTeach && !validLearn) {
@@ -146,12 +149,41 @@ class ProfileDetailViewModel(
                 emptyList()
             }
 
+            // Gọi valid-pairs để lấy trạng thái cặp, quan hệ và cảnh báo mềm (DEC-028, TASK-083)
+            val validPairsRes = if (!isOwn) exchangeRepository?.getValidPairs(userId)?.getOrNull() else null
+            val validPairs = validPairsRes?.pairs ?: emptyList()
+            val recentlyRejected = validPairsRes?.recentlyRejected ?: false
+            val relStatus = validPairsRes?.relationshipStatus
+            val completedCount = validPairsRes?.completedExchangeCount ?: 0
+
+            val availablePairs = validPairs.filter { !it.isActive }
+
+            val hasValidPair = when {
+                isOwn -> false
+                !validTeach || !validLearn -> false
+                validPairsRes != null && validPairs.isNotEmpty() -> availablePairs.isNotEmpty()
+                validPairsRes != null && validPairs.isEmpty() -> false
+                else -> !isOwn && validTeach && validLearn
+            }
+
             val reason = when {
                 isOwn -> "Đây là hồ sơ cá nhân của bạn"
+                validTeach && validLearn && validPairsRes != null && validPairs.isNotEmpty() && availablePairs.isEmpty() ->
+                    "Tất cả cặp kỹ năng phù hợp đang có yêu cầu trao đổi đang xử lý."
                 !hasValidPair && suggestedSkills.isNotEmpty() -> null
                 !hasValidPair -> "Chưa có cặp kỹ năng phù hợp hai chiều để trao đổi"
                 else -> null
             }
+
+            val effectiveRelStatus = relStatus
+                ?: if (validPairs.any { it.isActive }) "ACTIVE"
+                   else if (completedCount > 0 || validPairs.any { it.completedCount > 0 }) "COMPLETED"
+                   else null
+
+            val effectiveCompletedCount = maxOf(
+                completedCount,
+                validPairs.maxOfOrNull { it.completedCount } ?: 0
+            )
 
             _state.update {
                 it.copy(
@@ -164,6 +196,9 @@ class ProfileDetailViewModel(
                     suggestedSkills = suggestedSkills,
                     reputation = reputation,
                     reviews = reviews,
+                    relationshipStatus = effectiveRelStatus,
+                    completedExchangeCount = effectiveCompletedCount,
+                    recentlyRejected = recentlyRejected,
                     error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
                 )
             }

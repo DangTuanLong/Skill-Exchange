@@ -608,10 +608,20 @@ open class ExchangeService(
             }
         }
 
-        // Chỉ trả về các cặp còn khả dụng (chưa active), cặp COMPLETED vẫn khả dụng để trao đổi tiếp
+        val hasActive = existingRequests.any { req ->
+            req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.PENDING.name, ExchangeStatus.ACCEPTED.name)
+        }
+        val completedCount = existingRequests.count { req ->
+            req[ExchangeRequestsTable.status] == ExchangeStatus.COMPLETED.name
+        }
+        val relStatus = if (hasActive) "ACTIVE" else if (completedCount > 0) "COMPLETED" else null
+
+        // Trả về danh sách cặp kỹ năng hợp lệ (mỗi cặp có isActive để client nhận diện hoặc disable)
         ValidPairsResponse(
-            pairs = pairs.filter { !it.isActive },
-            recentlyRejected = recentlyRejected
+            pairs = pairs,
+            recentlyRejected = recentlyRejected,
+            relationshipStatus = relStatus,
+            completedExchangeCount = completedCount
         )
     }
 }

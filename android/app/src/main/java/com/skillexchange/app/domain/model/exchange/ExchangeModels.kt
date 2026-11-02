@@ -1,6 +1,8 @@
 package com.skillexchange.app.domain.model.exchange
 
 import com.skillexchange.app.data.remote.exchange.ExchangeRequestDto
+import com.skillexchange.app.data.remote.exchange.ValidPairsResponseDto
+import com.skillexchange.app.data.remote.exchange.ValidSkillPairDto
 
 enum class ExchangeStatus {
     PENDING,
@@ -106,3 +108,36 @@ fun ExchangeRequestDto.toDomain(): ExchangeRequest {
         updatedAt = updatedAt
     )
 }
+
+data class ValidSkillPair(
+    val skillOfferedId: Int,
+    val skillOfferedName: String,
+    val skillWantedId: Int,
+    val skillWantedName: String,
+    val isActive: Boolean,
+    val completedCount: Int
+)
+
+data class ValidPairsResult(
+    val pairs: List<ValidSkillPair>,
+    val recentlyRejected: Boolean,
+    val relationshipStatus: String? = null,
+    val completedExchangeCount: Int = 0
+)
+
+fun ValidSkillPairDto.toDomain() = ValidSkillPair(
+    skillOfferedId = skillOfferedId,
+    skillOfferedName = skillOfferedName,
+    skillWantedId = skillWantedId,
+    skillWantedName = skillWantedName,
+    isActive = isActive,
+    completedCount = completedCount
+)
+
+fun ValidPairsResponseDto.toDomain() = ValidPairsResult(
+    pairs = pairs.map { it.toDomain() },
+    recentlyRejected = recentlyRejected,
+    relationshipStatus = relationshipStatus,
+    completedExchangeCount = completedExchangeCount
+)
+

@@ -434,16 +434,22 @@ open class MatchingService {
     }
 
     fun decodeCursor(cursor: String): Pair<Int, String>? {
-        val raw = try {
-            String(Base64.getUrlDecoder().decode(cursor), Charsets.UTF_8)
-        } catch (e: Exception) {
-            cursor
-        }
-        val parts = raw.split("_", limit = 2)
-        if (parts.size == 2) {
-            val score = parts[0].toIntOrNull() ?: return null
-            val userId = parts[1]
-            return score to userId
+        if (cursor.isBlank()) return null
+        val candidates = mutableListOf<String>()
+        try {
+            val decoded = String(Base64.getUrlDecoder().decode(cursor), Charsets.UTF_8)
+            candidates.add(decoded)
+        } catch (_: Exception) {}
+        candidates.add(cursor)
+
+        for (raw in candidates) {
+            val parts = raw.split("_", limit = 2)
+            if (parts.size == 2) {
+                val score = parts[0].toIntOrNull()
+                if (score != null && parts[1].isNotBlank()) {
+                    return score to parts[1]
+                }
+            }
         }
         return null
     }

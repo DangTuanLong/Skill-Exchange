@@ -85,6 +85,10 @@ class ApiException(
         const val CODE_LIVEKIT_NOT_CONFIGURED = "LIVEKIT_NOT_CONFIGURED"
         const val CODE_CALL_NOT_FOUND = "CALL_NOT_FOUND"
 
+        // Symmetric Pair & Pending Limit Error Codes (DEC-028, TASK-081, TASK-083)
+        const val CODE_PAIR_ALREADY_ACTIVE = "PAIR_ALREADY_ACTIVE"
+        const val CODE_PENDING_LIMIT_REACHED = "PENDING_LIMIT_REACHED"
+
         /**
          * Chuyển đổi từ HTTP status và ApiErrorDto sang ApiException.
          * Ưu tiên chuỗi code -> fallback status -> fallback server message -> thông điệp mặc định.
@@ -154,6 +158,8 @@ class ApiException(
                     CODE_CALL_COOLDOWN_ACTIVE -> return "Vui lòng đợi ít giây trước khi thực hiện cuộc gọi tiếp theo."
                     CODE_LIVEKIT_NOT_CONFIGURED -> return "Dịch vụ gọi trực tiếp chưa sẵn sàng. Vui lòng thử lại sau."
                     CODE_CALL_NOT_FOUND -> return "Không tìm thấy phiên cuộc gọi."
+                    CODE_PAIR_ALREADY_ACTIVE -> return "Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động."
+                    CODE_PENDING_LIMIT_REACHED -> return "Bạn đang có 3 yêu cầu chờ phản hồi với người này."
                     else -> {}
                 }
             }

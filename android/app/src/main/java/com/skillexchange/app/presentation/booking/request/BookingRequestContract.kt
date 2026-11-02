@@ -3,6 +3,7 @@ package com.skillexchange.app.presentation.booking.request
 import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.model.exchange.MeetingMode
+import com.skillexchange.app.domain.model.exchange.ValidSkillPair
 
 data class BookingRequestState(
     val isLoading: Boolean = false,
@@ -10,8 +11,10 @@ data class BookingRequestState(
     val receiverProfile: Profile? = null,
     val validTeachSkills: List<UserSkill> = emptyList(), // Current user's HAVE that receiver WANTs
     val validLearnSkills: List<UserSkill> = emptyList(), // Receiver's HAVE that current user WANTs
+    val pairs: List<ValidSkillPair> = emptyList(), // All valid pairs from valid-pairs API (DEC-028)
     val selectedSkillOfferedId: Int? = null,
     val selectedSkillWantedId: Int? = null,
+    val recentlyRejected: Boolean = false,
     val scheduledDateEpochMs: Long = System.currentTimeMillis() + 86400000L, // Default tomorrow
     val scheduledHour: Int = 10,
     val scheduledMinute: Int = 0,
@@ -20,8 +23,11 @@ data class BookingRequestState(
     val message: String = "",
     val error: String? = null
 ) {
+    val availablePairs: List<ValidSkillPair>
+        get() = pairs.filter { !it.isActive }
+
     val hasValidPair: Boolean
-        get() = validTeachSkills.isNotEmpty() && validLearnSkills.isNotEmpty()
+        get() = availablePairs.isNotEmpty()
 
     val canSubmit: Boolean
         get() = hasValidPair &&
@@ -33,6 +39,7 @@ data class BookingRequestState(
 
 sealed class BookingRequestIntent {
     data class LoadData(val receiverId: String) : BookingRequestIntent()
+    data class SelectPair(val skillOfferedId: Int, val skillWantedId: Int) : BookingRequestIntent()
     data class SelectSkillOffered(val skillId: Int) : BookingRequestIntent()
     data class SelectSkillWanted(val skillId: Int) : BookingRequestIntent()
     data class SetScheduledDate(val epochMs: Long) : BookingRequestIntent()
