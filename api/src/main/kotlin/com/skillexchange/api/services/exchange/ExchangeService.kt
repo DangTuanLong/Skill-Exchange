@@ -29,9 +29,9 @@ open class ExchangeService(
     }
 
     /**
-     * Tạo yêu cầu trao đổi kỹ năng mới (sender -> receiver).
+     * Kiểm tra hợp lệ các trường dữ liệu thuần túy (không phụ thuộc CSDL) trước khi mở transaction.
      */
-    open fun createExchangeRequest(senderId: String, req: CreateExchangeRequest): ExchangeRequestDto = transaction {
+    open fun validateCreateExchangeInput(senderId: String, req: CreateExchangeRequest) {
         // 1. Kiểm tra sender != receiver
         if (senderId == req.receiverId) {
             throw ValidationException("Không thể gửi yêu cầu trao đổi cho chính mình")
@@ -41,11 +41,6 @@ open class ExchangeService(
         if (req.message != null && req.message.length > ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH) {
             throw ValidationException("Lời nhắn không được vượt quá ${ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH} ký tự")
         }
-
-        // 2. Kiểm tra receiver tồn tại
-        val receiverProfile = ProfilesTable.selectAll()
-            .where { ProfilesTable.userId eq req.receiverId }
-            .firstOrNull() ?: throw ValidationException("Người nhận không tồn tại")
 
         // 3. Kiểm tra durationMinutes
         val allowedDurations = listOf(30, 60, 90, 120)
@@ -65,6 +60,22 @@ open class ExchangeService(
         if (!scheduledDateTime.isAfter(LocalDateTime.now())) {
             throw ValidationException("Thời gian hẹn phải ở tương lai")
         }
+    }
+
+    /**
+     * Tạo yêu cầu trao đổi kỹ năng mới (sender -> receiver).
+     */
+    open fun createExchangeRequest(senderId: String, req: CreateExchangeRequest): ExchangeRequestDto {
+        validateCreateExchangeInput(senderId, req)
+
+        val upperMode = req.meetingMode.uppercase().trim()
+        val scheduledDateTime = parseIsoDateTime(req.scheduledAt)
+
+        val dto = transaction {
+            // 2. Kiểm tra receiver tồn tại
+            val receiverProfile = ProfilesTable.selectAll()
+                .where { ProfilesTable.userId eq req.receiverId }
+                .firstOrNull() ?: throw ValidationException("Người nhận không tồn tại")
 
         // 6. Kiểm tra cặp kỹ năng hợp lệ hai chiều (BUSINESS_RULES.md §3)
         // Chiều 1: Sender dạy skillOfferedId cho Receiver (Sender HAVE >= Receiver WANT)
@@ -185,9 +196,12 @@ open class ExchangeService(
         val dto = getExchangeRequestInternal(newId.toString())
             ?: throw IllegalStateException("Không thể tải yêu cầu vừa tạo")
 
-        notificationHook.onRequestCreated(dto)
         dto
     }
+
+    notificationHook.onRequestCreated(dto)
+    return dto
+}
 
     /**
      * Danh sách yêu cầu gửi đến người gọi (receiverId = userId).

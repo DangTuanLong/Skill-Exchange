@@ -6,6 +6,7 @@ import com.skillexchange.api.models.exchange.CancelExchangeRequest
 import com.skillexchange.api.models.exchange.CreateExchangeRequest
 import com.skillexchange.api.plugins.ValidationException
 import com.skillexchange.api.plugins.getUserId
+import com.skillexchange.api.services.InMemoryRateLimiter
 import com.skillexchange.api.services.exchange.ExchangeConflictException
 import com.skillexchange.api.services.exchange.ExchangeForbiddenException
 import com.skillexchange.api.services.exchange.PairAlreadyActiveException
@@ -18,7 +19,17 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.*
 
-fun Route.exchangeRoutes(exchangeService: ExchangeService) {
+const val VALID_PAIRS_RATE_LIMIT_PER_MINUTE = 30
+
+val defaultValidPairsRateLimiter = InMemoryRateLimiter(
+    maxRequests = VALID_PAIRS_RATE_LIMIT_PER_MINUTE,
+    windowMillis = 60_000L
+)
+
+fun Route.exchangeRoutes(
+    exchangeService: ExchangeService,
+    validPairsRateLimiter: InMemoryRateLimiter = defaultValidPairsRateLimiter
+) {
 
     route("/api/exchange-requests") {
         authenticate("auth-jwt") {
@@ -71,6 +82,17 @@ fun Route.exchangeRoutes(exchangeService: ExchangeService) {
             // GET /api/exchange-requests/valid-pairs/{receiverId} - Danh sách cặp kỹ năng khả dụng để đặt lịch (DEC-028)
             get("/valid-pairs/{receiverId}") {
                 val callerUserId = call.getUserId()
+                if (!validPairsRateLimiter.tryAcquire(callerUserId)) {
+                    return@get call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = 429,
+                            code = ErrorCodes.RATE_LIMITED,
+                            message = "Bạn đang gửi yêu cầu kiểm tra cặp kỹ năng quá nhanh. Vui lòng thử lại sau 1 phút."
+                        )
+                    )
+                }
+
                 val receiverId = call.parameters["receiverId"]
                 if (receiverId.isNullOrBlank() || receiverId == callerUserId) {
                     return@get call.respond(

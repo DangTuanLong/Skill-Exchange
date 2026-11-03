@@ -159,7 +159,18 @@ kover {
     reports {
         filters {
             excludes {
-                classes("*Benchmark*")
+                classes(
+                    "*Benchmark*",
+                    "*$\$serializer*",
+                    "com.skillexchange.api.models.db.*",
+                    "com.skillexchange.api.config.*",
+                    "com.skillexchange.api.seed.*"
+                )
+                packages(
+                    "com.skillexchange.api.models.db",
+                    "com.skillexchange.api.config",
+                    "com.skillexchange.api.seed"
+                )
             }
         }
     }

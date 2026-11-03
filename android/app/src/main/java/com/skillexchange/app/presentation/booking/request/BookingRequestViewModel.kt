@@ -101,7 +101,7 @@ class BookingRequestViewModel(
             val rawPairs = pairsResult?.pairs ?: emptyList()
             val recentlyRejected = pairsResult?.recentlyRejected ?: false
 
-            val finalPairs = if (rawPairs.isNotEmpty() || validPairsRes.isSuccess) {
+            val finalPairs = if (rawPairs.isNotEmpty()) {
                 rawPairs
             } else {
                 // Fallback nếu API valid-pairs thất bại hoặc chưa mock trong test cũ
