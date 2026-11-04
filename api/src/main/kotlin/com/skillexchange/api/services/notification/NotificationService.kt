@@ -111,7 +111,9 @@ open class NotificationService(
         } catch (e: Exception) {
             // Xử lý duplicate key / conflict constraint
             if (e.message?.contains("unique", ignoreCase = true) == true ||
-                e.message?.contains("idx_notifications_unique_reminders", ignoreCase = true) == true) {
+                e.message?.contains("idx_notifications_unique_reminders", ignoreCase = true) == true ||
+                e.message?.contains("idx_notifications_unique_appointment", ignoreCase = true) == true ||
+                e.message?.contains("idx_notifications_unique_rating", ignoreCase = true) == true) {
                 logger.info("Thông báo trùng lặp (đã tồn tại) cho user $userId, type $type, entityId $entityId -> bỏ qua")
                 return null
             }

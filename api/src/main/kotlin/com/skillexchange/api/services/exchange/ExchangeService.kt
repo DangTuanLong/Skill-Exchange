@@ -239,7 +239,7 @@ open class ExchangeService(
      */
     open fun acceptRequest(callerUserId: String, exchangeId: String): ExchangeRequestDto? = transaction {
         val uuid = try { UUID.fromString(exchangeId) } catch (e: Exception) { return@transaction null }
-        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.firstOrNull()
+        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.forUpdate().firstOrNull()
             ?: return@transaction null
 
         val currentStatus = ExchangeStatus.valueOf(row[ExchangeRequestsTable.status])
@@ -281,7 +281,7 @@ open class ExchangeService(
      */
     open fun rejectRequest(callerUserId: String, exchangeId: String): ExchangeRequestDto? = transaction {
         val uuid = try { UUID.fromString(exchangeId) } catch (e: Exception) { return@transaction null }
-        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.firstOrNull()
+        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.forUpdate().firstOrNull()
             ?: return@transaction null
 
         val currentStatus = ExchangeStatus.valueOf(row[ExchangeRequestsTable.status])
@@ -325,7 +325,7 @@ open class ExchangeService(
         }
 
         val uuid = try { UUID.fromString(exchangeId) } catch (e: Exception) { return@transaction null }
-        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.firstOrNull()
+        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.forUpdate().firstOrNull()
             ?: return@transaction null
 
         val currentStatus = ExchangeStatus.valueOf(row[ExchangeRequestsTable.status])
@@ -369,8 +369,34 @@ open class ExchangeService(
      */
     open fun completeRequest(callerUserId: String, exchangeId: String): ExchangeRequestDto? = transaction {
         val uuid = try { UUID.fromString(exchangeId) } catch (e: Exception) { return@transaction null }
-        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.firstOrNull()
+        val row = ExchangeRequestsTable.selectAll().where { ExchangeRequestsTable.id eq uuid }.forUpdate().firstOrNull()
             ?: return@transaction null
+
+        val now = LocalDateTime.now()
+
+        // DEC-025 / TASK-068: Chặn /complete nếu có đề xuất đổi lịch PENDING còn hiệu lực
+        val pendingProposals = com.skillexchange.api.models.db.RescheduleProposalsTable.selectAll()
+            .where {
+                (com.skillexchange.api.models.db.RescheduleProposalsTable.exchangeId eq uuid) and
+                (com.skillexchange.api.models.db.RescheduleProposalsTable.status eq com.skillexchange.api.models.exchange.RescheduleStatus.PENDING.name)
+            }
+            .toList()
+
+        for (p in pendingProposals) {
+            val pStatus = p[com.skillexchange.api.models.db.RescheduleProposalsTable.status]
+            val pCreatedAt = p[com.skillexchange.api.models.db.RescheduleProposalsTable.createdAt]
+            val pNewScheduledAt = p[com.skillexchange.api.models.db.RescheduleProposalsTable.newScheduledAt]
+            val isExpired = RescheduleLogicHelper.isProposalExpired(pStatus, pCreatedAt, pNewScheduledAt, now)
+
+            if (isExpired) {
+                com.skillexchange.api.models.db.RescheduleProposalsTable.update({ com.skillexchange.api.models.db.RescheduleProposalsTable.id eq p[com.skillexchange.api.models.db.RescheduleProposalsTable.id] }) {
+                    it[status] = com.skillexchange.api.models.exchange.RescheduleStatus.EXPIRED.name
+                    it[updatedAt] = now
+                }
+            } else {
+                throw ExchangeConflictException("Không thể hoàn thành trao đổi khi đang có đề xuất đổi lịch chờ phản hồi.")
+            }
+        }
 
         val currentStatus = ExchangeStatus.valueOf(row[ExchangeRequestsTable.status])
         val sId = row[ExchangeRequestsTable.senderId]
@@ -385,7 +411,7 @@ open class ExchangeService(
             senderId = sId,
             receiverId = rId,
             callerUserId = callerUserId,
-            now = LocalDateTime.now(),
+            now = now,
             senderCompletedAt = sCompleted,
             receiverCompletedAt = rCompleted,
             cancellationReason = reason,

@@ -49,9 +49,10 @@ val appModule = module {
         com.skillexchange.api.services.chat.FirestoreChatService(httpClient = get(), credentialsProvider = get())
     }
     single { com.skillexchange.api.services.notification.NotificationService(fcmService = get(), deviceService = get()) }
+    single { com.skillexchange.api.services.exchange.RescheduleService() }
     single { com.skillexchange.api.services.call.LiveKitTokenService() }
     single { com.skillexchange.api.services.call.CallService(liveKitTokenService = get(), firestoreChatService = get(), deviceService = get(), fcmService = get(), notificationService = get()) }
-    single { com.skillexchange.api.services.notification.ReminderSchedulerService(notificationService = get(), callService = get()) }
+    single { com.skillexchange.api.services.notification.ReminderSchedulerService(notificationService = get(), callService = get(), rescheduleService = get()) }
     single<IExchangeNotificationHook> {
         FcmExchangeNotificationHook(
             fcmService = get(),

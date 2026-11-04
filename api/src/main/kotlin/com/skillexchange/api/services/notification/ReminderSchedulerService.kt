@@ -19,7 +19,8 @@ import java.util.UUID
 open class ReminderSchedulerService(
     private val notificationService: NotificationService,
     private val timeProvider: () -> LocalDateTime = { LocalDateTime.now() },
-    private val callService: com.skillexchange.api.services.call.CallService? = null
+    private val callService: com.skillexchange.api.services.call.CallService? = null,
+    private val rescheduleService: com.skillexchange.api.services.exchange.RescheduleService? = null
 ) {
     private val logger = LoggerFactory.getLogger(ReminderSchedulerService::class.java)
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm dd/MM")
@@ -34,14 +35,29 @@ open class ReminderSchedulerService(
         try {
             // 1. Quét nhắc lịch hẹn trước 1 giờ (APPOINTMENT_REMINDER)
             appointmentRemindersCount = processAppointmentReminders(now)
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi quét appointment reminders: ${e.message}", e)
+        }
 
+        try {
             // 2. Quét nhắc đánh giá sau 24 giờ kể từ COMPLETED (RATING_REMINDER)
             ratingRemindersCount = processRatingReminders(now)
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi quét rating reminders: ${e.message}", e)
+        }
 
+        try {
             // 3. Dọn dẹp các cuộc gọi hết hạn (DEC-026, TASK-073)
             callService?.cleanupExpiredCalls()
         } catch (e: Throwable) {
-            logger.error("Lỗi khi quét reminders: ${e.message}", e)
+            logger.error("Lỗi khi dọn dẹp cuộc gọi hết hạn: ${e.message}", e)
+        }
+
+        try {
+            // 4. Dọn dẹp các đề xuất đổi lịch hết hạn (TASK-068)
+            rescheduleService?.cleanupExpiredProposals(now)
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi dọn dẹp đề xuất đổi lịch hết hạn: ${e.message}", e)
         }
 
         logger.info("Hoàn thành quét reminders: $appointmentRemindersCount nhắc hẹn, $ratingRemindersCount nhắc đánh giá")
@@ -80,6 +96,7 @@ open class ReminderSchedulerService(
             val names = getUserNames(senderId, receiverId)
             val senderName = names[senderId] ?: "Đối tác"
             val receiverName = names[receiverId] ?: "Đối tác"
+            val isoUtcScheduledAt = com.skillexchange.api.services.exchange.RescheduleLogicHelper.formatScheduledAtForReminder(scheduledAt)
 
             // Gửi nhắc cho Sender
             val notifSender = notificationService.createNotification(
@@ -88,7 +105,7 @@ open class ReminderSchedulerService(
                 title = "Nhắc lịch hẹn sắp tới",
                 body = "Bạn có lịch hẹn với $receiverName lúc $timeText",
                 entityId = exchangeId,
-                dataPayload = """{"exchangeId":"$exchangeId","scheduledAt":"$scheduledAt"}"""
+                dataPayload = """{"exchangeId":"$exchangeId","scheduledAt":"$isoUtcScheduledAt"}"""
             )
             if (notifSender != null) count++
 
@@ -99,7 +116,7 @@ open class ReminderSchedulerService(
                 title = "Nhắc lịch hẹn sắp tới",
                 body = "Bạn có lịch hẹn với $senderName lúc $timeText",
                 entityId = exchangeId,
-                dataPayload = """{"exchangeId":"$exchangeId","scheduledAt":"$scheduledAt"}"""
+                dataPayload = """{"exchangeId":"$exchangeId","scheduledAt":"$isoUtcScheduledAt"}"""
             )
             if (notifReceiver != null) count++
         }
