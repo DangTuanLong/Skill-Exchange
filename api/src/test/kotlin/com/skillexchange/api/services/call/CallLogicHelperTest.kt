@@ -42,14 +42,14 @@ class CallLogicHelperTest {
     fun `validateInitiateCallRequest throws on invalid callType or exchangeId`() {
         val validExchangeId = UUID.randomUUID().toString()
 
-        val exType = assertThrows<ValidationException> {
+        val exType = assertFailsWith<ValidationException> {
             CallLogicHelper.validateInitiateCallRequest(
                 CallTokenRequest(exchangeId = validExchangeId, callType = "UNKNOWN")
             )
         }
         assertTrue(exType.message?.contains("Loại cuộc gọi không hợp lệ") == true)
 
-        val exUuid = assertThrows<ValidationException> {
+        val exUuid = assertFailsWith<ValidationException> {
             CallLogicHelper.validateInitiateCallRequest(
                 CallTokenRequest(exchangeId = "not-a-uuid", callType = "VOICE")
             )
@@ -62,7 +62,7 @@ class CallLogicHelperTest {
         val validUuid = UUID.randomUUID()
         assertEquals(validUuid, CallLogicHelper.parseSessionUuid(validUuid.toString()))
 
-        assertThrows<ValidationException> {
+        assertFailsWith<ValidationException> {
             CallLogicHelper.parseSessionUuid("invalid-uuid")
         }
     }
@@ -77,7 +77,7 @@ class CallLogicHelperTest {
         assertDoesNotThrow { CallLogicHelper.validateParticipant(receiverId, senderId, receiverId) }
 
         // Non-participant throws forbidden
-        val ex = assertThrows<CallForbiddenException> {
+        val ex = assertFailsWith<CallForbiddenException> {
             CallLogicHelper.validateParticipant("stranger", senderId, receiverId)
         }
         assertEquals(ErrorCodes.NOT_PARTICIPANT, ex.errorCode)
@@ -91,12 +91,12 @@ class CallLogicHelperTest {
     fun `validateExchangeActive requires ACCEPTED status`() {
         assertDoesNotThrow { CallLogicHelper.validateExchangeActive(ExchangeStatus.ACCEPTED.name) }
 
-        val exPending = assertThrows<CallConflictException> {
+        val exPending = assertFailsWith<CallConflictException> {
             CallLogicHelper.validateExchangeActive(ExchangeStatus.PENDING.name)
         }
         assertEquals(ErrorCodes.EXCHANGE_NOT_ACTIVE, exPending.errorCode)
 
-        val exCompleted = assertThrows<CallConflictException> {
+        val exCompleted = assertFailsWith<CallConflictException> {
             CallLogicHelper.validateExchangeActive(ExchangeStatus.COMPLETED.name)
         }
         assertEquals(ErrorCodes.EXCHANGE_NOT_ACTIVE, exCompleted.errorCode)
@@ -107,7 +107,7 @@ class CallLogicHelperTest {
         assertDoesNotThrow { CallLogicHelper.checkSpamLimit(0) }
         assertDoesNotThrow { CallLogicHelper.checkSpamLimit(2) }
 
-        val ex = assertThrows<CallRateLimitException> {
+        val ex = assertFailsWith<CallRateLimitException> {
             CallLogicHelper.checkSpamLimit(3)
         }
         assertEquals(ErrorCodes.CALL_COOLDOWN_ACTIVE, ex.errorCode)
@@ -133,12 +133,12 @@ class CallLogicHelperTest {
         assertDoesNotThrow {
             CallLogicHelper.validateReceiverJoin(receiver, receiver, CallStatus.DIALING.name)
         }
-        val exForbiddenJoin = assertThrows<CallForbiddenException> {
+        val exForbiddenJoin = assertFailsWith<CallForbiddenException> {
             CallLogicHelper.validateReceiverJoin(other, receiver, CallStatus.DIALING.name)
         }
         assertEquals(ErrorCodes.FORBIDDEN, exForbiddenJoin.errorCode)
 
-        val exEndedJoin = assertThrows<CallConflictException> {
+        val exEndedJoin = assertFailsWith<CallConflictException> {
             CallLogicHelper.validateReceiverJoin(receiver, receiver, CallStatus.ENDED.name)
         }
         assertEquals(ErrorCodes.CONFLICT, exEndedJoin.errorCode)
@@ -146,24 +146,24 @@ class CallLogicHelperTest {
         // validateAcceptConnected
         assertTrue(CallLogicHelper.validateAcceptConnected(receiver, receiver, CallStatus.RINGING.name))
         assertFalse(CallLogicHelper.validateAcceptConnected(receiver, receiver, CallStatus.CONNECTED.name))
-        assertThrows<CallForbiddenException> {
+        assertFailsWith<CallForbiddenException> {
             CallLogicHelper.validateAcceptConnected(other, receiver, CallStatus.RINGING.name)
         }
-        assertThrows<CallConflictException> {
+        assertFailsWith<CallConflictException> {
             CallLogicHelper.validateAcceptConnected(receiver, receiver, CallStatus.REJECTED.name)
         }
 
         // validateRejectCall
         assertTrue(CallLogicHelper.validateRejectCall(receiver, receiver, CallStatus.DIALING.name))
         assertFalse(CallLogicHelper.validateRejectCall(receiver, receiver, CallStatus.ENDED.name))
-        assertThrows<CallForbiddenException> {
+        assertFailsWith<CallForbiddenException> {
             CallLogicHelper.validateRejectCall(other, receiver, CallStatus.DIALING.name)
         }
 
         // validateEndCallParticipant
         assertDoesNotThrow { CallLogicHelper.validateEndCallParticipant("caller-1", "caller-1", receiver) }
         assertDoesNotThrow { CallLogicHelper.validateEndCallParticipant(receiver, "caller-1", receiver) }
-        assertThrows<CallForbiddenException> {
+        assertFailsWith<CallForbiddenException> {
             CallLogicHelper.validateEndCallParticipant(other, "caller-1", receiver)
         }
     }
@@ -206,14 +206,14 @@ class CallLogicHelperTest {
         }
 
         // 6th request within window fails
-        val exRate = assertThrows<CallRateLimitException> {
+        val exRate = assertFailsWith<CallRateLimitException> {
             CallLogicHelper.checkRateLimit(userId, timestamps, null, now = now + 60)
         }
         assertEquals(ErrorCodes.RATE_LIMITED, exRate.errorCode)
 
         // Cooldown check
         lastInitiated[userId] = now
-        val exCooldown = assertThrows<CallRateLimitException> {
+        val exCooldown = assertFailsWith<CallRateLimitException> {
             CallLogicHelper.checkRateLimit(userId, ConcurrentHashMap(), lastInitiated, now = now + 5_000L)
         }
         assertEquals(ErrorCodes.CALL_COOLDOWN_ACTIVE, exCooldown.errorCode)
@@ -223,7 +223,7 @@ class CallLogicHelperTest {
         for (i in 1..30) {
             CallLogicHelper.checkActionRateLimit(userId, actionMap, now = now + i)
         }
-        val exAction = assertThrows<CallRateLimitException> {
+        val exAction = assertFailsWith<CallRateLimitException> {
             CallLogicHelper.checkActionRateLimit(userId, actionMap, now = now + 31)
         }
         assertEquals(ErrorCodes.RATE_LIMITED, exAction.errorCode)

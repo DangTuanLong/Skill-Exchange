@@ -102,6 +102,20 @@ object ExchangeRequestsTable : Table("exchange_requests") {
     override val primaryKey = PrimaryKey(id)
 }
 
+object RescheduleProposalsTable : Table("reschedule_proposals") {
+    val id             = uuid("id").autoGenerate()
+    val exchangeId     = uuid("exchange_id").references(ExchangeRequestsTable.id)
+    val proposerId     = uuid("proposer_id").transform({ it.toString() }, { java.util.UUID.fromString(it) })
+    val newScheduledAt = datetime("new_scheduled_at")
+    val reason         = varchar("reason", 200).nullable()
+    val status         = varchar("status", 20).default("PENDING")
+    val proposalNumber = integer("proposal_number")
+    val respondedAt    = datetime("responded_at").nullable()
+    val createdAt      = datetime("created_at").default(LocalDateTime.now())
+    val updatedAt      = datetime("updated_at").default(LocalDateTime.now())
+    override val primaryKey = PrimaryKey(id)
+}
+
 object RatingsTable : Table("ratings") {
     val id         = uuid("id").autoGenerate()
     val exchangeId = uuid("exchange_id").references(ExchangeRequestsTable.id)

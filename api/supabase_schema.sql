@@ -208,7 +208,7 @@ CREATE TRIGGER trigger_set_exchange_resolved_at
     EXECUTE FUNCTION set_exchange_resolved_at();
 
 -- ============================================================
--- 5.1 RESCHEDULE PROPOSALS [PLANNED — DEC-025, TASK-067]
+-- 5.1 RESCHEDULE PROPOSALS [IMPLEMENTED — DEC-025, TASK-067]
 -- ============================================================
 CREATE TABLE IF NOT EXISTS reschedule_proposals (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
