@@ -1,0 +1,94 @@
+name: Render Anti-sleep & Scheduled Reminders
+
+on:
+  workflow_dispatch: # Cho phép kích hoạt thủ công từ giao diện GitHub Actions để kiểm tra
+  # LƯU Ý BẢO MẬT & CHI PHÍ: Lịch cron được tạm tắt theo yêu cầu.
+  # Sau khi chủ dự án đã cấu hình Secret JOB_SECRET và Variable API_BASE_URL trên GitHub,
+  # hãy mở comment khối bên dưới để kích hoạt lịch chạy tự động:
+  # schedule:
+  #   - cron: '*/15 2-16 * * *' # Chạy mỗi 15 phút từ 09:00 - 23:45 giờ VN (02:00 - 16:45 UTC)
+
+concurrency:
+  group: reminders-scheduler
+  cancel-in-progress: false
+
+jobs:
+  process-reminders:
+    name: Ping & Process Reminders
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Vietnam Time Window & Early Exit
+        id: time_check
+        run: |
+          # Tính toán giờ hiện tại theo múi giờ Việt Nam (UTC+7)
+          current_vn_hour=$(TZ="Asia/Ho_Chi_Minh" date +%-H)
+          start_hour="${{ vars.PING_START_HOUR }}"
+          end_hour="${{ vars.PING_END_HOUR }}"
+
+          # Gán giá trị mặc định nếu biến repository chưa được đặt (DEC-018: 09:00 - 23:00)
+          start_hour="${start_hour:-9}"
+          end_hour="${end_hour:-23}"
+
+          echo "Current Vietnam time hour: $current_vn_hour"
+          echo "Allowed operating window: $start_hour:00 - $end_hour:59 VN"
+
+          # Nếu được kích hoạt thủ công bằng workflow_dispatch, cho phép chạy ngay để test
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual trigger (workflow_dispatch) detected. Bypassing schedule window check."
+          elif [ "$current_vn_hour" -lt "$start_hour" ] || [ "$current_vn_hour" -gt "$end_hour" ]; then
+            echo "Current time is outside the allowed operating window ($start_hour:00 - $end_hour:59 VN time)."
+            echo "Exiting early to conserve Render free tier hours."
+            exit 0
+          fi
+
+      - name: Invoke Reminders Endpoint (Render Anti-sleep Ping)
+        run: |
+          api_base_url="${{ vars.API_BASE_URL }}"
+          job_secret="${{ secrets.JOB_SECRET }}"
+
+          if [ -z "$api_base_url" ]; then
+            echo "::error::Repository variable API_BASE_URL is not set! Please configure it in Settings -> Secrets and variables -> Actions -> Variables."
+            exit 1
+          fi
+
+          if [ -z "$job_secret" ]; then
+            echo "::error::Secret JOB_SECRET is not set! Please configure it in Settings -> Secrets and variables -> Actions -> Secrets."
+            exit 1
+          fi
+
+          # Chuẩn hóa URL, loại bỏ dấu gạch chéo cuối nếu có
+          api_base_url=$(echo "$api_base_url" | sed 's:/*$::')
+          endpoint="${api_base_url}/api/internal/jobs/process-reminders"
+
+          echo "Invoking endpoint (Render cold-start wake up)..."
+
+          # Gửi request POST kích hoạt:
+          # - Timeout 90s cho cold start Render
+          # - Retry 1 lần (--retry 1 --retry-delay 5)
+          # - Bảo mật: Không echo secret ra console, không dùng curl -v làm lộ header
+          response=$(curl -s -S -X POST \
+            -H "X-Job-Secret: $job_secret" \
+            -H "Accept: application/json" \
+            --max-time 90 \
+            --retry 1 \
+            --retry-delay 5 \
+            --write-out "\nHTTP_STATUS:%{http_code}" \
+            "$endpoint")
+
+          status_code=$(echo "$response" | grep "HTTP_STATUS" | cut -d':' -f2)
+          body=$(echo "$response" | sed '/HTTP_STATUS/d')
+
+          echo "Response HTTP Status: $status_code"
+
+          if [ "$status_code" -eq 200 ]; then
+            echo "Job executed successfully. Render container is active."
+            # In tóm tắt kết quả (số lượng reminder gửi) an toàn không lộ dữ liệu cá nhân
+            echo "Result: $body"
+          elif [ "$status_code" -eq 401 ]; then
+            echo "::error::Authentication failed (HTTP 401). JOB_SECRET does not match server configuration!"
+            exit 1
+          else
+            echo "::error::Request failed with HTTP status $status_code. Body: $body"
+            exit 1
+          fi
+
