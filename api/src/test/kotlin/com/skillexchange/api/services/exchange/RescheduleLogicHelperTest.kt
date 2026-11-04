@@ -381,5 +381,31 @@ class RescheduleLogicHelperTest {
         val newPayload = """{"exchangeId":"$exchangeId","scheduledAt":"$newFormatted"}"""
         assertNotEquals(oldPayload, newPayload)
     }
+
+    // --- Notification Formatting Tests (BUSINESS_RULES.md §6) ---
+
+    @Test
+    fun `notification body formatting - matches BUSINESS_RULES section 6 specifications`() {
+        val dt = LocalDateTime.of(2026, 11, 10, 14, 30, 0)
+        val callerName = "Nguyễn Văn A"
+
+        // Proposed: "{Name} đề xuất đổi lịch hẹn sang {time}"
+        val proposedBody = RescheduleLogicHelper.formatProposedNotificationBody(callerName, dt)
+        assertEquals("Nguyễn Văn A đề xuất đổi lịch hẹn sang 14:30 10/11", proposedBody)
+
+        // Accepted: "{Name} đã đồng ý đổi lịch hẹn sang {time}"
+        val acceptedBody = RescheduleLogicHelper.formatAcceptedNotificationBody(callerName, dt)
+        assertEquals("Nguyễn Văn A đã đồng ý đổi lịch hẹn sang 14:30 10/11", acceptedBody)
+
+        // Rejected: "{Name} đã từ chối đề xuất đổi lịch hẹn"
+        val rejectedBody = RescheduleLogicHelper.formatRejectedNotificationBody(callerName)
+        assertEquals("Nguyễn Văn A đã từ chối đề xuất đổi lịch hẹn", rejectedBody)
+
+        // Data payload
+        val exchangeId = UUID.randomUUID().toString()
+        val proposalId = UUID.randomUUID().toString()
+        val payload = RescheduleLogicHelper.formatRescheduleDataPayload(exchangeId, proposalId)
+        assertEquals("""{"exchangeId":"$exchangeId","proposalId":"$proposalId"}""", payload)
+    }
 }
 

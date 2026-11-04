@@ -170,5 +170,27 @@ object RescheduleLogicHelper {
     fun formatScheduledAtForReminder(scheduledAt: LocalDateTime): String {
         return scheduledAt.format(UTC_FORMATTER)
     }
+
+    private val DISPLAY_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm dd/MM")
+
+    fun formatDisplayTime(dateTime: LocalDateTime): String {
+        return dateTime.format(DISPLAY_TIME_FORMATTER)
+    }
+
+    fun formatProposedNotificationBody(callerName: String, scheduledAt: LocalDateTime): String {
+        return "$callerName đề xuất đổi lịch hẹn sang ${formatDisplayTime(scheduledAt)}"
+    }
+
+    fun formatAcceptedNotificationBody(callerName: String, scheduledAt: LocalDateTime): String {
+        return "$callerName đã đồng ý đổi lịch hẹn sang ${formatDisplayTime(scheduledAt)}"
+    }
+
+    fun formatRejectedNotificationBody(callerName: String): String {
+        return "$callerName đã từ chối đề xuất đổi lịch hẹn"
+    }
+
+    fun formatRescheduleDataPayload(exchangeId: String, proposalId: String): String {
+        return """{"exchangeId":"$exchangeId","proposalId":"$proposalId"}"""
+    }
 }
 

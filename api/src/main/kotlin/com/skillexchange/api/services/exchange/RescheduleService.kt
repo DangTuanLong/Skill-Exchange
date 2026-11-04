@@ -2,20 +2,50 @@ package com.skillexchange.api.services.exchange
 
 import com.skillexchange.api.models.ErrorCodes
 import com.skillexchange.api.models.db.ExchangeRequestsTable
+import com.skillexchange.api.models.db.ProfilesTable
 import com.skillexchange.api.models.db.RescheduleProposalsTable
 import com.skillexchange.api.models.exchange.CreateRescheduleRequest
 import com.skillexchange.api.models.exchange.RescheduleProposalDto
 import com.skillexchange.api.models.exchange.RescheduleStatus
+import com.skillexchange.api.services.notification.NotificationService
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 open class RescheduleService(
+    private val notificationService: NotificationService? = null,
     private val timeProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
+    private val logger = LoggerFactory.getLogger(RescheduleService::class.java)
+    private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm dd/MM")
+
+    private data class ProposedNotificationData(
+        val dto: RescheduleProposalDto,
+        val partnerId: String,
+        val callerName: String
+    )
+
+    private data class AcceptNotificationData(
+        val dto: RescheduleProposalDto,
+        val shouldNotify: Boolean,
+        val proposerId: String,
+        val callerName: String,
+        val newScheduledAt: LocalDateTime,
+        val exchangeId: String
+    )
+
+    private data class RejectNotificationData(
+        val dto: RescheduleProposalDto,
+        val shouldNotify: Boolean,
+        val proposerId: String,
+        val callerName: String,
+        val exchangeId: String
+    )
 
     open fun createProposal(
         callerUserId: String,
@@ -27,7 +57,7 @@ open class RescheduleService(
         val now = timeProvider()
         val newScheduledAt = RescheduleLogicHelper.validateNewScheduledAt(req.newScheduledAt, now)
 
-        return transaction {
+        val notificationData = transaction {
             val exchangeRow = ExchangeRequestsTable.selectAll()
                 .where { ExchangeRequestsTable.id eq exchangeUuid }
                 .forUpdate()
@@ -41,60 +71,83 @@ open class RescheduleService(
             RescheduleLogicHelper.validateExchangeAccepted(exchangeStatus)
 
             // Đếm tổng số đề xuất từng tạo của exchange trên MỌI trạng thái (DEC-025 anti-spam)
-        val totalCount = RescheduleProposalsTable.selectAll()
-            .where { RescheduleProposalsTable.exchangeId eq exchangeUuid }
-            .count()
-        RescheduleLogicHelper.checkProposalLimit(totalCount)
+            val totalCount = RescheduleProposalsTable.selectAll()
+                .where { RescheduleProposalsTable.exchangeId eq exchangeUuid }
+                .count()
+            RescheduleLogicHelper.checkProposalLimit(totalCount)
 
-        // Kiểm tra đề xuất PENDING hiện tại (có tính lazy expiration)
-        val pendingProposals = RescheduleProposalsTable.selectAll()
-            .where {
-                (RescheduleProposalsTable.exchangeId eq exchangeUuid) and
-                (RescheduleProposalsTable.status eq RescheduleStatus.PENDING.name)
-            }
-            .toList()
-
-        for (p in pendingProposals) {
-            val pStatus = p[RescheduleProposalsTable.status]
-            val pCreatedAt = p[RescheduleProposalsTable.createdAt]
-            val pNewScheduledAt = p[RescheduleProposalsTable.newScheduledAt]
-            val isExpired = RescheduleLogicHelper.isProposalExpired(pStatus, pCreatedAt, pNewScheduledAt, now)
-
-            if (isExpired) {
-                RescheduleProposalsTable.update({ RescheduleProposalsTable.id eq p[RescheduleProposalsTable.id] }) {
-                    it[status] = RescheduleStatus.EXPIRED.name
-                    it[updatedAt] = now
+            // Kiểm tra đề xuất PENDING hiện tại (có tính lazy expiration)
+            val pendingProposals = RescheduleProposalsTable.selectAll()
+                .where {
+                    (RescheduleProposalsTable.exchangeId eq exchangeUuid) and
+                    (RescheduleProposalsTable.status eq RescheduleStatus.PENDING.name)
                 }
-            } else {
-                throw RescheduleConflictException(
-                    "Đang có đề xuất đổi lịch chờ phản hồi cho phiên trao đổi này.",
-                    ErrorCodes.PENDING_PROPOSAL_EXISTS
-                )
+                .toList()
+
+            for (p in pendingProposals) {
+                val pId = p[RescheduleProposalsTable.id]
+                val pCreatedAt = p[RescheduleProposalsTable.createdAt]
+                val pNewScheduledAt = p[RescheduleProposalsTable.newScheduledAt]
+                val pStatus = p[RescheduleProposalsTable.status]
+
+                if (RescheduleLogicHelper.isProposalExpired(pStatus, pCreatedAt, pNewScheduledAt, now)) {
+                    // Tự động chuyển thành EXPIRED (lazy expiration)
+                    RescheduleProposalsTable.update({ RescheduleProposalsTable.id eq pId }) {
+                        it[status] = RescheduleStatus.EXPIRED.name
+                        it[updatedAt] = now
+                    }
+                } else {
+                    // Vẫn còn PENDING hợp lệ -> xung đột 409
+                    throw RescheduleConflictException(
+                        "Đang có đề xuất đổi lịch chờ phản hồi cho phiên trao đổi này.",
+                        ErrorCodes.PENDING_PROPOSAL_EXISTS
+                    )
+                }
             }
+
+            val newProposalId = UUID.randomUUID()
+            val nextNumber = (totalCount + 1).toInt()
+
+            RescheduleProposalsTable.insert {
+                it[RescheduleProposalsTable.id] = newProposalId
+                it[RescheduleProposalsTable.exchangeId] = exchangeUuid
+                it[RescheduleProposalsTable.proposerId] = callerUserId
+                it[RescheduleProposalsTable.newScheduledAt] = newScheduledAt
+                it[RescheduleProposalsTable.reason] = cleanReason
+                it[RescheduleProposalsTable.status] = RescheduleStatus.PENDING.name
+                it[RescheduleProposalsTable.proposalNumber] = nextNumber
+                it[RescheduleProposalsTable.respondedAt] = null
+                it[RescheduleProposalsTable.createdAt] = now
+                it[RescheduleProposalsTable.updatedAt] = now
+            }
+
+            val createdRow = RescheduleProposalsTable.selectAll()
+                .where { RescheduleProposalsTable.id eq newProposalId }
+                .first()
+
+            val partnerId = if (callerUserId == senderId) receiverId else senderId
+            val callerName = getUserName(callerUserId)
+            ProposedNotificationData(
+                dto = createdRow.toDto(),
+                partnerId = partnerId,
+                callerName = callerName
+            )
         }
 
-        val newProposalId = UUID.randomUUID()
-        val nextNumber = (totalCount + 1).toInt()
-
-        RescheduleProposalsTable.insert {
-            it[RescheduleProposalsTable.id] = newProposalId
-            it[RescheduleProposalsTable.exchangeId] = exchangeUuid
-            it[RescheduleProposalsTable.proposerId] = callerUserId
-            it[RescheduleProposalsTable.newScheduledAt] = newScheduledAt
-            it[RescheduleProposalsTable.reason] = cleanReason
-            it[RescheduleProposalsTable.status] = RescheduleStatus.PENDING.name
-            it[RescheduleProposalsTable.proposalNumber] = nextNumber
-            it[RescheduleProposalsTable.respondedAt] = null
-            it[RescheduleProposalsTable.createdAt] = now
-            it[RescheduleProposalsTable.updatedAt] = now
+        try {
+            notificationService?.createNotification(
+                userId = notificationData.partnerId,
+                type = "RESCHEDULE_PROPOSED",
+                title = "Đề xuất đổi lịch hẹn",
+                body = RescheduleLogicHelper.formatProposedNotificationBody(notificationData.callerName, newScheduledAt),
+                entityId = exchangeId,
+                dataPayload = RescheduleLogicHelper.formatRescheduleDataPayload(exchangeId, notificationData.dto.id)
+            )
+        } catch (e: Throwable) {
+            logger.error("Lỗi khi gửi thông báo RESCHEDULE_PROPOSED cho exchange $exchangeId: ${e.message}", e)
         }
 
-        val createdRow = RescheduleProposalsTable.selectAll()
-            .where { RescheduleProposalsTable.id eq newProposalId }
-            .first()
-
-        createdRow.toDto()
-        }
+        return notificationData.dto
     }
 
     open fun getCurrentProposal(callerUserId: String, exchangeId: String): RescheduleProposalDto? {
@@ -135,7 +188,7 @@ open class RescheduleService(
         val proposalUuid = RescheduleLogicHelper.parseProposalUuid(proposalId)
         val now = timeProvider()
 
-        return transaction {
+        val notificationData = transaction {
             val proposalRow = RescheduleProposalsTable.selectAll()
                 .where { RescheduleProposalsTable.id eq proposalUuid }
                 .forUpdate()
@@ -156,7 +209,14 @@ open class RescheduleService(
 
             val canProceed = RescheduleLogicHelper.validateAcceptEligibility(callerUserId, proposerId, currentStatus)
             if (!canProceed) {
-                return@transaction proposalRow.toDto()
+                return@transaction AcceptNotificationData(
+                    dto = proposalRow.toDto(),
+                    shouldNotify = false,
+                    proposerId = proposerId,
+                    callerName = "",
+                    newScheduledAt = now,
+                    exchangeId = exchangeUuid.toString()
+                )
             }
 
             // Kiểm tra lazy expiration
@@ -187,15 +247,40 @@ open class RescheduleService(
                 .where { RescheduleProposalsTable.id eq proposalUuid }
                 .first()
 
-            updatedRow.toDto()
+            val callerName = getUserName(callerUserId)
+            AcceptNotificationData(
+                dto = updatedRow.toDto(),
+                shouldNotify = true,
+                proposerId = proposerId,
+                callerName = callerName,
+                newScheduledAt = newScheduledAt,
+                exchangeId = exchangeUuid.toString()
+            )
         }
+
+        if (notificationData.shouldNotify) {
+            try {
+                notificationService?.createNotification(
+                    userId = notificationData.proposerId,
+                    type = "RESCHEDULE_ACCEPTED",
+                    title = "Đã đồng ý đổi lịch hẹn",
+                    body = RescheduleLogicHelper.formatAcceptedNotificationBody(notificationData.callerName, notificationData.newScheduledAt),
+                    entityId = notificationData.exchangeId,
+                    dataPayload = RescheduleLogicHelper.formatRescheduleDataPayload(notificationData.exchangeId, notificationData.dto.id)
+                )
+            } catch (e: Throwable) {
+                logger.error("Lỗi khi gửi thông báo RESCHEDULE_ACCEPTED: ${e.message}", e)
+            }
+        }
+
+        return notificationData.dto
     }
 
     open fun rejectProposal(callerUserId: String, proposalId: String): RescheduleProposalDto {
         val proposalUuid = RescheduleLogicHelper.parseProposalUuid(proposalId)
         val now = timeProvider()
 
-        return transaction {
+        val notificationData = transaction {
             val proposalRow = RescheduleProposalsTable.selectAll()
                 .where { RescheduleProposalsTable.id eq proposalUuid }
                 .forUpdate()
@@ -215,7 +300,13 @@ open class RescheduleService(
 
             val canProceed = RescheduleLogicHelper.validateRejectEligibility(callerUserId, proposerId, currentStatus)
             if (!canProceed) {
-                return@transaction proposalRow.toDto()
+                return@transaction RejectNotificationData(
+                    dto = proposalRow.toDto(),
+                    shouldNotify = false,
+                    proposerId = proposerId,
+                    callerName = "",
+                    exchangeId = exchangeUuid.toString()
+                )
             }
 
             RescheduleProposalsTable.update({ RescheduleProposalsTable.id eq proposalUuid }) {
@@ -228,8 +319,32 @@ open class RescheduleService(
                 .where { RescheduleProposalsTable.id eq proposalUuid }
                 .first()
 
-            updatedRow.toDto()
+            val callerName = getUserName(callerUserId)
+            RejectNotificationData(
+                dto = updatedRow.toDto(),
+                shouldNotify = true,
+                proposerId = proposerId,
+                callerName = callerName,
+                exchangeId = exchangeUuid.toString()
+            )
         }
+
+        if (notificationData.shouldNotify) {
+            try {
+                notificationService?.createNotification(
+                    userId = notificationData.proposerId,
+                    type = "RESCHEDULE_REJECTED",
+                    title = "Từ chối đổi lịch hẹn",
+                    body = RescheduleLogicHelper.formatRejectedNotificationBody(notificationData.callerName),
+                    entityId = notificationData.exchangeId,
+                    dataPayload = RescheduleLogicHelper.formatRescheduleDataPayload(notificationData.exchangeId, notificationData.dto.id)
+                )
+            } catch (e: Throwable) {
+                logger.error("Lỗi khi gửi thông báo RESCHEDULE_REJECTED: ${e.message}", e)
+            }
+        }
+
+        return notificationData.dto
     }
 
     open fun cancelProposal(callerUserId: String, proposalId: String): RescheduleProposalDto {
@@ -296,6 +411,16 @@ open class RescheduleService(
         }
 
         expiredRows.size
+    }
+
+    private fun getUserName(userId: String): String {
+        return ProfilesTable
+            .selectAll()
+            .where { ProfilesTable.userId eq userId }
+            .firstOrNull()
+            ?.get(ProfilesTable.fullName)
+            ?.ifBlank { "Đối tác" }
+            ?: "Đối tác"
     }
 
     private fun ResultRow.toDto(): RescheduleProposalDto {

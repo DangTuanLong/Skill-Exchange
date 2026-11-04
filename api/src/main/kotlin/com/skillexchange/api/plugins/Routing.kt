@@ -7,6 +7,7 @@ import com.skillexchange.api.routes.exchangeRoutes
 import com.skillexchange.api.routes.healthRoutes
 import com.skillexchange.api.routes.matchingRoutes
 import com.skillexchange.api.routes.profileRoutes
+import com.skillexchange.api.routes.rescheduleRoutes
 import com.skillexchange.api.routes.skillRoutes
 import com.skillexchange.api.routes.userRoutes
 import com.skillexchange.api.services.AuthService
@@ -55,6 +56,8 @@ fun Application.configureRouting() {
     val authRateLimiter: com.skillexchange.api.services.auth.AuthRateLimiter by inject()
     val reminderRateLimiter: com.skillexchange.api.services.notification.ReminderRateLimiter by inject()
     val callService: com.skillexchange.api.services.call.CallService by inject()
+    val rescheduleService: com.skillexchange.api.services.exchange.RescheduleService by inject()
+    val rescheduleRateLimiter: com.skillexchange.api.services.exchange.RescheduleRateLimiter by inject()
 
     routing {
         healthRoutes()
@@ -72,5 +75,6 @@ fun Application.configureRouting() {
         graphRoutes(skillGraphService, graphRateLimiter)
         statsRoutes(statsService)
         callRoutes(callService)
+        rescheduleRoutes(rescheduleService, rescheduleRateLimiter)
     }
 }
