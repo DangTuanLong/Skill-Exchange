@@ -32,34 +32,7 @@ open class ExchangeService(
      * Kiểm tra hợp lệ các trường dữ liệu thuần túy (không phụ thuộc CSDL) trước khi mở transaction.
      */
     open fun validateCreateExchangeInput(senderId: String, req: CreateExchangeRequest) {
-        // 1. Kiểm tra sender != receiver
-        if (senderId == req.receiverId) {
-            throw ValidationException("Không thể gửi yêu cầu trao đổi cho chính mình")
-        }
-
-        // 1b. Kiểm tra độ dài lời nhắn (ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH = 1000)
-        if (req.message != null && req.message.length > ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH) {
-            throw ValidationException("Lời nhắn không được vượt quá ${ValidationConstants.MAX_EXCHANGE_MESSAGE_LENGTH} ký tự")
-        }
-
-        // 3. Kiểm tra durationMinutes
-        val allowedDurations = listOf(30, 60, 90, 120)
-        if (req.durationMinutes !in allowedDurations) {
-            throw ValidationException("Thời lượng trao đổi phải là 30, 60, 90 hoặc 120 phút")
-        }
-
-        // 4. Kiểm tra meetingMode
-        val allowedModes = listOf("ONLINE", "IN_PERSON", "UNDECIDED")
-        val upperMode = req.meetingMode.uppercase().trim()
-        if (upperMode !in allowedModes) {
-            throw ValidationException("Chế độ gặp gỡ không hợp lệ (phải là ONLINE, IN_PERSON hoặc UNDECIDED)")
-        }
-
-        // 5. Kiểm tra scheduledAt ở tương lai
-        val scheduledDateTime = parseIsoDateTime(req.scheduledAt)
-        if (!scheduledDateTime.isAfter(LocalDateTime.now())) {
-            throw ValidationException("Thời gian hẹn phải ở tương lai")
-        }
+        ExchangeLogicHelper.validateCreateExchangeInput(senderId, req)
     }
 
     /**
@@ -93,12 +66,6 @@ open class ExchangeService(
                 (UserSkillsTable.type eq "WANT")
             }.firstOrNull() ?: throw ValidationException("Người nhận không có nhu cầu học kỹ năng bạn đề xuất dạy")
 
-        if (senderHave[UserSkillsTable.proficiencyLevel] < receiverWant[UserSkillsTable.proficiencyLevel]) {
-            throw ValidationException(
-                "Trình độ kỹ năng dạy của bạn (${senderHave[UserSkillsTable.proficiencyLevel]}) chưa đạt mức mục tiêu người nhận cần học (${receiverWant[UserSkillsTable.proficiencyLevel]})"
-            )
-        }
-
         // Chiều 2: Receiver dạy skillWantedId cho Sender (Receiver HAVE >= Sender WANT)
         val receiverHave = UserSkillsTable.selectAll()
             .where {
@@ -114,11 +81,12 @@ open class ExchangeService(
                 (UserSkillsTable.type eq "WANT")
             }.firstOrNull() ?: throw ValidationException("Người gửi không có kỹ năng muốn học trong hồ sơ của mình")
 
-        if (receiverHave[UserSkillsTable.proficiencyLevel] < senderWant[UserSkillsTable.proficiencyLevel]) {
-            throw ValidationException(
-                "Trình độ kỹ năng của người nhận (${receiverHave[UserSkillsTable.proficiencyLevel]}) chưa đạt mức mục tiêu bạn muốn học (${senderWant[UserSkillsTable.proficiencyLevel]})"
-            )
-        }
+        ExchangeLogicHelper.validateProficiencyMatch(
+            senderHaveLevel = senderHave[UserSkillsTable.proficiencyLevel],
+            receiverWantLevel = receiverWant[UserSkillsTable.proficiencyLevel],
+            receiverHaveLevel = receiverHave[UserSkillsTable.proficiencyLevel],
+            senderWantLevel = senderWant[UserSkillsTable.proficiencyLevel]
+        )
 
         // 6b. Khóa dòng profile theo thứ tự ID để chống race condition khi 2 bên gửi cùng lúc (DEC-028)
         val firstId = minOf(senderId, req.receiverId)
@@ -508,21 +476,8 @@ open class ExchangeService(
         }
     }
 
-    private fun parseIsoDateTime(str: String): LocalDateTime {
-        return try {
-            LocalDateTime.parse(str)
-        } catch (e: Exception) {
-            try {
-                java.time.OffsetDateTime.parse(str).toLocalDateTime()
-            } catch (e2: Exception) {
-                try {
-                    java.time.Instant.parse(str).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime()
-                } catch (e3: Exception) {
-                    throw ValidationException("Định dạng scheduled_at không hợp lệ. Vui lòng dùng chuẩn ISO-8601 (ví dụ: 2026-10-15T19:00:00)")
-                }
-            }
-        }
-    }
+    private fun parseIsoDateTime(str: String): LocalDateTime = ExchangeLogicHelper.parseIsoDateTime(str)
+
     /**
      * Lấy danh sách các cặp kỹ năng hợp lệ giữa caller và receiver còn khả dụng để đặt lịch (DEC-028).
      * Loại bỏ các cặp đang có exchange PENDING hoặc ACCEPTED.
@@ -555,87 +510,36 @@ open class ExchangeService(
             .where { (UserSkillsTable.userId eq callerId) and (UserSkillsTable.type eq "WANT") }
             .associate { it[SkillsTable.id] to Pair(it[SkillsTable.name], it[UserSkillsTable.proficiencyLevel]) }
 
-        // 3. Tìm các kỹ năng hợp lệ:
-        val validTeachSkills = callerHaveSkills.filter { (id, _, level) ->
-            val want = receiverWantSkills[id]
-            want != null && level >= want.second
-        }
-
-        val validLearnSkills = receiverHaveSkills.filter { (id, _, level) ->
-            val want = callerWantSkills[id]
-            want != null && level >= want.second
-        }
-
-        // 4. Lấy tất cả request giữa 2 người dùng
+        // 3. Lấy tất cả request giữa 2 người dùng chuyển sang DTO tóm tắt
         val existingRequests = ExchangeRequestsTable.selectAll()
             .where {
                 ((ExchangeRequestsTable.senderId eq callerId) and (ExchangeRequestsTable.receiverId eq receiverId)) or
                 ((ExchangeRequestsTable.senderId eq receiverId) and (ExchangeRequestsTable.receiverId eq callerId))
-            }.toList()
-
-        // Kiểm tra xem có bị từ chối/hủy gần đây trong 14 ngày không
-        val cooldownCutoff = LocalDateTime.now().minusDays(REJECTION_COOLDOWN_DAYS)
-        val recentlyRejected = existingRequests.any { req ->
-            req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.REJECTED.name, ExchangeStatus.CANCELLED.name) &&
-            (req[ExchangeRequestsTable.resolvedAt] ?: req[ExchangeRequestsTable.updatedAt]) > cooldownCutoff
-        }
-
-        // 5. Tổ hợp các cặp hợp lệ và kiểm tra trạng thái active
-        val pairs = mutableListOf<ValidSkillPairDto>()
-        for (teach in validTeachSkills) {
-            for (learn in validLearnSkills) {
-                val teachId = teach.first
-                val teachName = teach.second
-                val learnId = learn.first
-                val learnName = learn.second
-
-                val isPairActive = existingRequests.any { req ->
-                    req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.PENDING.name, ExchangeStatus.ACCEPTED.name) &&
-                    (
-                        (req[ExchangeRequestsTable.senderId] == callerId && req[ExchangeRequestsTable.receiverId] == receiverId &&
-                         req[ExchangeRequestsTable.skillOfferedId] == teachId && req[ExchangeRequestsTable.skillWantedId] == learnId) ||
-                        (req[ExchangeRequestsTable.senderId] == receiverId && req[ExchangeRequestsTable.receiverId] == callerId &&
-                         req[ExchangeRequestsTable.skillOfferedId] == learnId && req[ExchangeRequestsTable.skillWantedId] == teachId)
-                    )
-                }
-
-                val completedCount = existingRequests.count { req ->
-                    req[ExchangeRequestsTable.status] == ExchangeStatus.COMPLETED.name &&
-                    (
-                        (req[ExchangeRequestsTable.senderId] == callerId && req[ExchangeRequestsTable.receiverId] == receiverId &&
-                         req[ExchangeRequestsTable.skillOfferedId] == teachId && req[ExchangeRequestsTable.skillWantedId] == learnId) ||
-                        (req[ExchangeRequestsTable.senderId] == receiverId && req[ExchangeRequestsTable.receiverId] == callerId &&
-                         req[ExchangeRequestsTable.skillOfferedId] == learnId && req[ExchangeRequestsTable.skillWantedId] == teachId)
-                    )
-                }
-
-                pairs.add(
-                    ValidSkillPairDto(
-                        skillOfferedId = teachId,
-                        skillOfferedName = teachName,
-                        skillWantedId = learnId,
-                        skillWantedName = learnName,
-                        isActive = isPairActive,
-                        completedCount = completedCount
-                    )
+            }.map { req ->
+                ExistingExchangeRequestSummary(
+                    id = req[ExchangeRequestsTable.id].toString(),
+                    senderId = req[ExchangeRequestsTable.senderId],
+                    receiverId = req[ExchangeRequestsTable.receiverId],
+                    skillOfferedId = req[ExchangeRequestsTable.skillOfferedId],
+                    skillWantedId = req[ExchangeRequestsTable.skillWantedId],
+                    status = req[ExchangeRequestsTable.status],
+                    createdAt = req[ExchangeRequestsTable.createdAt],
+                    updatedAt = req[ExchangeRequestsTable.updatedAt],
+                    resolvedAt = req[ExchangeRequestsTable.resolvedAt]
                 )
             }
-        }
 
-        val hasActive = existingRequests.any { req ->
-            req[ExchangeRequestsTable.status] in listOf(ExchangeStatus.PENDING.name, ExchangeStatus.ACCEPTED.name)
-        }
-        val completedCount = existingRequests.count { req ->
-            req[ExchangeRequestsTable.status] == ExchangeStatus.COMPLETED.name
-        }
-        val relStatus = if (hasActive) "ACTIVE" else if (completedCount > 0) "COMPLETED" else null
-
-        // Trả về danh sách cặp kỹ năng hợp lệ (mỗi cặp có isActive để client nhận diện hoặc disable)
-        ValidPairsResponse(
-            pairs = pairs,
-            recentlyRejected = recentlyRejected,
-            relationshipStatus = relStatus,
-            completedExchangeCount = completedCount
+        // 4. Tính toán hợp lệ qua logic thuần
+        ExchangeLogicHelper.computeValidPairs(
+            callerId = callerId,
+            receiverId = receiverId,
+            callerHaveSkills = callerHaveSkills,
+            receiverWantSkills = receiverWantSkills,
+            receiverHaveSkills = receiverHaveSkills,
+            callerWantSkills = callerWantSkills,
+            existingRequests = existingRequests,
+            now = LocalDateTime.now(),
+            cooldownDays = REJECTION_COOLDOWN_DAYS
         )
     }
 }

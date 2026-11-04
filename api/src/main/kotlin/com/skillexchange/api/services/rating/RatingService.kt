@@ -28,20 +28,8 @@ open class RatingService {
      * Tạo đánh giá mới sau khi phiên trao đổi đã COMPLETED.
      */
     open fun createRating(callerUserId: String, req: CreateRatingRequest): RatingDto = transaction {
-        if (req.score !in 1..5) {
-            throw ValidationException("Điểm đánh giá phải từ 1 đến 5", mapOf("score" to "Điểm đánh giá phải từ 1 đến 5"))
-        }
-
-        val trimmedComment = req.comment?.trim().takeUnless { it.isNullOrBlank() }
-        if (trimmedComment != null && trimmedComment.length > 200) {
-            throw ValidationException("Nhận xét không được vượt quá 200 ký tự", mapOf("comment" to "Nhận xét không được vượt quá 200 ký tự"))
-        }
-
-        val exchangeUuid = try {
-            UUID.fromString(req.exchangeId)
-        } catch (e: Exception) {
-            throw RatingNotFoundException("Không tìm thấy yêu cầu trao đổi")
-        }
+        val (score, trimmedComment) = RatingLogicHelper.validateCreateRatingInput(req)
+        val exchangeUuid = RatingLogicHelper.parseExchangeUuid(req.exchangeId)
 
         val exchangeRow = ExchangeRequestsTable.selectAll()
             .where { ExchangeRequestsTable.id eq exchangeUuid }
@@ -49,24 +37,20 @@ open class RatingService {
 
         val senderId = exchangeRow[ExchangeRequestsTable.senderId]
         val receiverId = exchangeRow[ExchangeRequestsTable.receiverId]
-
-        if (callerUserId != senderId && callerUserId != receiverId) {
-            throw RatingForbiddenException("Bạn không phải thành viên của phiên trao đổi này")
-        }
-
         val currentStatus = exchangeRow[ExchangeRequestsTable.status]
-        if (currentStatus != ExchangeStatus.COMPLETED.name) {
-            throw ValidationException("Chỉ có thể đánh giá phiên trao đổi đã hoàn thành (COMPLETED)")
-        }
 
         val existing = RatingsTable.selectAll()
             .where { (RatingsTable.exchangeId eq exchangeUuid) and (RatingsTable.reviewerId eq callerUserId) }
             .firstOrNull()
-        if (existing != null) {
-            throw RatingConflictException("Bạn đã đánh giá phiên trao đổi này rồi")
-        }
 
-        val revieweeId = if (callerUserId == senderId) receiverId else senderId
+        val revieweeId = RatingLogicHelper.validateRatingEligibility(
+            callerUserId = callerUserId,
+            senderId = senderId,
+            receiverId = receiverId,
+            currentStatus = currentStatus,
+            hasExistingRating = (existing != null)
+        )
+
         val ratingId = UUID.randomUUID()
         val now = LocalDateTime.now()
 
@@ -75,7 +59,7 @@ open class RatingService {
             it[exchangeId] = exchangeUuid
             it[reviewerId] = callerUserId
             it[this.revieweeId] = revieweeId
-            it[score] = req.score
+            it[this.score] = score
             it[comment] = trimmedComment
             it[createdAt] = now
         }
@@ -91,7 +75,7 @@ open class RatingService {
             reviewerName = reviewerProfile?.get(ProfilesTable.fullName),
             reviewerAvatarUrl = reviewerProfile?.get(ProfilesTable.avatarUrl),
             revieweeId = revieweeId,
-            score = req.score,
+            score = score,
             comment = trimmedComment,
             createdAt = now.toString()
         )
@@ -173,11 +157,7 @@ open class RatingService {
      * Kiểm tra trạng thái đánh giá của caller đối với một exchange cụ thể.
      */
     open fun getMyExchangeRating(callerUserId: String, exchangeId: String): UserExchangeRatingStatusDto = transaction {
-        val exchangeUuid = try {
-            UUID.fromString(exchangeId)
-        } catch (e: Exception) {
-            throw RatingNotFoundException("Không tìm thấy yêu cầu trao đổi")
-        }
+        val exchangeUuid = RatingLogicHelper.parseExchangeUuid(exchangeId)
 
         val exchangeRow = ExchangeRequestsTable.selectAll()
             .where { ExchangeRequestsTable.id eq exchangeUuid }
@@ -186,9 +166,7 @@ open class RatingService {
         val senderId = exchangeRow[ExchangeRequestsTable.senderId]
         val receiverId = exchangeRow[ExchangeRequestsTable.receiverId]
 
-        if (callerUserId != senderId && callerUserId != receiverId) {
-            throw RatingForbiddenException("Bạn không phải thành viên của phiên trao đổi này")
-        }
+        RatingLogicHelper.validateExchangeMember(callerUserId, senderId, receiverId)
 
         val ratingRow = RatingsTable.selectAll()
             .where { (RatingsTable.exchangeId eq exchangeUuid) and (RatingsTable.reviewerId eq callerUserId) }

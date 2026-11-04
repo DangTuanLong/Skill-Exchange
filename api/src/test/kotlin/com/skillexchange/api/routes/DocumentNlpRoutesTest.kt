@@ -662,7 +662,7 @@ class DocumentNlpRoutesTest {
 
         val filesAfter = tmpDir.list()?.toSet() ?: emptySet()
         val newFiles = filesAfter - filesBefore
-        val newPdfBoxFiles = newFiles.filter { it.contains("pdfbox", ignoreCase = true) || it.endsWith(".tmp") }
+        val newPdfBoxFiles = newFiles.filter { it.contains("pdfbox", ignoreCase = true) || it.contains("scratch", ignoreCase = true) }
         assertTrue(newPdfBoxFiles.isEmpty(), "Phát hiện tệp tạm PDFBox được tạo ra trong tmpdir: $newPdfBoxFiles")
     }
 

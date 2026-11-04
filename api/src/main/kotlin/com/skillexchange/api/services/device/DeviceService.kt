@@ -14,11 +14,8 @@ open class DeviceService {
      * Đăng ký hoặc cập nhật FCM token của người dùng (upsert).
      */
     open fun registerToken(userId: String, token: String, deviceInfo: String?) {
-        val cleanToken = token.trim()
-        if (cleanToken.isBlank()) {
-            throw ValidationException("FCM token không được để trống")
-        }
-        val cleanDeviceInfo = deviceInfo?.trim()?.takeIf { it.isNotBlank() }
+        val cleanToken = DeviceLogicHelper.validateAndCleanToken(token)
+        val cleanDeviceInfo = DeviceLogicHelper.cleanDeviceInfo(deviceInfo)
 
         transaction {
             val existing = FcmTokensTable.selectAll()
@@ -50,8 +47,7 @@ open class DeviceService {
      * Xóa token của người dùng (khi đăng xuất).
      */
     open fun deleteToken(userId: String, token: String): Boolean {
-        val cleanToken = token.trim()
-        if (cleanToken.isBlank()) return false
+        val cleanToken = DeviceLogicHelper.cleanTokenOrNull(token) ?: return false
 
         return transaction {
             val rowsDeleted = FcmTokensTable.deleteWhere {
@@ -65,8 +61,7 @@ open class DeviceService {
      * Xóa token trực tiếp khi FCM báo lỗi UNREGISTERED / 404 (stale token).
      */
     open fun deleteTokenDirect(token: String): Boolean {
-        val cleanToken = token.trim()
-        if (cleanToken.isBlank()) return false
+        val cleanToken = DeviceLogicHelper.cleanTokenOrNull(token) ?: return false
 
         return transaction {
             val rowsDeleted = FcmTokensTable.deleteWhere {

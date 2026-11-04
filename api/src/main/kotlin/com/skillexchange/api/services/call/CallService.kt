@@ -41,47 +41,18 @@ open class CallService(
     private val actionTimestamps = ConcurrentHashMap<String, MutableList<Long>>()
 
     private fun checkRateLimit(userId: String) {
-        val now = System.currentTimeMillis()
-        val timestamps = requestTimestamps.computeIfAbsent(userId) { mutableListOf() }
-        synchronized(timestamps) {
-            timestamps.removeAll { now - it > 60_000L }
-            if (timestamps.size >= 5) {
-                throw CallRateLimitException("Bạn đã yêu cầu tạo cuộc gọi quá nhiều lần. Vui lòng đợi 1 phút.", ErrorCodes.RATE_LIMITED)
-            }
-            timestamps.add(now)
-        }
-
-        val lastTime = lastCallInitiated[userId]
-        if (lastTime != null && now - lastTime < 10_000L) {
-            val remainSeconds = ((10_000L - (now - lastTime)) / 1000L) + 1
-            throw CallRateLimitException("Vui lòng đợi $remainSeconds giây trước khi bấm gọi lại.", ErrorCodes.CALL_COOLDOWN_ACTIVE)
-        }
+        CallLogicHelper.checkRateLimit(userId, requestTimestamps, lastCallInitiated)
     }
 
     private fun checkActionRateLimit(userId: String) {
-        val now = System.currentTimeMillis()
-        val timestamps = actionTimestamps.computeIfAbsent(userId) { mutableListOf() }
-        synchronized(timestamps) {
-            timestamps.removeAll { now - it > 60_000L }
-            if (timestamps.size >= 30) {
-                throw CallRateLimitException("Quá nhiều yêu cầu thao tác cuộc gọi. Vui lòng đợi 1 phút.", ErrorCodes.RATE_LIMITED)
-            }
-            timestamps.add(now)
-        }
+        CallLogicHelper.checkActionRateLimit(userId, actionTimestamps)
     }
 
     /**
      * Bắt đầu cuộc gọi (Caller xin cấp token phòng mới)
      */
     open fun initiateCall(callerId: String, req: CallTokenRequest): CallTokenResponse {
-        val callTypeEnum = CallType.fromStringOrNull(req.callType)
-            ?: throw ValidationException("Loại cuộc gọi không hợp lệ (phải là VOICE hoặc VIDEO)")
-
-        val exchangeUuid = try {
-            UUID.fromString(req.exchangeId)
-        } catch (_: Exception) {
-            throw ValidationException("exchangeId không hợp lệ")
-        }
+        val (callTypeEnum, exchangeUuid) = CallLogicHelper.validateInitiateCallRequest(req)
 
         checkRateLimit(callerId)
 
@@ -98,15 +69,10 @@ open class CallService(
             val receiverId = exchangeRow[ExchangeRequestsTable.receiverId]
             val status = exchangeRow[ExchangeRequestsTable.status]
 
-            if (callerId != senderId && callerId != receiverId) {
-                throw CallForbiddenException("Bạn không phải thành viên tham gia trao đổi này", ErrorCodes.NOT_PARTICIPANT)
-            }
+            CallLogicHelper.validateParticipant(callerId, senderId, receiverId)
+            CallLogicHelper.validateExchangeActive(status)
 
-            if (status != ExchangeStatus.ACCEPTED.name) {
-                throw CallConflictException("Yêu cầu trao đổi chưa được chấp nhận hoặc đã kết thúc", ErrorCodes.EXCHANGE_NOT_ACTIVE)
-            }
-
-            val targetReceiverId = if (callerId == senderId) receiverId else senderId
+            val targetReceiverId = CallLogicHelper.determineTargetReceiverId(callerId, senderId, receiverId)
 
             // 2. Kiểm tra giới hạn gọi dồn dập (Anti-spam): Tối đa 3 lần bị MISSED/REJECTED trong 2 phút
             val twoMinutesAgo = LocalDateTime.now().minusMinutes(2)
@@ -118,15 +84,10 @@ open class CallService(
                     (CallSessionsTable.status inList listOf(CallStatus.MISSED.name, CallStatus.REJECTED.name))
                 }.count()
 
-            if (spamCount >= 3) {
-                throw CallRateLimitException(
-                    "Bạn đã gọi 3 lần không thành công tới đối tác này. Vui lòng đợi 2 phút trước khi thử lại.",
-                    ErrorCodes.CALL_COOLDOWN_ACTIVE
-                )
-            }
+            CallLogicHelper.checkSpamLimit(spamCount)
 
             // 3. Concurrency Guard với Ordered Locking (ngăn Race Condition A gọi B và B gọi A cùng lúc)
-            val (firstId, secondId) = if (callerId < targetReceiverId) callerId to targetReceiverId else targetReceiverId to callerId
+            val (firstId, secondId) = CallLogicHelper.orderUserIds(callerId, targetReceiverId)
 
             // Khóa thứ tự 2 user bằng SELECT FOR UPDATE trên ProfilesTable
             ProfilesTable.selectAll()
@@ -311,9 +272,7 @@ open class CallService(
     open fun joinCall(receiverId: String, sessionId: String): CallTokenResponse {
         checkActionRateLimit(receiverId)
         return transaction {
-            val sessionUuid = try { UUID.fromString(sessionId) } catch (_: Exception) {
-                throw ValidationException("sessionId không hợp lệ")
-            }
+            val sessionUuid = CallLogicHelper.parseSessionUuid(sessionId)
 
             val row = CallSessionsTable.selectAll()
                 .where { CallSessionsTable.id eq sessionUuid }
@@ -325,13 +284,7 @@ open class CallService(
             val callType = row[CallSessionsTable.callType]
 
             // BUG-SEC-01: Chỉ receiver mới có quyền tham gia cuộc gọi
-            if (receiverId != rId) {
-                throw CallForbiddenException("Chỉ người nhận mới có quyền tham gia cuộc gọi", ErrorCodes.FORBIDDEN)
-            }
-
-            if (status in CallStatus.terminalStatuses()) {
-                throw CallConflictException("Cuộc gọi đã kết thúc", ErrorCodes.CONFLICT)
-            }
+            CallLogicHelper.validateReceiverJoin(receiverId, rId, status)
 
             // Cập nhật DIALING -> RINGING khi receiver fetch token
             if (status == CallStatus.DIALING.name && receiverId == rId) {
@@ -364,9 +317,7 @@ open class CallService(
     open fun acceptConnected(userId: String, sessionId: String): CallSessionDto {
         checkActionRateLimit(userId)
         return transaction {
-            val sessionUuid = try { UUID.fromString(sessionId) } catch (_: Exception) {
-                throw ValidationException("sessionId không hợp lệ")
-            }
+            val sessionUuid = CallLogicHelper.parseSessionUuid(sessionId)
 
             val row = CallSessionsTable.selectAll()
                 .where { CallSessionsTable.id eq sessionUuid }
@@ -374,17 +325,10 @@ open class CallService(
                 .firstOrNull() ?: throw CallNotFoundException("Không tìm thấy phiên cuộc gọi")
 
             val rId = row[CallSessionsTable.receiverId]
-            if (userId != rId) {
-                throw CallForbiddenException("Chỉ người nhận mới có quyền xác nhận kết nối cuộc gọi", ErrorCodes.FORBIDDEN)
-            }
-
             val currentStatus = row[CallSessionsTable.status]
-            if (currentStatus == CallStatus.CONNECTED.name) {
+            val canProceed = CallLogicHelper.validateAcceptConnected(userId, rId, currentStatus)
+            if (!canProceed) {
                 return@transaction row.toDto()
-            }
-
-            if (currentStatus in CallStatus.terminalStatuses()) {
-                throw CallConflictException("Cuộc gọi đã kết thúc, không thể kết nối", ErrorCodes.CONFLICT)
             }
 
             val now = LocalDateTime.now()
@@ -405,9 +349,7 @@ open class CallService(
     open fun rejectCall(userId: String, sessionId: String): CallSessionDto {
         checkActionRateLimit(userId)
         val (dto, exchangeId) = transaction {
-            val sessionUuid = try { UUID.fromString(sessionId) } catch (_: Exception) {
-                throw ValidationException("sessionId không hợp lệ")
-            }
+            val sessionUuid = CallLogicHelper.parseSessionUuid(sessionId)
 
             val row = CallSessionsTable.selectAll()
                 .where { CallSessionsTable.id eq sessionUuid }
@@ -415,12 +357,9 @@ open class CallService(
                 .firstOrNull() ?: throw CallNotFoundException("Không tìm thấy phiên cuộc gọi")
 
             val rId = row[CallSessionsTable.receiverId]
-            if (userId != rId) {
-                throw CallForbiddenException("Chỉ người nhận mới có quyền từ chối cuộc gọi", ErrorCodes.FORBIDDEN)
-            }
-
             val currentStatus = row[CallSessionsTable.status]
-            if (currentStatus in CallStatus.terminalStatuses()) {
+            val canProceed = CallLogicHelper.validateRejectCall(userId, rId, currentStatus)
+            if (!canProceed) {
                 return@transaction row.toDto() to row[CallSessionsTable.exchangeId].toString()
             }
 
@@ -465,9 +404,7 @@ open class CallService(
     open fun endCall(userId: String, sessionId: String): CallSessionDto {
         checkActionRateLimit(userId)
         val result = transaction {
-            val sessionUuid = try { UUID.fromString(sessionId) } catch (_: Exception) {
-                throw ValidationException("sessionId không hợp lệ")
-            }
+            val sessionUuid = CallLogicHelper.parseSessionUuid(sessionId)
 
             val row = CallSessionsTable.selectAll()
                 .where { CallSessionsTable.id eq sessionUuid }
@@ -476,9 +413,7 @@ open class CallService(
 
             val sId = row[CallSessionsTable.callerId]
             val rId = row[CallSessionsTable.receiverId]
-            if (userId != sId && userId != rId) {
-                throw CallForbiddenException("Bạn không phải thành viên của cuộc gọi này", ErrorCodes.NOT_PARTICIPANT)
-            }
+            CallLogicHelper.validateEndCallParticipant(userId, sId, rId)
 
             val currentStatus = row[CallSessionsTable.status]
             val wasUnconnected = currentStatus in listOf(CallStatus.DIALING.name, CallStatus.RINGING.name)
@@ -488,14 +423,10 @@ open class CallService(
 
             val now = LocalDateTime.now()
             val connectedTime = row[CallSessionsTable.connectedAt]
-            val duration = if (currentStatus == CallStatus.CONNECTED.name && connectedTime != null) {
-                maxOf(0, Duration.between(connectedTime, now).seconds.toInt())
-            } else {
-                0
-            }
+            val duration = CallLogicHelper.calculateCallDuration(currentStatus, connectedTime, now)
 
             // BUG-SEC-03: Nếu cúp máy khi chưa kết nối, lưu status DB là MISSED để anti-spam tính đúng
-            val targetStatus = if (wasUnconnected) CallStatus.MISSED.name else CallStatus.ENDED.name
+            val targetStatus = CallLogicHelper.determineEndStatus(wasUnconnected)
             CallSessionsTable.update({ CallSessionsTable.id eq sessionUuid }) {
                 it[status] = targetStatus
                 it[endedAt] = now
