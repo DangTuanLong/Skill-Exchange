@@ -98,7 +98,7 @@ object RescheduleLogicHelper {
 
     fun checkProposalLimit(totalCount: Long) {
         if (totalCount >= 3) {
-            throw RescheduleValidationException(
+            throw RescheduleConflictException(
                 "Buổi trao đổi này đã sử dụng hết giới hạn 3 lần đề xuất đổi lịch.",
                 ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED
             )

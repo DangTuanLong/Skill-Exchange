@@ -47,7 +47,7 @@ import kotlin.test.assertTrue
  *   rate limiting (5 req/phút/user), mã lỗi HTTP (201, 200, 400, 401, 403, 404, 409, 422, 429),
  *   và luồng điều phối của các endpoint đổi lịch ở tầng Route.
  * - SỬ DỤNG SERVICE GIẢ (MOCK SERVICES), TUYỆT ĐỐI KHÔNG SỬ DỤNG CSDL POSTGRESQL THẬT.
- * - Các ràng buộc CSDL thật (partial unique index, SELECT FOR UPDATE lock, trigger updated_at)
+ * - Các ràng buộc CSDL thật (partial unique index idx_unique_pending_reschedule, SELECT FOR UPDATE lock, trigger updated_at)
  *   được kiểm chứng độc lập qua các kịch bản kiểm thử thủ công trên DB dev theo tài liệu TASK-072.
  */
 class RescheduleRouteIntegrationTest {
@@ -93,7 +93,8 @@ class RescheduleRouteIntegrationTest {
     )
 
     private fun ApplicationTestBuilder.setupApp(
-        customRescheduleRateLimiter: RescheduleRateLimiter? = null
+        customRescheduleRateLimiter: RescheduleRateLimiter? = null,
+        customActionRateLimiter: RescheduleRateLimiter? = null
     ) {
         application {
             configureSerialization()
@@ -116,7 +117,8 @@ class RescheduleRouteIntegrationTest {
             routing {
                 rescheduleRoutes(
                     rescheduleService = mockRescheduleService,
-                    rateLimiter = customRescheduleRateLimiter ?: RescheduleRateLimiter(maxPerMinute = 5)
+                    rateLimiter = customRescheduleRateLimiter ?: RescheduleRateLimiter(maxPerMinute = 5),
+                    actionRateLimiter = customActionRateLimiter ?: RescheduleRateLimiter(maxPerMinute = 30)
                 )
                 exchangeRoutes(
                     exchangeService = mockExchangeService,
@@ -198,6 +200,34 @@ class RescheduleRouteIntegrationTest {
         assertEquals(ErrorCodes.RATE_LIMITED, err.code)
     }
 
+    @Test
+    fun `GET current - Action Rate limiter chan o request thu 31 trong 1 phut tra ve 429 RATE_LIMITED`() = testApplication {
+        val actionLimiter = RescheduleRateLimiter(maxPerMinute = 30)
+        setupApp(customActionRateLimiter = actionLimiter)
+
+        val dto = createProposalDto()
+        every { mockRescheduleService.getCurrentProposal(aliceId, testExchangeId) } returns dto
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val token = createToken(aliceId)
+
+        // 30 requests hop le trong quota
+        repeat(30) {
+            val response = client.get("/api/exchange-requests/$testExchangeId/reschedule/current") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }
+            assertEquals(HttpStatusCode.OK, response.status)
+        }
+
+        // Request thu 31 bi chan boi action rate limiter
+        val blockedResponse = client.get("/api/exchange-requests/$testExchangeId/reschedule/current") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, blockedResponse.status)
+        val err = json.decodeFromString<ApiError>(blockedResponse.bodyAsText())
+        assertEquals(ErrorCodes.RATE_LIMITED, err.code)
+    }
+
     // =========================================================================
     // 2. Tao de xuat doi lich (POST /reschedule)
     // =========================================================================
@@ -223,11 +253,11 @@ class RescheduleRouteIntegrationTest {
     }
 
     @Test
-    fun `POST reschedule - da dat gioi han 3 lan tra ve 422 RESCHEDULE_LIMIT_EXCEEDED`() = testApplication {
+    fun `POST reschedule - da dat gioi han 3 lan tra ve 409 RESCHEDULE_LIMIT_EXCEEDED`() = testApplication {
         setupApp()
         every {
             mockRescheduleService.createProposal(aliceId, testExchangeId, any())
-        } throws RescheduleValidationException(
+        } throws RescheduleConflictException(
             message = "Phiên trao đổi đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch.",
             errorCode = ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED
         )
@@ -239,7 +269,7 @@ class RescheduleRouteIntegrationTest {
             setBody("""{"new_scheduled_at":"2026-11-20T14:00:00Z"}""")
         }
 
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertEquals(HttpStatusCode.Conflict, response.status)
         val err = json.decodeFromString<ApiError>(response.bodyAsText())
         assertEquals(ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED, err.code)
     }

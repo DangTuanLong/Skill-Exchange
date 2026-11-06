@@ -141,12 +141,12 @@ class RescheduleLogicHelperTest {
 
     @Test
     fun `checkProposalLimit - rejects count 3 or higher`() {
-        val ex3 = assertFailsWith<RescheduleValidationException> {
+        val ex3 = assertFailsWith<RescheduleConflictException> {
             RescheduleLogicHelper.checkProposalLimit(3)
         }
         assertEquals(ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED, ex3.errorCode)
 
-        val ex4 = assertFailsWith<RescheduleValidationException> {
+        val ex4 = assertFailsWith<RescheduleConflictException> {
             RescheduleLogicHelper.checkProposalLimit(4)
         }
         assertEquals(ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED, ex4.errorCode)
@@ -165,7 +165,7 @@ class RescheduleLogicHelperTest {
         val totalHistoricalCount = historicalProposals.size.toLong()
 
         // Lần đề xuất thứ 4 phải bị chặn ngay lập tức
-        val ex = assertFailsWith<RescheduleValidationException> {
+        val ex = assertFailsWith<RescheduleConflictException> {
             RescheduleLogicHelper.checkProposalLimit(totalHistoricalCount)
         }
         assertEquals(ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED, ex.errorCode)

@@ -39,12 +39,14 @@ class RescheduleRoutesTest {
 
     private val mockRescheduleService = mockk<RescheduleService>(relaxed = true)
     private val mockRateLimiter = mockk<RescheduleRateLimiter>(relaxed = true)
+    private val mockActionRateLimiter = mockk<RescheduleRateLimiter>(relaxed = true)
     private val jsonSerializer = Json { ignoreUnknownKeys = true }
 
     @BeforeTest
     fun setUp() {
-        clearMocks(mockRescheduleService, mockRateLimiter)
+        clearMocks(mockRescheduleService, mockRateLimiter, mockActionRateLimiter)
         every { mockRateLimiter.tryAcquire(any()) } returns true
+        every { mockActionRateLimiter.tryAcquire(any()) } returns true
     }
 
     private fun createTestJwt(userId: String = "user-alice-123"): String {
@@ -93,7 +95,7 @@ class RescheduleRoutesTest {
                 }
             }
             routing {
-                rescheduleRoutes(mockRescheduleService, mockRateLimiter)
+                rescheduleRoutes(mockRescheduleService, mockRateLimiter, mockActionRateLimiter)
             }
         }
     }
@@ -160,6 +162,36 @@ class RescheduleRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-alice-123")}")
             contentType(ContentType.Application.Json)
             setBody("""{"new_scheduled_at":"2026-11-10T10:00:00Z","reason":"Bận"}""")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        val err = jsonSerializer.decodeFromString<ApiError>(response.bodyAsText())
+        assertEquals(ErrorCodes.RATE_LIMITED, err.code)
+    }
+
+    @Test
+    fun `GET current - returns 429 when action rate limit exceeded`() = testApplication {
+        setupRescheduleModule()
+        every { mockActionRateLimiter.tryAcquire("user-alice-123") } returns false
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val response = client.get("/api/exchange-requests/${UUID.randomUUID()}/reschedule/current") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-alice-123")}")
+        }
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        val err = jsonSerializer.decodeFromString<ApiError>(response.bodyAsText())
+        assertEquals(ErrorCodes.RATE_LIMITED, err.code)
+    }
+
+    @Test
+    fun `PUT accept - returns 429 when action rate limit exceeded`() = testApplication {
+        setupRescheduleModule()
+        every { mockActionRateLimiter.tryAcquire("user-bob-456") } returns false
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val response = client.put("/api/reschedule-proposals/${UUID.randomUUID()}/accept") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("user-bob-456")}")
         }
 
         assertEquals(HttpStatusCode.TooManyRequests, response.status)
@@ -251,12 +283,12 @@ class RescheduleRoutesTest {
     }
 
     @Test
-    fun `POST reschedule - returns 422 RESCHEDULE_LIMIT_EXCEEDED when 3 proposals used`() = testApplication {
+    fun `POST reschedule - returns 409 RESCHEDULE_LIMIT_EXCEEDED when 3 proposals used`() = testApplication {
         setupRescheduleModule()
         val exchangeId = UUID.randomUUID().toString()
         every {
             mockRescheduleService.createProposal("user-alice-123", exchangeId, any())
-        } throws RescheduleValidationException("Hết 3 lần đổi lịch", ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED)
+        } throws RescheduleConflictException("Hết 3 lần đổi lịch", ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED)
 
         val client = createClient { install(ContentNegotiation) { json() } }
         val response = client.post("/api/exchange-requests/$exchangeId/reschedule") {
@@ -265,7 +297,7 @@ class RescheduleRoutesTest {
             setBody("""{"new_scheduled_at":"2026-11-10T10:00:00Z"}""")
         }
 
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertEquals(HttpStatusCode.Conflict, response.status)
         val err = jsonSerializer.decodeFromString<ApiError>(response.bodyAsText())
         assertEquals(ErrorCodes.RESCHEDULE_LIMIT_EXCEEDED, err.code)
     }

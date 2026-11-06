@@ -193,12 +193,12 @@ class RescheduleRepositoryTest {
         val errorJson = """
         {
             "success": false,
-            "status": 422,
+            "status": 409,
             "code": "RESCHEDULE_LIMIT_EXCEEDED",
             "message": "Đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch cho buổi trao đổi này."
         }
         """.trimIndent()
-        val client = createMockClient(HttpStatusCode.UnprocessableEntity, errorJson)
+        val client = createMockClient(HttpStatusCode.Conflict, errorJson)
         val repo = RescheduleRepositoryImpl(RescheduleRemoteDataSource(client))
 
         val result = repo.createProposal(
@@ -210,7 +210,7 @@ class RescheduleRepositoryTest {
         val ex = result.exceptionOrNull()
         assertTrue(ex is ApiException)
         val apiException = ex as ApiException
-        assertEquals(422, apiException.status)
+        assertEquals(409, apiException.status)
         assertEquals(ApiException.CODE_RESCHEDULE_LIMIT_EXCEEDED, apiException.code)
         assertEquals("Đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch cho buổi trao đổi này.", apiException.message)
     }

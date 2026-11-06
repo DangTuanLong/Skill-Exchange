@@ -12,11 +12,22 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.*
 
-val defaultRescheduleRateLimiter = RescheduleRateLimiter(maxPerMinute = 5)
+const val RESCHEDULE_PROPOSE_RATE_LIMIT_PER_MINUTE = 5
+const val RESCHEDULE_ACTION_RATE_LIMIT_PER_MINUTE = 30
+
+/**
+ * Rate limiter in-memory theo từng server instance (DEC-025, TASK-072):
+ * - Đề xuất đổi lịch mới: 5 req/phút/user (RESCHEDULE_PROPOSE_RATE_LIMIT_PER_MINUTE).
+ * - Các thao tác xem/duyệt/từ chối/hủy (current, accept, reject, cancel): 30 req/phút/user (RESCHEDULE_ACTION_RATE_LIMIT_PER_MINUTE).
+ * Giới hạn độc lập trên từng instance (in-memory per-instance).
+ */
+val defaultRescheduleRateLimiter = RescheduleRateLimiter(maxPerMinute = RESCHEDULE_PROPOSE_RATE_LIMIT_PER_MINUTE)
+val defaultRescheduleActionRateLimiter = RescheduleRateLimiter(maxPerMinute = RESCHEDULE_ACTION_RATE_LIMIT_PER_MINUTE)
 
 fun Route.rescheduleRoutes(
     rescheduleService: RescheduleService,
-    rateLimiter: RescheduleRateLimiter = defaultRescheduleRateLimiter
+    rateLimiter: RescheduleRateLimiter = defaultRescheduleRateLimiter,
+    actionRateLimiter: RescheduleRateLimiter = defaultRescheduleActionRateLimiter
 ) {
     authenticate("auth-jwt") {
         route("/api/exchange-requests/{id}/reschedule") {
@@ -96,6 +107,17 @@ fun Route.rescheduleRoutes(
             // GET /api/exchange-requests/{id}/reschedule/current - Lấy đề xuất hiện tại
             get("/current") {
                 val callerUserId = call.getUserId()
+                if (!actionRateLimiter.tryAcquire(callerUserId)) {
+                    return@get call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = 429,
+                            code = ErrorCodes.RATE_LIMITED,
+                            message = "Bạn đang gửi yêu cầu quá nhanh. Vui lòng thử lại sau 1 phút."
+                        )
+                    )
+                }
+
                 val exchangeId = call.parameters["id"]
                     ?: return@get call.respond(
                         HttpStatusCode.BadRequest,
@@ -132,6 +154,17 @@ fun Route.rescheduleRoutes(
             // PUT /api/reschedule-proposals/{proposalId}/accept - Chấp nhận đề xuất
             put("/accept") {
                 val callerUserId = call.getUserId()
+                if (!actionRateLimiter.tryAcquire(callerUserId)) {
+                    return@put call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = 429,
+                            code = ErrorCodes.RATE_LIMITED,
+                            message = "Bạn đang gửi yêu cầu quá nhanh. Vui lòng thử lại sau 1 phút."
+                        )
+                    )
+                }
+
                 val proposalId = call.parameters["proposalId"] ?: call.parameters["id"]
                     ?: return@put call.respond(
                         HttpStatusCode.BadRequest,
@@ -174,6 +207,17 @@ fun Route.rescheduleRoutes(
             // PUT /api/reschedule-proposals/{proposalId}/reject - Từ chối đề xuất
             put("/reject") {
                 val callerUserId = call.getUserId()
+                if (!actionRateLimiter.tryAcquire(callerUserId)) {
+                    return@put call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = 429,
+                            code = ErrorCodes.RATE_LIMITED,
+                            message = "Bạn đang gửi yêu cầu quá nhanh. Vui lòng thử lại sau 1 phút."
+                        )
+                    )
+                }
+
                 val proposalId = call.parameters["proposalId"] ?: call.parameters["id"]
                     ?: return@put call.respond(
                         HttpStatusCode.BadRequest,
@@ -216,6 +260,17 @@ fun Route.rescheduleRoutes(
             // PUT /api/reschedule-proposals/{proposalId}/cancel - Hủy đề xuất
             put("/cancel") {
                 val callerUserId = call.getUserId()
+                if (!actionRateLimiter.tryAcquire(callerUserId)) {
+                    return@put call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiError(
+                            status = 429,
+                            code = ErrorCodes.RATE_LIMITED,
+                            message = "Bạn đang gửi yêu cầu quá nhanh. Vui lòng thử lại sau 1 phút."
+                        )
+                    )
+                }
+
                 val proposalId = call.parameters["proposalId"] ?: call.parameters["id"]
                     ?: return@put call.respond(
                         HttpStatusCode.BadRequest,

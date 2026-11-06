@@ -108,17 +108,28 @@ open class RescheduleService(
             val newProposalId = UUID.randomUUID()
             val nextNumber = (totalCount + 1).toInt()
 
-            RescheduleProposalsTable.insert {
-                it[RescheduleProposalsTable.id] = newProposalId
-                it[RescheduleProposalsTable.exchangeId] = exchangeUuid
-                it[RescheduleProposalsTable.proposerId] = callerUserId
-                it[RescheduleProposalsTable.newScheduledAt] = newScheduledAt
-                it[RescheduleProposalsTable.reason] = cleanReason
-                it[RescheduleProposalsTable.status] = RescheduleStatus.PENDING.name
-                it[RescheduleProposalsTable.proposalNumber] = nextNumber
-                it[RescheduleProposalsTable.respondedAt] = null
-                it[RescheduleProposalsTable.createdAt] = now
-                it[RescheduleProposalsTable.updatedAt] = now
+            try {
+                RescheduleProposalsTable.insert {
+                    it[RescheduleProposalsTable.id] = newProposalId
+                    it[RescheduleProposalsTable.exchangeId] = exchangeUuid
+                    it[RescheduleProposalsTable.proposerId] = callerUserId
+                    it[RescheduleProposalsTable.newScheduledAt] = newScheduledAt
+                    it[RescheduleProposalsTable.reason] = cleanReason
+                    it[RescheduleProposalsTable.status] = RescheduleStatus.PENDING.name
+                    it[RescheduleProposalsTable.proposalNumber] = nextNumber
+                    it[RescheduleProposalsTable.respondedAt] = null
+                    it[RescheduleProposalsTable.createdAt] = now
+                    it[RescheduleProposalsTable.updatedAt] = now
+                }
+            } catch (e: Exception) {
+                // DEC-025 / TASK-072: Bắt vi phạm partial unique index idx_unique_pending_reschedule (SQLState 23505)
+                if (isUniquePendingRescheduleViolation(e)) {
+                    throw RescheduleConflictException(
+                        "Đang có đề xuất đổi lịch chờ phản hồi cho phiên trao đổi này.",
+                        ErrorCodes.PENDING_PROPOSAL_EXISTS
+                    )
+                }
+                throw e
             }
 
             val createdRow = RescheduleProposalsTable.selectAll()
@@ -436,5 +447,20 @@ open class RescheduleService(
             createdAt = this[RescheduleProposalsTable.createdAt].format(DateTimeFormatter.ISO_DATE_TIME),
             updatedAt = this[RescheduleProposalsTable.updatedAt].format(DateTimeFormatter.ISO_DATE_TIME)
         )
+    }
+
+    private fun isUniquePendingRescheduleViolation(t: Throwable): Boolean {
+        var current: Throwable? = t
+        while (current != null) {
+            if (current is java.sql.SQLException && current.sqlState == "23505") {
+                return true
+            }
+            val msg = current.message?.lowercase() ?: ""
+            if (msg.contains("idx_unique_pending_reschedule") || msg.contains("23505")) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 }
