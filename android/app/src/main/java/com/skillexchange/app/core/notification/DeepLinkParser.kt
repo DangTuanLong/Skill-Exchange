@@ -24,7 +24,10 @@ object DeepLinkParser {
             "NEW_REQUEST",
             "REQUEST_ACCEPTED",
             "REQUEST_REJECTED",
-            "APPOINTMENT_REMINDER" -> Screen.BookingDetail.createRoute(entityId)
+            "APPOINTMENT_REMINDER",
+            "RESCHEDULE_PROPOSED",
+            "RESCHEDULE_ACCEPTED",
+            "RESCHEDULE_REJECTED" -> Screen.BookingDetail.createRoute(entityId)
             "RATING_REMINDER" -> Screen.Rating.createRoute(entityId)
             "CALL" -> null // Tuyệt đối không tự quay số hoặc chuyển hướng trực tiếp vào CallScreen từ deep link ngoài
             else -> null

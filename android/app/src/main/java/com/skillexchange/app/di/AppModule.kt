@@ -95,6 +95,11 @@ val appModule = module {
     single<com.skillexchange.app.domain.repository.IExchangeRepository> {
         com.skillexchange.app.data.repository.ExchangeRepositoryImpl(get())
     }
+    // ── Reschedule Proposals (DEC-025, TASK-070) ────────────────────
+    single { com.skillexchange.app.data.remote.reschedule.RescheduleRemoteDataSource(get()) }
+    single<com.skillexchange.app.domain.repository.IRescheduleRepository> {
+        com.skillexchange.app.data.repository.RescheduleRepositoryImpl(get())
+    }
     viewModelOf(::BookingRequestViewModel)
     viewModelOf(::BookingDetailViewModel)
     viewModelOf(::BookingListViewModel)

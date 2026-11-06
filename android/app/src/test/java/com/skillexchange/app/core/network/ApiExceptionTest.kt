@@ -97,7 +97,13 @@ class ApiExceptionTest {
             ApiException.CODE_UNSUPPORTED_MEDIA to "Định dạng tập tin không được hỗ trợ.",
             ApiException.CODE_RATE_LIMITED to "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.",
             ApiException.CODE_INTERNAL to "Lỗi máy chủ. Vui lòng thử lại sau.",
-            ApiException.CODE_BAD_REQUEST to "Yêu cầu không hợp lệ."
+            ApiException.CODE_BAD_REQUEST to "Yêu cầu không hợp lệ.",
+            ApiException.CODE_PENDING_PROPOSAL_EXISTS to "Đang có một đề xuất đổi lịch chờ phản hồi cho buổi trao đổi này.",
+            ApiException.CODE_RESCHEDULE_LIMIT_EXCEEDED to "Đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch cho buổi trao đổi này.",
+            ApiException.CODE_RESCHEDULE_LIMIT_REACHED to "Đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch cho buổi trao đổi này.",
+            ApiException.CODE_INVALID_RESCHEDULE_TIME to "Thời gian đổi lịch mới phải cách thời điểm hiện tại ít nhất 15 phút.",
+            ApiException.CODE_PROPOSAL_NOT_PENDING to "Đề xuất đổi lịch không còn ở trạng thái chờ phản hồi.",
+            ApiException.CODE_PENDING_RESCHEDULE_EXISTS to "Buổi trao đổi đang có đề xuất đổi lịch chờ xử lý, không thể hoàn tất."
         )
 
         for ((code, expectedMessage) in testCases) {

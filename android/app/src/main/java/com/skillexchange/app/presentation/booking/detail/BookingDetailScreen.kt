@@ -25,6 +25,8 @@ import com.skillexchange.app.core.ui.theme.Brand500
 import com.skillexchange.app.core.ui.theme.TextPrimaryLight
 import com.skillexchange.app.core.ui.theme.TextSecondaryLight
 import com.skillexchange.app.domain.model.exchange.ExchangeStatus
+import com.skillexchange.app.presentation.booking.detail.components.PendingRescheduleCard
+import com.skillexchange.app.presentation.booking.detail.components.RescheduleDialog
 import org.koin.androidx.compose.koinViewModel
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -151,6 +153,16 @@ fun BookingDetailScreen(
         )
     }
 
+    if (state.showRescheduleDialog) {
+        RescheduleDialog(
+            onDismiss = { viewModel.onIntent(BookingDetailIntent.DismissRescheduleDialog) },
+            onConfirm = { isoString, reason ->
+                viewModel.onIntent(BookingDetailIntent.SubmitReschedule(isoString, reason))
+            },
+            isLoading = state.isRescheduleLoading
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -186,6 +198,49 @@ fun BookingDetailScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Banner thông báo cập nhật lịch thành công (DEC-025, TASK-071)
+                    if (state.showRescheduleSuccessBanner) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = Color(0xFFB45309),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Lịch hẹn đã được dời sang giờ mới. Vui lòng bấm 'Thêm vào lịch' bên dưới để cập nhật sự kiện trên điện thoại của bạn!",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF92400E),
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { viewModel.onIntent(BookingDetailIntent.DismissRescheduleSuccessBanner) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Đóng",
+                                        tint = Color(0xFF92400E),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // 1. Thẻ đối tác + Chip trạng thái
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -348,6 +403,20 @@ fun BookingDetailScreen(
                                     valueColor = MaterialTheme.colorScheme.error
                                 )
                             }
+                        }
+                    }
+
+                    // Thẻ đề xuất đổi lịch đang chờ (DEC-025, TASK-071)
+                    if (state.isReschedulePending) {
+                        state.rescheduleProposal?.let { proposal ->
+                            PendingRescheduleCard(
+                                proposal = proposal,
+                                isProposer = state.isRescheduleProposer,
+                                onAccept = { viewModel.onIntent(BookingDetailIntent.AcceptRescheduleProposal) },
+                                onReject = { viewModel.onIntent(BookingDetailIntent.RejectRescheduleProposal) },
+                                onCancel = { viewModel.onIntent(BookingDetailIntent.CancelRescheduleProposal) },
+                                isLoading = state.isRescheduleLoading
+                            )
                         }
                     }
 
@@ -514,6 +583,40 @@ fun BookingDetailScreen(
                                         Text("Thêm vào lịch", fontWeight = FontWeight.SemiBold)
                                     }
 
+                                    // Đề xuất giờ khác (TASK-071, DEC-025)
+                                    if (state.canProposeReschedule) {
+                                        OutlinedButton(
+                                            onClick = { viewModel.onIntent(BookingDetailIntent.OpenRescheduleDialog) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            enabled = !state.isActionLoading && !state.isRescheduleLoading,
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
+                                        ) {
+                                            Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            val proposalCount = state.rescheduleProposal?.proposalNumber ?: 0
+                                            Text(
+                                                if (proposalCount > 0) "Đề xuất giờ khác (Lượt $proposalCount/3)" else "Đề xuất giờ khác",
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    } else if ((state.rescheduleProposal?.proposalNumber ?: 0) >= 3 && !state.isReschedulePending) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            color = Color(0xFFF1F5F9),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                "Đã sử dụng hết 3/3 lần đề xuất đổi lịch",
+                                                fontSize = 12.sp,
+                                                color = TextSecondaryLight,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+
                                     // Xác nhận hoàn thành
                                     if (state.hasUserConfirmed) {
                                         Surface(
@@ -540,18 +643,29 @@ fun BookingDetailScreen(
                                             }
                                         }
                                     } else {
-                                        Button(
-                                            onClick = { viewModel.onIntent(BookingDetailIntent.ConfirmCompletion) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            enabled = !state.isActionLoading,
-                                            colors = ButtonDefaults.buttonColors(containerColor = Brand500)
-                                        ) {
-                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Xác nhận đã hoàn thành", fontWeight = FontWeight.Bold)
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Button(
+                                                onClick = { viewModel.onIntent(BookingDetailIntent.ConfirmCompletion) },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(48.dp),
+                                                shape = RoundedCornerShape(12.dp),
+                                                enabled = !state.isActionLoading && !state.isReschedulePending,
+                                                colors = ButtonDefaults.buttonColors(containerColor = Brand500)
+                                            ) {
+                                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Xác nhận đã hoàn thành", fontWeight = FontWeight.Bold)
+                                            }
+
+                                            if (state.isReschedulePending) {
+                                                Text(
+                                                    "Đang có đề xuất đổi lịch chờ xử lý. Vui lòng phản hồi đề xuất trước khi hoàn thành.",
+                                                    fontSize = 12.sp,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                                )
+                                            }
                                         }
                                     }
 

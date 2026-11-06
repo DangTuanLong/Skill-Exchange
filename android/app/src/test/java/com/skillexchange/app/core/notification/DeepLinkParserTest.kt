@@ -58,6 +58,22 @@ class DeepLinkParserTest {
     }
 
     @Test
+    fun parse_WhenRescheduleNotifications_ReturnsBookingDetailRoute() {
+        assertEquals(
+            "booking_detail/exchange-reschedule-1",
+            DeepLinkParser.parse("RESCHEDULE_PROPOSED", "exchange-reschedule-1", true)
+        )
+        assertEquals(
+            "booking_detail/exchange-reschedule-2",
+            DeepLinkParser.parse("RESCHEDULE_ACCEPTED", "exchange-reschedule-2", true)
+        )
+        assertEquals(
+            "booking_detail/exchange-reschedule-3",
+            DeepLinkParser.parse("RESCHEDULE_REJECTED", "exchange-reschedule-3", true)
+        )
+    }
+
+    @Test
     fun parse_WhenAppointmentReminder_ReturnsBookingDetailRoute() {
         val route = DeepLinkParser.parse(
             type = "APPOINTMENT_REMINDER",

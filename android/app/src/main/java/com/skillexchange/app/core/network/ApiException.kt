@@ -89,6 +89,14 @@ class ApiException(
         const val CODE_PAIR_ALREADY_ACTIVE = "PAIR_ALREADY_ACTIVE"
         const val CODE_PENDING_LIMIT_REACHED = "PENDING_LIMIT_REACHED"
 
+        // Reschedule Proposal Error Codes (DEC-025, TASK-067..TASK-070)
+        const val CODE_PENDING_PROPOSAL_EXISTS = "PENDING_PROPOSAL_EXISTS"
+        const val CODE_RESCHEDULE_LIMIT_EXCEEDED = "RESCHEDULE_LIMIT_EXCEEDED"
+        const val CODE_RESCHEDULE_LIMIT_REACHED = "RESCHEDULE_LIMIT_REACHED"
+        const val CODE_INVALID_RESCHEDULE_TIME = "INVALID_RESCHEDULE_TIME"
+        const val CODE_PROPOSAL_NOT_PENDING = "PROPOSAL_NOT_PENDING"
+        const val CODE_PENDING_RESCHEDULE_EXISTS = "PENDING_RESCHEDULE_EXISTS"
+
         /**
          * Chuyển đổi từ HTTP status và ApiErrorDto sang ApiException.
          * Ưu tiên chuỗi code -> fallback status -> fallback server message -> thông điệp mặc định.
@@ -160,6 +168,11 @@ class ApiException(
                     CODE_CALL_NOT_FOUND -> return "Không tìm thấy phiên cuộc gọi."
                     CODE_PAIR_ALREADY_ACTIVE -> return "Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động."
                     CODE_PENDING_LIMIT_REACHED -> return "Bạn đang có 3 yêu cầu chờ phản hồi với người này."
+                    CODE_PENDING_PROPOSAL_EXISTS -> return "Đang có một đề xuất đổi lịch chờ phản hồi cho buổi trao đổi này."
+                    CODE_RESCHEDULE_LIMIT_EXCEEDED, CODE_RESCHEDULE_LIMIT_REACHED -> return "Đã đạt giới hạn tối đa 3 lần đề xuất đổi lịch cho buổi trao đổi này."
+                    CODE_INVALID_RESCHEDULE_TIME -> return "Thời gian đổi lịch mới phải cách thời điểm hiện tại ít nhất 15 phút."
+                    CODE_PROPOSAL_NOT_PENDING -> return "Đề xuất đổi lịch không còn ở trạng thái chờ phản hồi."
+                    CODE_PENDING_RESCHEDULE_EXISTS -> return "Buổi trao đổi đang có đề xuất đổi lịch chờ xử lý, không thể hoàn tất."
                     else -> {}
                 }
             }
