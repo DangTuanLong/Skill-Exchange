@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.core.ui.util.CategoryIconHelper
@@ -1141,12 +1142,23 @@ fun ProfileSetupScreen(
                                     }
 
                                     if (!item.skill.reason.isNullOrBlank()) {
-                                        Text(
-                                            text = "💡 ${item.skill.reason}",
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF0F766E),
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                                             modifier = Modifier.padding(top = 2.dp)
-                                        )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Lightbulb,
+                                                contentDescription = "Gợi ý",
+                                                tint = Color(0xFF0F766E),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                text = item.skill.reason ?: "",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF0F766E)
+                                            )
+                                        }
                                     }
 
                                     if (item.isAlreadyAdded) {

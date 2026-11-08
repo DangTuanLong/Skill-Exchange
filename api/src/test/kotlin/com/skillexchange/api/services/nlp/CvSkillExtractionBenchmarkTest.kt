@@ -687,9 +687,186 @@ class CvSkillExtractionBenchmarkTest {
         if (heldOutMisclassified.isEmpty()) println("    (Không có lỗi)")
         else heldOutMisclassified.forEach { println(it) }
 
-        println("=".repeat(85) + "\n")
+        // ════════════════════════════════════════════════════════════════════
+        // ĐO LƯỜNG TẬP CV MỚI BỔ SUNG (BÁO CÁO TÁCH BIỆT KHỎI 24 CV CŨ)
+        // ════════════════════════════════════════════════════════════════════
+        val additionalSamples = loadAdditionalCvSamples()
+        if (additionalSamples.isEmpty()) {
+            println("\n>>> TẬP CV MỚI BỔ SUNG (cv_additional):")
+            println("    - Thư mục: api/src/test/resources/cv_additional/")
+            println("    - Trạng thái: Hiện chưa có tệp CV bổ sung nào (Sẵn sàng để Chủ sở hữu đưa tệp và rà nhãn).")
+            println("=".repeat(85) + "\n")
+        } else {
+            var addTP = 0
+            var addFP = 0
+            var addFN = 0
+            val addMisclassified = mutableListOf<String>()
+
+            for (sample in additionalSamples) {
+                val extracted = extractor.extractSkills(sample.content)
+                val predicted = extracted.map { it.skillName }.toSet()
+                val expected = sample.expectedHave
+
+                val tp = predicted.intersect(expected).size
+                val fp = predicted.minus(expected).size
+                val fn = expected.minus(predicted).size
+
+                addTP += tp
+                addFP += fp
+                addFN += fn
+
+                if (fp > 0 || fn > 0) {
+                    val sb = StringBuilder()
+                    sb.appendLine("  [${sample.id}] [ADDITIONAL_SET] ${sample.title}")
+                    sb.appendLine("    Ground Truth HAVE: $expected")
+                    sb.appendLine("    Predicted        : $predicted")
+                    if (fp > 0) {
+                        val falsePositives = predicted.minus(expected)
+                        sb.appendLine("    [!] False Positive (Thừa/Bắt nhầm): $falsePositives")
+                    }
+                    if (fn > 0) {
+                        sb.appendLine("    [?] False Negative (Bỏ sót): ${expected.minus(predicted)}")
+                    }
+                    addMisclassified.add(sb.toString())
+                }
+            }
+
+            val (addPrecision, addRecall, addF1) = calcMetrics(addTP, addFP, addFN)
+            println("\n>>> KẾT QUẢ ĐO LƯỜNG TRÊN TẬP CV MỚI BỔ SUNG (${additionalSamples.size} CV):")
+            println("    - True Positives  (TP) : $addTP")
+            println("    - False Positives (FP) : $addFP")
+            println("    - False Negatives (FN) : $addFN")
+            println("    - Precision            : ${"%.2f".format(addPrecision * 100)}%")
+            println("    - Recall               : ${"%.2f".format(addRecall * 100)}%")
+            println("    - F1-Score             : ${"%.2f".format(addF1 * 100)}%")
+
+            println("\n>>> CHI TIẾT CÁC LỖI TRÊN TẬP CV MỚI BỔ SUNG (ADDITIONAL MISCLASSIFIED):")
+            if (addMisclassified.isEmpty()) println("    (Không có lỗi)")
+            else addMisclassified.forEach { println(it) }
+            println("=".repeat(85) + "\n")
+        }
 
         // Kiểm tra chạy thành công (không crash)
         assertTrue(totalTP > 0, "Benchmark baseline phải ghi nhận TP > 0")
+    }
+
+    /**
+     * Tải các mẫu CV bổ sung từ thư mục `cv_additional` (nếu có).
+     */
+    fun loadAdditionalCvSamples(): List<CvBenchmarkSample> {
+        val searchDirs = listOf(
+            java.io.File("src/test/resources/cv_additional"),
+            java.io.File("api/src/test/resources/cv_additional"),
+            java.io.File("../api/src/test/resources/cv_additional"),
+            java.io.File("cv_additional")
+        )
+        val dir = searchDirs.firstOrNull { it.exists() && it.isDirectory } ?: return emptyList()
+
+        val files = dir.listFiles { f ->
+            f.isFile && (f.name.endsWith(".txt", ignoreCase = true) || f.name.endsWith(".md", ignoreCase = true))
+                    && !f.name.equals("README.md", ignoreCase = true)
+        }?.sortedBy { it.name } ?: return emptyList()
+
+        return files.mapNotNull { file ->
+            try {
+                parseSampleFromFile(file)
+            } catch (e: Exception) {
+                System.err.println("Lỗi đọc tệp CV bổ sung ${file.name}: ${e.message}")
+                null
+            }
+        }
+    }
+
+    private fun parseSampleFromFile(file: java.io.File): CvBenchmarkSample {
+        val lines = file.readLines(Charsets.UTF_8)
+        var id = file.nameWithoutExtension
+        var title = file.nameWithoutExtension
+        val expectedHave = mutableSetOf<String>()
+        val expectedWant = mutableSetOf<String>()
+        val negativeSkills = mutableSetOf<String>()
+        val orgSkills = mutableSetOf<String>()
+        var notes = ""
+
+        val contentBuilder = StringBuilder()
+        var inFrontmatter = false
+        var frontmatterPassed = false
+
+        var lineIdx = 0
+        while (lineIdx < lines.size) {
+            val line = lines[lineIdx]
+            val trimmed = line.trim()
+
+            if (!frontmatterPassed) {
+                if (lineIdx == 0 && trimmed == "---") {
+                    inFrontmatter = true
+                    lineIdx++
+                    continue
+                }
+                if (inFrontmatter) {
+                    if (trimmed == "---") {
+                        inFrontmatter = false
+                        frontmatterPassed = true
+                        lineIdx++
+                        continue
+                    }
+                    parseHeaderLine(trimmed, { id = it }, { title = it }, expectedHave, expectedWant, negativeSkills, orgSkills, { notes = it })
+                    lineIdx++
+                    continue
+                }
+                if (trimmed.startsWith("#")) {
+                    val withoutHash = trimmed.removePrefix("#").trim()
+                    if (parseHeaderLine(withoutHash, { id = it }, { title = it }, expectedHave, expectedWant, negativeSkills, orgSkills, { notes = it })) {
+                        lineIdx++
+                        continue
+                    }
+                }
+                frontmatterPassed = true
+            }
+
+            contentBuilder.appendLine(line)
+            lineIdx++
+        }
+
+        return CvBenchmarkSample(
+            id = id,
+            title = title,
+            content = contentBuilder.toString().trim(),
+            isHeldOut = true,
+            expectedHave = expectedHave,
+            expectedWant = expectedWant,
+            negativeSkills = negativeSkills,
+            orgSkills = orgSkills,
+            notes = notes
+        )
+    }
+
+    private fun parseHeaderLine(
+        line: String,
+        setId: (String) -> Unit,
+        setTitle: (String) -> Unit,
+        expectedHave: MutableSet<String>,
+        expectedWant: MutableSet<String>,
+        negativeSkills: MutableSet<String>,
+        orgSkills: MutableSet<String>,
+        setNotes: (String) -> Unit
+    ): Boolean {
+        val colonIdx = line.indexOf(':')
+        if (colonIdx == -1) return false
+        val key = line.substring(0, colonIdx).trim().lowercase()
+        val value = line.substring(colonIdx + 1).trim()
+
+        fun parseSet(str: String): Set<String> = str.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+        when (key) {
+            "id" -> setId(value)
+            "title" -> setTitle(value)
+            "have", "expectedhave", "expected_have" -> expectedHave.addAll(parseSet(value))
+            "want", "expectedwant", "expected_want" -> expectedWant.addAll(parseSet(value))
+            "negative", "negativeskills", "negative_skills" -> negativeSkills.addAll(parseSet(value))
+            "org", "orgskills", "org_skills" -> orgSkills.addAll(parseSet(value))
+            "notes", "note" -> setNotes(value)
+            else -> return false
+        }
+        return true
     }
 }
