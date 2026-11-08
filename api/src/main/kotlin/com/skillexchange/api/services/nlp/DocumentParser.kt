@@ -34,9 +34,15 @@ class CancellablePdfTextStripper(
     }
 }
 
+data class ParsedDocument(
+    val text: String,
+    val warning: String? = null
+)
+
 object DocumentParser {
     const val MAX_FILE_BYTES: Long = 2 * 1024 * 1024L // 2MB
     const val MAX_TEXT_CHARS: Int = 10_000
+    const val MAX_INPUT_CHARS: Int = 50_000
     const val MAX_PDF_PAGES: Int = 5
     const val MIN_PDF_TEXT_CHARS: Int = 20
 
@@ -45,14 +51,14 @@ object DocumentParser {
     private val ZIP_SPANNED_HEADER = byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x07.toByte(), 0x08.toByte())
     private val PDF_MAGIC_HEADER = byteArrayOf(0x25.toByte(), 0x50.toByte(), 0x44.toByte(), 0x46.toByte()) // %PDF
 
-    fun parseDocument(
+    fun parseDocumentWithWarning(
         inputStream: InputStream,
         fileName: String,
         maxBytes: Long = MAX_FILE_BYTES,
         maxChars: Int = MAX_TEXT_CHARS,
         maxPages: Int = MAX_PDF_PAGES,
         checkCancelled: (() -> Unit)? = null
-    ): String {
+    ): ParsedDocument {
         val lowerName = fileName.lowercase()
 
         // 1. Kiểm tra phần mở rộng tệp
@@ -139,7 +145,75 @@ object DocumentParser {
         }
     }
 
-    private fun parseTextBytes(allBytes: ByteArray, maxChars: Int): String {
+    fun parseDocument(
+        inputStream: InputStream,
+        fileName: String,
+        maxBytes: Long = MAX_FILE_BYTES,
+        maxChars: Int = MAX_TEXT_CHARS,
+        maxPages: Int = MAX_PDF_PAGES,
+        checkCancelled: (() -> Unit)? = null
+    ): String = parseDocumentWithWarning(inputStream, fileName, maxBytes, maxChars, maxPages, checkCancelled).text
+
+    fun processDocumentLength(
+        fullText: String,
+        maxChars: Int = MAX_TEXT_CHARS,
+        maxInputChars: Int = MAX_INPUT_CHARS
+    ): ParsedDocument {
+        if (fullText.length > maxInputChars) {
+            throw DocumentParseException(
+                HttpStatusCode.UnprocessableEntity,
+                ErrorCodes.TEXT_TOO_LONG,
+                "Nội dung văn bản vượt quá giới hạn tối đa 50.000 ký tự (hiện tại: ${fullText.length} ký tự). Vui lòng rút gọn tài liệu."
+            )
+        }
+
+        if (fullText.length <= maxChars) {
+            return ParsedDocument(fullText, null)
+        }
+
+        // Trích lọc thông minh các mục quan trọng (DEC-029)
+        val service = SkillExtractionService()
+        val sections = service.parseCvSections(service.unaccent(fullText))
+
+        val extracted = StringBuilder()
+        val warning = "Tài liệu dài hơn 10.000 ký tự (${fullText.length} ký tự); hệ thống đã ưu tiên phân tích các phần Kỹ năng & Kinh nghiệm chính."
+
+        if (sections.isNotEmpty()) {
+            val prioritizedTypes = listOf(
+                SkillExtractionService.CvSectionType.SKILLS,
+                SkillExtractionService.CvSectionType.EXPERIENCE,
+                SkillExtractionService.CvSectionType.EDUCATION,
+                SkillExtractionService.CvSectionType.OBJECTIVE_WANT,
+                SkillExtractionService.CvSectionType.PROJECTS
+            )
+
+            for (type in prioritizedTypes) {
+                val matchingSections = sections.filter { it.type == type }
+                for (sec in matchingSections) {
+                    val secText = fullText.substring(sec.startOffset, minOf(sec.endOffset, fullText.length)).trim()
+                    if (extracted.length + secText.length + 2 <= maxChars) {
+                        extracted.append(secText).append("\n\n")
+                    }
+                }
+            }
+        }
+
+        val finalText = if (extracted.length >= 200) {
+            extracted.toString().trim()
+        } else {
+            val truncated = fullText.substring(0, maxChars)
+            val lastNewline = truncated.lastIndexOfAny(charArrayOf('\n', '\r'))
+            if (lastNewline > maxChars / 2) {
+                truncated.substring(0, lastNewline).trim()
+            } else {
+                truncated.trim()
+            }
+        }
+
+        return ParsedDocument(finalText, warning)
+    }
+
+    private fun parseTextBytes(allBytes: ByteArray, maxChars: Int): ParsedDocument {
         val decoder = StandardCharsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -163,15 +237,7 @@ object DocumentParser {
             )
         }
 
-        if (text.length > maxChars) {
-            throw DocumentParseException(
-                HttpStatusCode.UnprocessableEntity,
-                ErrorCodes.TEXT_TOO_LONG,
-                "Nội dung văn bản vượt quá giới hạn 10.000 ký tự (hiện tại: ${text.length} ký tự). Vui lòng rút gọn tài liệu."
-            )
-        }
-
-        return text
+        return processDocumentLength(text, maxChars)
     }
 
     private fun parsePdfBytes(
@@ -179,7 +245,7 @@ object DocumentParser {
         maxChars: Int,
         maxPages: Int,
         checkCancelled: (() -> Unit)?
-    ): String {
+    ): ParsedDocument {
         // Cấu hình hoàn toàn in-memory qua RandomAccessReadBuffer (không ghi tệp tạm disk)
         val doc: PDDocument = try {
             Loader.loadPDF(RandomAccessReadBuffer(allBytes))
@@ -322,16 +388,8 @@ object DocumentParser {
                 )
             }
 
-            // 6. Kiểm tra giới hạn độ dài ký tự tối đa (từ chối, tuyệt đối không cắt ngắn âm thầm)
-            if (text.length > maxChars) {
-                throw DocumentParseException(
-                    HttpStatusCode.UnprocessableEntity,
-                    ErrorCodes.TEXT_TOO_LONG,
-                    "Nội dung văn bản vượt quá giới hạn 10.000 ký tự (hiện tại: ${text.length} ký tự). Vui lòng rút gọn tài liệu."
-                )
-            }
-
-            return text
+            // 6. Xử lý giới hạn độ dài ký tự thông minh (DEC-029)
+            return processDocumentLength(text, maxChars)
         }
     }
 

@@ -156,7 +156,7 @@ fun Route.nlpRoutes(
                         false
                     }
 
-                    val textToAnalyze: String = withContext(Dispatchers.IO) {
+                    val parsedDoc = withContext(Dispatchers.IO) {
                         withTimeout(5000L) {
                             val coroutineCtx = currentCoroutineContext()
                             if (isJson) {
@@ -169,14 +169,14 @@ fun Route.nlpRoutes(
                                         "Dữ liệu JSON không hợp lệ"
                                     )
                                 }
-                                DocumentParser.parseDocument(
+                                DocumentParser.parseDocumentWithWarning(
                                     ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
                                     req.fileName,
                                     checkCancelled = { coroutineCtx.ensureActive() }
                                 )
                             } else {
                                 // Multipart form-data
-                                var extracted: String? = null
+                                var extracted: com.skillexchange.api.services.nlp.ParsedDocument? = null
                                 var foundFile = false
                                 val multipart = try {
                                     call.receiveMultipart()
@@ -193,7 +193,7 @@ fun Route.nlpRoutes(
                                         foundFile = true
                                         val fileName = part.originalFileName ?: "document.txt"
                                         part.streamProvider().use { stream ->
-                                            extracted = DocumentParser.parseDocument(
+                                            extracted = DocumentParser.parseDocumentWithWarning(
                                                 stream,
                                                 fileName,
                                                 checkCancelled = { coroutineCtx.ensureActive() }
@@ -217,8 +217,15 @@ fun Route.nlpRoutes(
                     }
 
                     // 3. Phân tích trích xuất kỹ năng bằng dịch vụ in-process (DEC-020)
-                    val skills = skillExtractionService.extractSkills(textToAnalyze)
-                    call.respond(HttpStatusCode.OK, ExtractSkillsResponse(success = true, data = skills))
+                    val skills = skillExtractionService.extractSkills(parsedDoc.text)
+                    call.respond(
+                        HttpStatusCode.OK,
+                        ExtractSkillsResponse(
+                            success = true,
+                            data = skills,
+                            warning = parsedDoc.warning
+                        )
+                    )
                 } catch (e: TimeoutCancellationException) {
                     call.respond(
                         HttpStatusCode.GatewayTimeout,

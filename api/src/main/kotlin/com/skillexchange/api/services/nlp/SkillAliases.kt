@@ -24,15 +24,15 @@ object SkillAliases {
         "C" to listOf("c"),
         "Flutter" to listOf("flutter"),
         "Node.js" to listOf("nodejs", "node.js", "node js"),
-        "SQL" to listOf("sql"),
+        "SQL" to listOf("sql", "postgresql", "postgres"),
         "AI/ML" to listOf("ai/ml", "machine learning", "ml", "tri tue nhan tao"),
 
         // Thiết kế
         "Figma / UI Design" to listOf("figma", "ui ux", "ui/ux", "ui design", "ux design"),
         "Adobe Photoshop" to listOf("photoshop", "ps", "pts"),
         "Illustrator" to listOf("illustrator", "adobe illustrator"),
-        "Video Editing" to listOf("video editing", "edit video", "dung phim", "chinh sua video"),
-        "3D Modeling" to listOf("3d modeling", "blender", "maya"),
+        "Video Editing" to listOf("video editing", "edit video", "dung phim", "chinh sua video", "premiere", "premiere pro"),
+        "3D Modeling" to listOf("3d modeling", "blender", "maya", "3ds max"),
         "Motion Graphics" to listOf("motion graphics", "after effects", "ae"),
 
         // Ngoại ngữ
@@ -49,7 +49,7 @@ object SkillAliases {
         "Piano" to listOf("piano", "dan piano"),
         "Ukulele" to listOf("ukulele"),
         "Violin" to listOf("violin"),
-        "Trống" to listOf("drums", "trong"),
+        "Trống" to listOf("drums", "dan trong", "bo trong", "trong jazz", "danh trong"),
         "Hát" to listOf("vocal", "hat", "ca hat"),
         "Sáng tác nhạc" to listOf("sang tac nhac", "songwriting"),
         "Beat making" to listOf("beat making", "lam beat"),

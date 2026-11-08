@@ -299,8 +299,8 @@ class DocumentNlpRoutesTest {
     }
 
     @Test
-    fun testExtractSkillsDocument_textExceeds10kChars_returns422TextTooLong() = testApp { client ->
-        val longText = "A".repeat(10_001)
+    fun testExtractSkillsDocument_textExceeds50kChars_returns422TextTooLong() = testApp { client ->
+        val longText = "A".repeat(50_001)
         val response = client.post("/api/nlp/extract-skills-document") {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
             setBody(
@@ -318,6 +318,31 @@ class DocumentNlpRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         val err = Json.decodeFromString<ApiError>(response.bodyAsText())
         assertEquals(ErrorCodes.TEXT_TOO_LONG, err.code)
+    }
+
+    @Test
+    fun testExtractSkillsDocument_textBetween10kAnd50k_returns200WithWarning() = testApp { client ->
+        val longText = "Mục kỹ năng:\n- Lập trình Python và Java\n\nKinh nghiệm làm việc:\n" + "Chi tiết công việc dự án.\n".repeat(600)
+        val response = client.post("/api/nlp/extract-skills-document") {
+            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", longText.toByteArray(Charsets.UTF_8), Headers.build {
+                            append(HttpHeaders.ContentType, "text/plain")
+                            append(HttpHeaders.ContentDisposition, "filename=\"smart_extract.txt\"")
+                        })
+                    }
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val res = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
+        assertTrue(res.success)
+        kotlin.test.assertNotNull(res.warning)
+        assertTrue(res.warning!!.contains("10.000"))
+        assertTrue(res.data.any { it.skillName == "Python" })
     }
 
     @Test

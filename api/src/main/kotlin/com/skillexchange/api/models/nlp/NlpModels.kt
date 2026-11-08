@@ -21,11 +21,16 @@ data class ExtractedSkillDto(
     val categoryName: String? = null,
     val confidence: Double,
     val matchType: String, // "EXACT", "ALIAS", "FUZZY"
-    val matchedTerm: String
+    val matchedTerm: String,
+    val frequency: Int = 1,
+    val score: Double = confidence,
+    val reason: String? = null,
+    val suggestedLevel: Int = 2
 )
 
 @Serializable
 data class ExtractSkillsResponse(
     val success: Boolean = true,
-    val data: List<ExtractedSkillDto>
+    val data: List<ExtractedSkillDto>,
+    val warning: String? = null
 )

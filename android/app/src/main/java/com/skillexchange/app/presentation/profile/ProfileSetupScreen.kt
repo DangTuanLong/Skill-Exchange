@@ -1140,6 +1140,15 @@ fun ProfileSetupScreen(
                                         )
                                     }
 
+                                    if (!item.skill.reason.isNullOrBlank()) {
+                                        Text(
+                                            text = "💡 ${item.skill.reason}",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF0F766E),
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+
                                     if (item.isAlreadyAdded) {
                                         Text(
                                             text = "(Đã có trong danh sách kỹ năng)",

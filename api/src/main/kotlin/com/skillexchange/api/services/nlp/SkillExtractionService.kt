@@ -68,6 +68,21 @@ class SkillExtractionService(
     }
 
     /**
+     * Chuẩn hóa văn bản tài liệu (Bước a - Text Normalization):
+     * 1. Chuẩn hóa Unicode NFC.
+     * 2. Chuẩn hóa khoảng trắng Unicode (NBSP, zero-width space, tabs, en/em space).
+     * 3. Gộp các từ bị ngắt dòng có gạch nối (hyphenation): (\p{L}+)-\s*\r?\n\s*(\p{L}+) -> $1$2.
+     * 4. Chuẩn hóa các ký hiệu đầu dòng bullet points (•, ▪, ▫, –, —, *, +) thành '- '.
+     */
+    fun normalizeDocumentText(text: String): String {
+        var normalized = normalizeNfc(text)
+        normalized = normalized.replace(Regex("[\u00A0\u200B\u2000-\u200A\uFEFF]"), " ")
+        normalized = normalized.replace(Regex("(\\p{L}+)-\\s*\\r?\\n\\s*(\\p{L}+)"), "$1$2")
+        normalized = normalized.replace(Regex("^[ \t]*[•▪▫–—*+][ \t]*", RegexOption.MULTILINE), "- ")
+        return normalized
+    }
+
+    /**
      * Loại bỏ dấu tiếng Việt (Unaccent) và chuyển về chữ thường.
      * Xử lý cả NFD combining marks và ký tự 'đ'/'Đ'.
      */
@@ -83,6 +98,235 @@ class SkillExtractionService(
     // Loại trừ các từ tiếng Việt thông dụng / giới từ khỏi danh sách mục tiêu fuzzy để tránh dương tính giả.
     // Ví dụ: "trong" (Trống) trùng giới từ tiếng Việt và chỉ cách các từ như "thống", "trung", "trường" đúng 1 ký tự.
     private val FUZZY_EXCLUDED_TARGETS = setOf("trong")
+
+    enum class MatchIntent {
+        HAVE,
+        WANT,
+        NEGATIVE
+    }
+
+    enum class CvSectionType {
+        SKILLS,
+        EXPERIENCE,
+        EDUCATION,
+        OBJECTIVE_WANT,
+        PROJECTS,
+        OTHER
+    }
+
+    data class TextSection(
+        val type: CvSectionType,
+        val startOffset: Int,
+        val endOffset: Int,
+        val rawHeader: String
+    )
+
+    companion object {
+        private val CLAUSE_DELIMITERS = charArrayOf(',', ';', '.', '!', '?', '\n', '\r', '—', '–')
+
+        private val SECTION_HEADER_PATTERNS = listOf(
+            CvSectionType.OBJECTIVE_WANT to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:muc\\s+tieu(?:\\s+nghe\\s+nghiep|\\s+ca\\s+nhan)?|dinh\\s+huong|nhu\\s+cau\\s+(?:trao\\s+doi\\s+&\\s+)?hoc\\s+tap|nhu\\s+cau\\s+hoc\\s+hoi\\s+them|ky\\s+nang\\s+muon\\s+hoc|career\\s+objective|objective|goals|want\\s+to\\s+learn)[^\n:]*[:\n]"),
+            CvSectionType.SKILLS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:ky\\s+nang(?:\\s+chuyen\\s+mon|\\s+chinh|\\s+ca\\s+nhan|\\s+hien\\s+co)?|chuyen\\s+mon|nang\\s+luc\\s+chuyen\\s+mon|skills(?:\\s+&\\s+technologies|\\s+&\\s+tools)?|technical\\s+skills|core\\s+competencies)[^\n:]*[:\n]"),
+            CvSectionType.EXPERIENCE to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:kinh\\s+nghiem(?:\\s+lam\\s+viec|\\s+nghe\\s+nghiep)?|lich\\s+su\\s+lam\\s+viec|work\\s+experience|professional\\s+experience|experience)[^\n:]*[:\n]"),
+            CvSectionType.EDUCATION to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:hoc\\s+van|trinh\\s+do|bang\\s+cap|education|academic\\s+background)[^\n:]*[:\n]"),
+            CvSectionType.PROJECTS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:du\\s+an(?:\\s+tieu\\s+bieu|\\s+ca\\s+nhan)?|projects|personal\\s+projects)[^\n:]*[:\n]")
+        )
+
+        // 5 cụm danh từ tổ chức cố định (Bước d - Organization Context Guard)
+        private val ORG_PREFIXES = listOf(
+            Regex("\\b(?:truong\\s+)?(?:dai\\s+hoc|cao\\s+dang)\\b", RegexOption.IGNORE_CASE),
+            Regex("\\b(?:hoc\\s+vien|vien\\s+nghien\\s+cuu|vien\\s+khoa\\s+hoc|vien\\s+han\\s+lam|trung\\s+tam)\\b", RegexOption.IGNORE_CASE),
+            Regex("\\b(?:cong\\s+ty|cty|tap\\s+doan|doanh\\s+nghiep)(?:\\s+(?:tnhh|co\\s+phan|cp))?\\b", RegexOption.IGNORE_CASE),
+            Regex("\\b(?:cau\\s+lac\\s+bo|clb)\\b", RegexOption.IGNORE_CASE),
+            Regex("\\b(?:truong(?:\\s+thpt|\\s+thcs|\\s+tieu\\s+hoc)?|benh\\s+vien)\\b", RegexOption.IGNORE_CASE)
+        )
+
+        // Các động từ / ranh giới ngắt cụm tổ chức (Ví dụ: "Học viện X dạy Python")
+        private val ACTION_VERBS_DELIMITERS = Regex(
+            "\\b(?:day|hoc|tuyen|tuyen\\s+dung|dao\\s+tao|nghien\\s+cuu|phat\\s+trien|su\\s+dung|lam\\s+viec\\s+voi)\\b",
+            RegexOption.IGNORE_CASE
+        )
+
+        private val NEGATIVE_PATTERNS = listOf(
+            // Tiếng Việt (unaccented)
+            Regex("\\b(?:chua\\s+tung|chua\\s+co\\s+kinh\\s+nghiem|khong\\s+co\\s+kinh\\s+nghiem|khong\\s+co\\s+chuyen\\s+mon|khong\\s+chuyen|khong\\s+biet|chua\\s+biet|hoan\\s+toan\\s+khong|khong\\s+thao|yeu\\s+ve|mat\\s+goc|chua|khong|kem)\\b", RegexOption.IGNORE_CASE),
+            // Tiếng Anh
+            Regex("\\b(?:no\\s+hands-on\\s+experience\\s+in|no\\s+experience\\s+with|no\\s+experience\\s+in|have\\s+no\\s+experience|not\\s+familiar\\s+with|not\\s+good\\s+at|cannot|can't|haven't|never|not|no)\\b", RegexOption.IGNORE_CASE)
+        )
+
+        private val AFFIRMATIVE_EXCEPTIONS = listOf(
+            Regex("\\bkhong\\s+nhung\\b.*?\\bma\\s+con\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+chi\\b.*?\\bma\\s+con\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+chi\\b.*?\\bnhung\\s+con\\b", RegexOption.IGNORE_CASE)
+        )
+
+        private val FALSE_NEGATIVE_WORDS = listOf(
+            Regex("\\bkhong\\s+gian\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+dau\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+khi\\b", RegexOption.IGNORE_CASE)
+        )
+
+        private val WANT_PATTERNS = listOf(
+            // Tiếng Việt (unaccented)
+            Regex("\\b(?:muon\\s+hoc|can\\s+hoc|can\\s+tim\\s+nguoi\\s+(?:huong\\s+dan|day)|dang\\s+tim\\s+nguoi\\s+(?:huong\\s+dan|day)|dang\\s+rat\\s+can\\s+tim\\s+nguoi|du\\s+dinh\\s+hoc|ke\\s+hoach\\s+hoc|ke\\s+hoach\\s+(?:nam\\s+toi|sap\\s+toi)?\\s*:\\s*muon\\s+hoc|muon\\s+trau\\s+doi|nhu\\s+cau\\s+(?:trao\\s+doi\\s+&\\s+)?hoc\\s+tap|tim\\s+nguoi\\s+huong\\s+dan\\s+hoc)\\b", RegexOption.IGNORE_CASE),
+            // Tiếng Anh
+            Regex("\\b(?:want\\s+to\\s+learn|planning\\s+to\\s+learn|looking\\s+to\\s+learn|looking\\s+for\\s+(?:a\\s+)?(?:tutor|mentor)\\s+to\\s+learn|wish\\s+to\\s+learn|interested\\s+in\\s+learning)\\b", RegexOption.IGNORE_CASE)
+        )
+    }
+
+    /**
+     * Phân tách các phần mục của CV (Bước b - Section-aware Parsing).
+     */
+    fun parseCvSections(text: String): List<TextSection> {
+        val detected = mutableListOf<Pair<Int, Pair<CvSectionType, String>>>()
+        for ((type, regex) in SECTION_HEADER_PATTERNS) {
+            val matches = regex.findAll(text)
+            for (m in matches) {
+                detected.add(m.range.first to (type to m.value))
+            }
+        }
+        detected.sortBy { it.first }
+        if (detected.isEmpty()) return emptyList()
+
+        val sections = mutableListOf<TextSection>()
+        for (i in detected.indices) {
+            val (start, pair) = detected[i]
+            val (type, header) = pair
+            val end = if (i + 1 < detected.size) detected[i + 1].first else text.length
+            sections.add(TextSection(type, start, end, header))
+        }
+        return sections
+    }
+
+    fun getSectionTypeAt(sections: List<TextSection>, offset: Int): CvSectionType {
+        for (sec in sections) {
+            if (offset in sec.startOffset until sec.endOffset) {
+                return sec.type
+            }
+        }
+        return CvSectionType.OTHER
+    }
+
+    /**
+     * Kiểm tra xem vị trí kỹ năng có nằm trọn trong cụm danh xưng tổ chức không (Bước d):
+     * - Khống chế cửa sổ tối đa 3-4 từ sau danh xưng tổ chức.
+     * - Dừng ở dấu câu ngắt mệnh đề.
+     * - Không chặn nếu có động từ hành động ở giữa (ví dụ: "Học viện X dạy Python").
+     */
+    fun isInsideOrganizationName(text: String, matchStartIndex: Int): Boolean {
+        val windowStart = maxOf(0, matchStartIndex - 60)
+        val rawWindow = text.substring(windowStart, matchStartIndex)
+
+        val lastDelimiterIndex = rawWindow.lastIndexOfAny(CLAUSE_DELIMITERS)
+        val window = if (lastDelimiterIndex != -1) {
+            rawWindow.substring(lastDelimiterIndex + 1)
+        } else {
+            rawWindow
+        }.trim()
+
+        if (window.isBlank()) return false
+
+        for (orgRegex in ORG_PREFIXES) {
+            val orgMatch = orgRegex.findAll(window).lastOrNull()
+            if (orgMatch != null) {
+                val between = window.substring(orgMatch.range.last + 1).trim()
+                val wordCount = if (between.isEmpty()) 0 else between.split("\\s+".toRegex()).size
+                if (wordCount <= 3) {
+                    // Nếu giữa danh xưng tổ chức và kỹ năng có động từ hành động -> không chặn!
+                    if (ACTION_VERBS_DELIMITERS.containsMatchIn(between)) {
+                        return false
+                    }
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * Gợi ý mức độ thành thạo và lý do từ ngữ cảnh (Bước f - Proficiency Inference):
+     * Chỉ ở dạng đề xuất tham khảo, mức mặc định vẫn là 2/5, người dùng có toàn quyền điều chỉnh.
+     */
+    fun inferSkillProficiency(text: String, matchIndices: List<Int>): Pair<Int, String> {
+        for (idx in matchIndices) {
+            val start = maxOf(0, idx - 80)
+            val end = minOf(text.length, idx + 80)
+            val window = text.substring(start, end).lowercase()
+
+            if (Regex("\\b(?:lead|principal|architect|expert|chuyen\\s+gia|[5-9]\\s*nam|1[0-9]\\s*nam)\\b").containsMatchIn(window)) {
+                return 5 to "Phát hiện thâm niên chuyên gia / ≥ 5 năm"
+            }
+            if (Regex("\\b(?:senior|thanh\\s+thao|luu\\s+loat|advanced|[3-4]\\s*nam)\\b").containsMatchIn(window)) {
+                return 4 to "Phát hiện thâm niên Senior / 3-5 năm"
+            }
+            if (Regex("\\b(?:mid|mid-level|intermediate|[1-2]\\s*nam)\\b").containsMatchIn(window)) {
+                return 3 to "Phát hiện kinh nghiệm 1-2 năm"
+            }
+            if (Regex("\\b(?:junior|fresher|co\\s+ban|basic)\\b").containsMatchIn(window)) {
+                return 2 to "Phát hiện mức cơ bản / Junior"
+            }
+            if (Regex("\\b(?:moi\\s+hoc|nhap\\s+mon|beginner)\\b").containsMatchIn(window)) {
+                return 1 to "Phát hiện mới tiếp cận / mới bắt đầu"
+            }
+        }
+        return 2 to "Mức đề xuất mặc định (2/5)"
+    }
+
+    /**
+     * Xác định ý định (HAVE / WANT / NEGATIVE) tại vị trí xuất hiện của kỹ năng:
+     * - Kiểm tra xem có nằm trong mục OBJECTIVE_WANT không.
+     * - Cửa sổ ngắn tối đa 60 ký tự trước vị trí khớp.
+     * - Dừng ngay khi gặp dấu câu ngắt mệnh đề gần nhất.
+     * - Kiểm tra ngoại lệ khẳng định (không những... mà còn).
+     * - Loại trừ các từ ghép không mang nghĩa phủ định (không gian, không dấu, không khí).
+     */
+    fun determineIntentAt(
+        text: String,
+        matchStartIndex: Int,
+        sections: List<TextSection> = emptyList()
+    ): MatchIntent {
+        // Nếu nằm trong mục Mục tiêu / Nhu cầu học hỏi (WANT section)
+        if (getSectionTypeAt(sections, matchStartIndex) == CvSectionType.OBJECTIVE_WANT) {
+            return MatchIntent.WANT
+        }
+
+        val windowStart = maxOf(0, matchStartIndex - 60)
+        val rawWindow = text.substring(windowStart, matchStartIndex)
+
+        val lastDelimiterIndex = rawWindow.lastIndexOfAny(CLAUSE_DELIMITERS)
+        val window = if (lastDelimiterIndex != -1) {
+            rawWindow.substring(lastDelimiterIndex + 1)
+        } else {
+            rawWindow
+        }.trim()
+
+        if (window.isBlank()) return MatchIntent.HAVE
+
+        for (pattern in AFFIRMATIVE_EXCEPTIONS) {
+            if (pattern.containsMatchIn(window)) {
+                return MatchIntent.HAVE
+            }
+        }
+
+        var cleanWindow = window
+        for (falseNeg in FALSE_NEGATIVE_WORDS) {
+            cleanWindow = cleanWindow.replace(falseNeg, "")
+        }
+
+        for (pattern in NEGATIVE_PATTERNS) {
+            if (pattern.containsMatchIn(cleanWindow)) {
+                return MatchIntent.NEGATIVE
+            }
+        }
+
+        for (pattern in WANT_PATTERNS) {
+            if (pattern.containsMatchIn(window)) {
+                return MatchIntent.WANT
+            }
+        }
+
+        return MatchIntent.HAVE
+    }
 
     /**
      * Thuật toán Damerau-Levenshtein Distance thuần Kotlin (Zero dependency).
@@ -139,8 +383,9 @@ class SkillExtractionService(
      * - Tầng 3: 0.75 (Fuzzy match Levenshtein <= 1 cho từ >= 5 ký tự)
      */
     fun extractSkills(rawText: String): List<ExtractedSkillDto> {
-        val nfcText = normalizeNfc(rawText)
+        val nfcText = normalizeDocumentText(rawText)
         val unaccentedBio = unaccent(nfcText)
+        val sections = parseCvSections(unaccentedBio)
         val skills = getSkillDefinitions()
 
         // Map kết quả tạm: skillId -> ExtractedSkillDto
@@ -150,19 +395,79 @@ class SkillExtractionService(
         for (skill in skills) {
             val unaccentedName = unaccent(skill.name)
             if (unaccentedName.isBlank()) continue
+
+            // Ngoại lệ từ đồng âm do bỏ dấu (Homograph collision với giới từ thông dụng):
+            // "Trống" sau khi unaccent thành "trong" trùng giới từ tiếng Việt "trong".
+            // Để exact match "Trống", văn bản có dấu phải thực sự chứa "trống"/"Trống".
+            // Nếu là văn bản không dấu, "trống" phải đi qua Alias match ("danh trong", "choi trong", "bo trong", "trong jazz").
+            if (skill.name == "Trống") {
+                val accentedRegex = Regex("(?<![\\p{L}\\p{N}])[Tt]rống(?![\\p{L}\\p{N}])")
+                val matches = accentedRegex.findAll(nfcText).toList()
+                if (matches.isNotEmpty()) {
+                    val hasHaveMatch = matches.any { match ->
+                        !isInsideOrganizationName(unaccentedBio, match.range.first) &&
+                            determineIntentAt(unaccentedBio, match.range.first, sections) == MatchIntent.HAVE
+                    }
+                    if (hasHaveMatch) {
+                        val frequency = matches.size
+                        val inSkillsSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.SKILLS }
+                        val inExpSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.EXPERIENCE }
+                        val sectionWeight = if (inSkillsSection) 1.05 else if (inExpSection) 1.0 else 0.95
+                        val score = 1.0 * (1.0 + 0.05 * minOf(frequency - 1, 3)) * sectionWeight
+                        val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, matches.map { it.range.first })
+
+                        val existing = resultMap[skill.id]
+                        if (existing == null || existing.confidence < 1.0) {
+                            resultMap[skill.id] = ExtractedSkillDto(
+                                skillId = skill.id,
+                                skillName = skill.name,
+                                categoryId = skill.categoryId,
+                                categoryName = skill.categoryName,
+                                confidence = 1.0,
+                                matchType = "EXACT",
+                                matchedTerm = skill.name,
+                                frequency = frequency,
+                                score = score,
+                                reason = sReason,
+                                suggestedLevel = sLevel
+                            )
+                        }
+                    }
+                }
+                continue
+            }
+
             val regex = buildWordBoundaryRegex(unaccentedName)
-            if (regex.containsMatchIn(unaccentedBio)) {
-                val existing = resultMap[skill.id]
-                if (existing == null || existing.confidence < 1.0) {
-                    resultMap[skill.id] = ExtractedSkillDto(
-                        skillId = skill.id,
-                        skillName = skill.name,
-                        categoryId = skill.categoryId,
-                        categoryName = skill.categoryName,
-                        confidence = 1.0,
-                        matchType = "EXACT",
-                        matchedTerm = skill.name
-                    )
+            val matches = regex.findAll(unaccentedBio).toList()
+            if (matches.isNotEmpty()) {
+                val hasHaveMatch = matches.any { match ->
+                    !isInsideOrganizationName(unaccentedBio, match.range.first) &&
+                        determineIntentAt(unaccentedBio, match.range.first, sections) == MatchIntent.HAVE
+                }
+                if (hasHaveMatch) {
+                    val frequency = matches.size
+                    val inSkillsSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.SKILLS }
+                    val inExpSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.EXPERIENCE }
+                    val sectionWeight = if (inSkillsSection) 1.05 else if (inExpSection) 1.0 else 0.95
+                    val score = 1.0 * (1.0 + 0.05 * minOf(frequency - 1, 3)) * sectionWeight
+                    val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, matches.map { it.range.first })
+
+                    val existing = resultMap[skill.id]
+                    if (existing == null || existing.confidence < 1.0) {
+                        resultMap[skill.id] = ExtractedSkillDto(
+                            skillId = skill.id,
+                            skillName = skill.name,
+                            categoryId = skill.categoryId,
+                            categoryName = skill.categoryName,
+                            confidence = 1.0,
+                            matchType = "EXACT",
+                            matchedTerm = skill.name,
+                            frequency = frequency,
+                            score = score,
+                            reason = sReason,
+                            suggestedLevel = sLevel
+                        )
+                    }
                 }
             }
         }
@@ -174,20 +479,38 @@ class SkillExtractionService(
             for (alias in aliases) {
                 val unaccentedAlias = unaccent(alias)
                 val regex = buildWordBoundaryRegex(unaccentedAlias)
-                if (regex.containsMatchIn(unaccentedBio)) {
-                    val existing = resultMap[skill.id]
-                    if (existing == null || existing.confidence < 0.9) {
-                        resultMap[skill.id] = ExtractedSkillDto(
-                            skillId = skill.id,
-                            skillName = skill.name,
-                            categoryId = skill.categoryId,
-                            categoryName = skill.categoryName,
-                            confidence = 0.9,
-                            matchType = "ALIAS",
-                            matchedTerm = alias
-                        )
+                val matches = regex.findAll(unaccentedBio).toList()
+                if (matches.isNotEmpty()) {
+                    val hasHaveMatch = matches.any { match ->
+                        !isInsideOrganizationName(unaccentedBio, match.range.first) &&
+                            determineIntentAt(unaccentedBio, match.range.first, sections) == MatchIntent.HAVE
                     }
-                    break
+                    if (hasHaveMatch) {
+                        val frequency = matches.size
+                        val inSkillsSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.SKILLS }
+                        val inExpSection = matches.any { getSectionTypeAt(sections, it.range.first) == CvSectionType.EXPERIENCE }
+                        val sectionWeight = if (inSkillsSection) 1.05 else if (inExpSection) 1.0 else 0.95
+                        val score = 0.9 * (1.0 + 0.05 * minOf(frequency - 1, 3)) * sectionWeight
+                        val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, matches.map { it.range.first })
+
+                        val existing = resultMap[skill.id]
+                        if (existing == null || existing.confidence < 0.9) {
+                            resultMap[skill.id] = ExtractedSkillDto(
+                                skillId = skill.id,
+                                skillName = skill.name,
+                                categoryId = skill.categoryId,
+                                categoryName = skill.categoryName,
+                                confidence = 0.9,
+                                matchType = "ALIAS",
+                                matchedTerm = alias,
+                                frequency = frequency,
+                                score = score,
+                                reason = sReason,
+                                suggestedLevel = sLevel
+                            )
+                        }
+                        break
+                    }
                 }
             }
         }
@@ -229,23 +552,40 @@ class SkillExtractionService(
                 if (Math.abs(token.length - targetWord.length) <= 1) {
                     val dist = damerauLevenshteinDistance(token, targetWord)
                     if (dist == 1) { // dist == 0 đã được xử lý ở Tầng 1/2
-                        resultMap[skill.id] = ExtractedSkillDto(
-                            skillId = skill.id,
-                            skillName = skill.name,
-                            categoryId = skill.categoryId,
-                            categoryName = skill.categoryName,
-                            confidence = 0.75,
-                            matchType = "FUZZY",
-                            matchedTerm = "$token ~ $targetWord"
-                        )
+                        val tokenIndex = unaccentedBio.indexOf(token)
+                        val isHave = if (tokenIndex != -1) {
+                            !isInsideOrganizationName(unaccentedBio, tokenIndex) &&
+                                determineIntentAt(unaccentedBio, tokenIndex, sections) == MatchIntent.HAVE
+                        } else true
+
+                        if (isHave) {
+                            val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, listOf(tokenIndex.coerceAtLeast(0)))
+                            resultMap[skill.id] = ExtractedSkillDto(
+                                skillId = skill.id,
+                                skillName = skill.name,
+                                categoryId = skill.categoryId,
+                                categoryName = skill.categoryName,
+                                confidence = 0.75,
+                                matchType = "FUZZY",
+                                matchedTerm = "$token ~ $targetWord",
+                                frequency = 1,
+                                score = 0.75,
+                                reason = sReason,
+                                suggestedLevel = sLevel
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Sắp xếp kết quả theo confidence giảm dần, sau đó theo ID tăng dần
+        // Sắp xếp kết quả theo danh mục (Bước e), trong mỗi danh mục theo score giảm dần, sau đó theo ID tăng dần
         return resultMap.values
-            .sortedWith(compareByDescending<ExtractedSkillDto> { it.confidence }.thenBy { it.skillId })
+            .sortedWith(
+                compareBy<ExtractedSkillDto> { it.categoryId ?: 999 }
+                    .thenByDescending { it.score }
+                    .thenBy { it.skillId }
+            )
     }
 
     private fun findAliasesForSkill(skillName: String): List<String> {

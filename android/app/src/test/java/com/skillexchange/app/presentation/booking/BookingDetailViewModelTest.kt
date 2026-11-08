@@ -91,6 +91,7 @@ class BookingDetailViewModelTest {
     private var currentProposal: RescheduleProposal? = null
     private val mockRescheduleRepo = object : IRescheduleRepository {
         override suspend fun createProposal(exchangeId: String, dto: CreateRescheduleProposalDto): Result<RescheduleProposal> {
+            val now = java.time.Instant.now().toString()
             val proposal = RescheduleProposal(
                 id = "prop_1",
                 exchangeId = exchangeId,
@@ -100,8 +101,8 @@ class BookingDetailViewModelTest {
                 status = RescheduleStatus.PENDING,
                 proposalNumber = (currentProposal?.proposalNumber ?: 0) + 1,
                 respondedAt = null,
-                createdAt = "2026-11-05T10:00:00Z",
-                updatedAt = "2026-11-05T10:00:00Z"
+                createdAt = now,
+                updatedAt = now
             )
             currentProposal = proposal
             return Result.success(proposal)
@@ -273,16 +274,17 @@ class BookingDetailViewModelTest {
     @Test
     fun `loadDetail on ACCEPTED loads current proposal and updates state`() = runTest {
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED)
+        val now = java.time.Instant.now()
         currentProposal = RescheduleProposal(
             id = "prop_1",
             exchangeId = "ex_999",
             proposerId = "user_sender",
-            newScheduledAt = "2026-11-10T14:00:00Z",
+            newScheduledAt = now.plus(java.time.Duration.ofDays(3)).toString(),
             reason = "Bận việc",
             status = RescheduleStatus.PENDING,
             proposalNumber = 1,
-            createdAt = "2026-11-05T10:00:00Z",
-            updatedAt = "2026-11-05T10:00:00Z"
+            createdAt = now.toString(),
+            updatedAt = now.toString()
         )
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
@@ -339,17 +341,19 @@ class BookingDetailViewModelTest {
 
     @Test
     fun `acceptRescheduleProposal updates proposal, exchange scheduledAt and triggers banner`() = runTest {
+        val now = java.time.Instant.now()
+        val futureTime = now.plus(java.time.Duration.ofDays(3)).toString()
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED, scheduledAt = "2026-10-15T10:00:00Z")
         currentProposal = RescheduleProposal(
             id = "prop_1",
             exchangeId = "ex_999",
             proposerId = "user_sender",
-            newScheduledAt = "2026-11-10T14:00:00Z",
+            newScheduledAt = futureTime,
             reason = "Bận việc",
             status = RescheduleStatus.PENDING,
             proposalNumber = 1,
-            createdAt = "2026-11-05T10:00:00Z",
-            updatedAt = "2026-11-05T10:00:00Z"
+            createdAt = now.toString(),
+            updatedAt = now.toString()
         )
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
@@ -361,7 +365,7 @@ class BookingDetailViewModelTest {
 
         val state = viewModel.state.value
         assertEquals(RescheduleStatus.ACCEPTED, state.rescheduleProposal?.status)
-        assertEquals("2026-11-10T14:00:00Z", state.exchange?.scheduledAt)
+        assertEquals(futureTime, state.exchange?.scheduledAt)
         assertTrue(state.showRescheduleSuccessBanner)
 
         viewModel.onIntent(BookingDetailIntent.DismissRescheduleSuccessBanner)
@@ -370,17 +374,18 @@ class BookingDetailViewModelTest {
 
     @Test
     fun `rejectRescheduleProposal updates proposal status in state`() = runTest {
+        val now = java.time.Instant.now()
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED)
         currentProposal = RescheduleProposal(
             id = "prop_1",
             exchangeId = "ex_999",
             proposerId = "user_sender",
-            newScheduledAt = "2026-11-10T14:00:00Z",
+            newScheduledAt = now.plus(java.time.Duration.ofDays(3)).toString(),
             reason = "Bận việc",
             status = RescheduleStatus.PENDING,
             proposalNumber = 1,
-            createdAt = "2026-11-05T10:00:00Z",
-            updatedAt = "2026-11-05T10:00:00Z"
+            createdAt = now.toString(),
+            updatedAt = now.toString()
         )
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
@@ -396,17 +401,18 @@ class BookingDetailViewModelTest {
 
     @Test
     fun `cancelRescheduleProposal updates proposal status in state`() = runTest {
+        val now = java.time.Instant.now()
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED)
         currentProposal = RescheduleProposal(
             id = "prop_1",
             exchangeId = "ex_999",
             proposerId = "user_receiver",
-            newScheduledAt = "2026-11-10T14:00:00Z",
+            newScheduledAt = now.plus(java.time.Duration.ofDays(3)).toString(),
             reason = "Tôi bận",
             status = RescheduleStatus.PENDING,
             proposalNumber = 1,
-            createdAt = "2026-11-05T10:00:00Z",
-            updatedAt = "2026-11-05T10:00:00Z"
+            createdAt = now.toString(),
+            updatedAt = now.toString()
         )
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
