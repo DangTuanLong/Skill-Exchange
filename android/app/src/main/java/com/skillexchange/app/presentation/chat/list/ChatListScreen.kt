@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -61,7 +62,7 @@ import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun ChatListScreen(
-    onNavigateBack: (() -> Unit)? = null,
+    onNavigateBack: () -> Unit = {},
     onNavigateToChat: (String) -> Unit,
     viewModel: ChatListViewModel = koinViewModel()
 ) {
@@ -81,23 +82,22 @@ fun ChatListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (onNavigateBack != null) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Quay lại",
-                                tint = TextPrimaryLight
-                            )
-                        }
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Quay lại",
+                            tint = TextPrimaryLight
+                        )
                     }
                     Text(
                         text = "Tin nhắn",

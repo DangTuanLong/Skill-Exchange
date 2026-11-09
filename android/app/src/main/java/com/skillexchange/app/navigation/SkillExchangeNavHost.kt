@@ -270,7 +270,13 @@ fun SkillExchangeNavHost(
         // ── Chat (TASK-030 & TASK-060) ──────────────────────────────
         composable(Screen.ChatList.route) {
             com.skillexchange.app.presentation.chat.list.ChatListScreen(
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = {
+                    if (!navController.popBackStack(Screen.Home.route, false)) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.ChatList.route) { inclusive = true }
+                        }
+                    }
+                },
                 onNavigateToChat = { chatId ->
                     navController.navigate(Screen.ChatDetail.createRoute(chatId))
                 }
