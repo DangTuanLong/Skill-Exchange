@@ -50,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -301,7 +302,11 @@ private fun SkillGraphContent(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(uiState.currentLoops) { index, _ ->
+                itemsIndexed(
+                    items = uiState.currentLoops,
+                    key = { index, _ -> index },
+                    contentType = { _, _ -> "loop_chip" }
+                ) { index, _ ->
                     FilterChip(
                         selected = uiState.selectedLoopIndex == index,
                         onClick = { onLoopSelected(index) },
@@ -450,8 +455,47 @@ private fun CanvasGraph(
 ) {
     val nodeCount = loop.nodes.size
     val primaryColor = Brand500
-    val secondaryColor = Brand700
+    val primaryColorArgb = primaryColor.toArgb()
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+
+    val arrowPath = remember { Path() }
+    val edgePaint = remember {
+        Paint().apply {
+            textSize = 28f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+    }
+    val nodeInitialsPaint = remember {
+        Paint().apply {
+            textSize = 28f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+    }
+    val nodeNamePaint = remember {
+        Paint().apply {
+            textSize = 24f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+    }
+    val nodeLabels = remember(loop.nodes) {
+        loop.nodes.map { user ->
+            val words = user.fullName.split(" ").filter { it.isNotBlank() }
+            val initials = words
+                .takeLast(2)
+                .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+                .joinToString("")
+                .ifBlank { "U" }
+            val shortName = words.lastOrNull() ?: user.fullName
+            Pair(initials, shortName)
+        }
+    }
+    val nodeXCoords = remember(nodeCount) { FloatArray(nodeCount) }
+    val nodeYCoords = remember(nodeCount) { FloatArray(nodeCount) }
 
     Canvas(
         modifier = modifier.pointerInput(loop) {
@@ -479,13 +523,15 @@ private fun CanvasGraph(
         val graphRadius = (size.width.coerceAtMost(size.height) / 2f) * 0.72f
         val nodeRadius = 30f
 
+        edgePaint.color = textColor
+        nodeInitialsPaint.color = primaryColorArgb
+        nodeNamePaint.color = textColor
+
         // 1. Tính tọa độ các đỉnh (Nodes)
-        val nodePositions = mutableListOf<Offset>()
         for (i in 0 until nodeCount) {
             val angle = -Math.PI / 2 + (2 * Math.PI * i / nodeCount)
-            val cx = centerX + graphRadius * cos(angle).toFloat()
-            val cy = centerY + graphRadius * sin(angle).toFloat()
-            nodePositions.add(Offset(cx, cy))
+            nodeXCoords[i] = centerX + graphRadius * cos(angle).toFloat()
+            nodeYCoords[i] = centerY + graphRadius * sin(angle).toFloat()
         }
 
         // 2. Vẽ các cạnh có hướng (Directed Edges with Arrows)
@@ -493,8 +539,8 @@ private fun CanvasGraph(
             val fromIndex = i
             val toIndex = (i + 1) % nodeCount
 
-            val start = nodePositions[fromIndex]
-            val end = nodePositions[toIndex]
+            val start = Offset(nodeXCoords[fromIndex], nodeYCoords[fromIndex])
+            val end = Offset(nodeXCoords[toIndex], nodeYCoords[toIndex])
 
             val dx = end.x - start.x
             val dy = end.y - start.y
@@ -526,12 +572,11 @@ private fun CanvasGraph(
             val x2 = edgeEnd.x - arrowLength * cos(angle + arrowAngle).toFloat()
             val y2 = edgeEnd.y - arrowLength * sin(angle + arrowAngle).toFloat()
 
-            val arrowPath = Path().apply {
-                moveTo(edgeEnd.x, edgeEnd.y)
-                lineTo(x1, y1)
-                lineTo(x2, y2)
-                close()
-            }
+            arrowPath.rewind()
+            arrowPath.moveTo(edgeEnd.x, edgeEnd.y)
+            arrowPath.lineTo(x1, y1)
+            arrowPath.lineTo(x2, y2)
+            arrowPath.close()
             drawPath(path = arrowPath, color = primaryColor)
 
             // Vẽ tên kỹ năng tại điểm giữa của cạnh
@@ -539,23 +584,14 @@ private fun CanvasGraph(
             val midY = (edgeStart.y + edgeEnd.y) / 2f
             val edge = loop.edges.getOrNull(i)
             if (edge != null) {
-                drawContext.canvas.nativeCanvas.apply {
-                    val paint = Paint().apply {
-                        color = textColor
-                        textSize = 28f
-                        isAntiAlias = true
-                        textAlign = Paint.Align.CENTER
-                        isFakeBoldText = true
-                    }
-                    drawText(edge.skillName, midX, midY - 10f, paint)
-                }
+                drawContext.canvas.nativeCanvas.drawText(edge.skillName, midX, midY - 10f, edgePaint)
             }
         }
 
         // 3. Vẽ các Node hình tròn
         for (i in 0 until nodeCount) {
-            val pos = nodePositions[i]
-            val user = loop.nodes[i]
+            val pos = Offset(nodeXCoords[i], nodeYCoords[i])
+            val (initials, shortName) = nodeLabels[i]
 
             // Vòng tròn node
             drawCircle(
@@ -570,33 +606,9 @@ private fun CanvasGraph(
                 style = Stroke(width = 4f)
             )
 
-            // Viết chữ viết tắt (Initials) trong node
-            val initials = user.fullName.split(" ")
-                .filter { it.isNotBlank() }
-                .takeLast(2)
-                .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-                .joinToString("")
-                .ifBlank { "U" }
-
             drawContext.canvas.nativeCanvas.apply {
-                val paint = Paint().apply {
-                    color = primaryColor.toArgb()
-                    textSize = 28f
-                    isAntiAlias = true
-                    textAlign = Paint.Align.CENTER
-                    isFakeBoldText = true
-                }
-                drawText(initials, pos.x, pos.y + 10f, paint)
-
-                // Tên người dùng dưới node
-                val namePaint = Paint().apply {
-                    color = textColor
-                    textSize = 24f
-                    isAntiAlias = true
-                    textAlign = Paint.Align.CENTER
-                }
-                val shortName = user.fullName.split(" ").lastOrNull() ?: user.fullName
-                drawText(shortName, pos.x, pos.y + nodeRadius + 22f, namePaint)
+                drawText(initials, pos.x, pos.y + 10f, nodeInitialsPaint)
+                drawText(shortName, pos.x, pos.y + nodeRadius + 22f, nodeNamePaint)
             }
         }
     }

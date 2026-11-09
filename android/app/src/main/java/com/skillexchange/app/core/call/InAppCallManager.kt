@@ -110,6 +110,7 @@ class InAppCallManager(
             // Báo cho server biết người nhận đã nhấc máy
             val notifyResult = callRepository.notifyConnected(current.sessionId)
             notifyResult.onSuccess {
+                InternalCallAuth.cacheJoinedToken(current.sessionId, current.token)
                 onSuccess(current)
             }.onFailure { err ->
                 Log.w(tag, "Xác nhận kết nối thất bại: ${err.message}")

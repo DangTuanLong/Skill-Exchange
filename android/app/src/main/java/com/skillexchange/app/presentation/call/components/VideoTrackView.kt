@@ -48,6 +48,7 @@ fun VideoTrackView(
     Box(modifier = modifier) {
         AndroidView(
             factory = { renderer },
+            update = { it.setMirror(mirror) },
             modifier = Modifier.fillMaxSize()
         )
     }

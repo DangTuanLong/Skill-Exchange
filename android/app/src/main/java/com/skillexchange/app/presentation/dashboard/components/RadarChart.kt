@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -35,6 +36,16 @@ fun RadarChart(
     val fillColor = brandColor.copy(alpha = 0.3f)
     val surfaceColor = MaterialTheme.colorScheme.surface
 
+    val gridPath = remember { Path() }
+    val dataPath = remember { Path() }
+    val textPaint = remember {
+        Paint().apply {
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            isFakeBoldText = true
+        }
+    }
+
     Box(
         modifier = modifier
             .height(280.dp)
@@ -49,25 +60,20 @@ fun RadarChart(
             // 1. Vẽ 5 vòng đa giác đồng tâm (levels 1..5)
             for (level in 1..5) {
                 val levelRadius = radius * (level / 5f)
-                val path = Path()
+                gridPath.rewind()
                 for (i in 0 until numAxes) {
                     val angle = (-Math.PI / 2 + i * angleStep).toFloat()
                     val x = center.x + levelRadius * cos(angle)
                     val y = center.y + levelRadius * sin(angle)
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    if (i == 0) gridPath.moveTo(x, y) else gridPath.lineTo(x, y)
                 }
-                path.close()
-                drawPath(path, color = gridColor, style = Stroke(width = 1.dp.toPx()))
+                gridPath.close()
+                drawPath(gridPath, color = gridColor, style = Stroke(width = 1.dp.toPx()))
             }
 
             // 2. Vẽ các đường trục từ tâm và nhãn văn bản
-            val textPaint = Paint().apply {
-                color = textColor
-                textSize = 12.sp.toPx()
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                isFakeBoldText = true
-            }
+            textPaint.color = textColor
+            textPaint.textSize = 12.sp.toPx()
 
             for (i in 0 until numAxes) {
                 val angle = (-Math.PI / 2 + i * angleStep).toFloat()
@@ -96,8 +102,7 @@ fun RadarChart(
             }
 
             // 3. Vẽ vùng dữ liệu của người dùng
-            val dataPath = Path()
-            val points = mutableListOf<androidx.compose.ui.geometry.Offset>()
+            dataPath.rewind()
 
             for (i in 0 until numAxes) {
                 val score = axes[i].score.coerceIn(0.0, 5.0)
@@ -105,8 +110,6 @@ fun RadarChart(
                 val angle = (-Math.PI / 2 + i * angleStep).toFloat()
                 val x = center.x + dataRadius * cos(angle)
                 val y = center.y + dataRadius * sin(angle)
-                val point = androidx.compose.ui.geometry.Offset(x, y)
-                points.add(point)
 
                 if (i == 0) dataPath.moveTo(x, y) else dataPath.lineTo(x, y)
             }
@@ -117,10 +120,19 @@ fun RadarChart(
             // Viền đậm
             drawPath(dataPath, color = brandColor, style = Stroke(width = 2.5f.dp.toPx()))
 
-            // Vẽ điểm tròn tại mỗi đỉnh có score > 0
-            for (p in points) {
-                drawCircle(color = brandColor, radius = 4.dp.toPx(), center = p)
-                drawCircle(color = surfaceColor, radius = 2.dp.toPx(), center = p)
+            // Vẽ điểm tròn tại mỗi đỉnh
+            val outerDotRadius = 4.dp.toPx()
+            val innerDotRadius = 2.dp.toPx()
+            for (i in 0 until numAxes) {
+                val score = axes[i].score.coerceIn(0.0, 5.0)
+                val dataRadius = radius * (score / 5f).toFloat()
+                val angle = (-Math.PI / 2 + i * angleStep).toFloat()
+                val p = androidx.compose.ui.geometry.Offset(
+                    center.x + dataRadius * cos(angle),
+                    center.y + dataRadius * sin(angle)
+                )
+                drawCircle(color = brandColor, radius = outerDotRadius, center = p)
+                drawCircle(color = surfaceColor, radius = innerDotRadius, center = p)
             }
         }
     }

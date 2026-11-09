@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,8 @@ import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+private val NOTIFICATION_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
@@ -41,7 +44,7 @@ fun NotificationScreen(
     showBackButton: Boolean = (onNavigateBack != null),
     viewModel: NotificationViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.effect) {
@@ -197,7 +200,7 @@ fun NotificationScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         state.groups.forEach { group ->
-                            item(key = "header_${group.title}") {
+                            item(key = "header_${group.title}", contentType = "header") {
                                 Text(
                                     text = group.title,
                                     fontSize = 14.sp,
@@ -209,7 +212,8 @@ fun NotificationScreen(
 
                             items(
                                 items = group.items,
-                                key = { it.id }
+                                key = { it.id },
+                                contentType = { "notification" }
                             ) { notification ->
                                 NotificationItemCard(
                                     notification = notification,
@@ -366,12 +370,11 @@ private fun getNotificationVisuals(type: NotificationType): Triple<ImageVector, 
 
 private fun formatNotificationTime(dateStr: String): String {
     return runCatching {
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         if (dateStr.contains("T")) {
             if (dateStr.endsWith("Z") || dateStr.contains("+")) {
-                ZonedDateTime.parse(dateStr).format(timeFormatter)
+                ZonedDateTime.parse(dateStr).format(NOTIFICATION_TIME_FORMATTER)
             } else {
-                LocalDateTime.parse(dateStr).format(timeFormatter)
+                LocalDateTime.parse(dateStr).format(NOTIFICATION_TIME_FORMATTER)
             }
         } else {
             dateStr.substringAfter(" ", "").take(5)

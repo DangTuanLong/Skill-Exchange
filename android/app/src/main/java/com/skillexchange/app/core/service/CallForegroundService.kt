@@ -20,6 +20,7 @@ import com.skillexchange.app.domain.repository.ICallRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
 
@@ -119,6 +120,7 @@ class CallForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        serviceScope.cancel()
         Log.d(TAG, "CallForegroundService đã bị hủy")
     }
 

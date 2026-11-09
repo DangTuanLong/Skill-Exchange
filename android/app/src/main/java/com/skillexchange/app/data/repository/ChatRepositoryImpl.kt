@@ -20,16 +20,17 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 
 class ChatRepositoryImpl(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    firestoreInstance: FirebaseFirestore? = null,
     private val firebaseAuthManager: IFirebaseAuthManager,
     private val tokenManager: TokenManager,
     private val chatRemoteDataSource: ChatRemoteDataSource? = null
 ) : IChatRepository {
 
-    init {
+    private val firestore: FirebaseFirestore by lazy {
         if (BuildConfig.DEBUG) {
             FirebaseFirestore.setLoggingEnabled(true)
         }
+        firestoreInstance ?: FirebaseFirestore.getInstance()
     }
 
     override fun getChatRoomsFlow(): Flow<List<ChatRoom>> = callbackFlow {

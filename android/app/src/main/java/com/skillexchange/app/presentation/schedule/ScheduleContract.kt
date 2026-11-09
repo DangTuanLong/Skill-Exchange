@@ -21,26 +21,28 @@ data class ScheduleState(
     /**
      * 7 ngày trong tuần hiện tại (từ Thứ 2 đến Chủ nhật)
      */
-    val daysInCurrentWeek: List<LocalDate>
-        get() = (0L..6L).map { currentWeekStart.plusDays(it) }
+    val daysInCurrentWeek: List<LocalDate> by lazy {
+        (0L..6L).map { currentWeekStart.plusDays(it) }
+    }
 
     /**
      * Tập hợp các ngày có ít nhất một buổi hẹn đã xác nhận (ACCEPTED)
      */
-    val datesWithBookings: Set<LocalDate>
-        get() = confirmedExchanges.mapNotNull { exchange ->
+    val datesWithBookings: Set<LocalDate> by lazy {
+        confirmedExchanges.mapNotNull { exchange ->
             try {
                 Instant.parse(exchange.scheduledAt).atZone(ZoneId.systemDefault()).toLocalDate()
             } catch (e: Exception) {
                 null
             }
         }.toSet()
+    }
 
     /**
      * Danh sách các buổi hẹn đã chốt rơi vào ngày được chọn, sắp xếp theo giờ bắt đầu
      */
-    val sessionsOnSelectedDate: List<ExchangeRequest>
-        get() = confirmedExchanges.filter { exchange ->
+    val sessionsOnSelectedDate: List<ExchangeRequest> by lazy {
+        confirmedExchanges.filter { exchange ->
             try {
                 val exchangeDate = Instant.parse(exchange.scheduledAt).atZone(ZoneId.systemDefault()).toLocalDate()
                 exchangeDate == selectedDate
@@ -48,25 +50,25 @@ data class ScheduleState(
                 false
             }
         }.sortedBy { it.scheduledAt }
+    }
 
     /**
      * Khung giờ rảnh cá nhân đã thiết lập tương ứng với thứ của ngày được chọn
      */
-    val openAvailabilityOnSelectedDate: List<AvailabilityWindow>
-        get() {
-            val dayKey = when (selectedDate.dayOfWeek) {
-                DayOfWeek.MONDAY -> "MON"
-                DayOfWeek.TUESDAY -> "TUE"
-                DayOfWeek.WEDNESDAY -> "WED"
-                DayOfWeek.THURSDAY -> "THU"
-                DayOfWeek.FRIDAY -> "FRI"
-                DayOfWeek.SATURDAY -> "SAT"
-                DayOfWeek.SUNDAY -> "SUN"
-            }
-            return myAvailability
-                .filter { it.day.uppercase() == dayKey }
-                .sortedBy { it.from }
+    val openAvailabilityOnSelectedDate: List<AvailabilityWindow> by lazy {
+        val dayKey = when (selectedDate.dayOfWeek) {
+            DayOfWeek.MONDAY -> "MON"
+            DayOfWeek.TUESDAY -> "TUE"
+            DayOfWeek.WEDNESDAY -> "WED"
+            DayOfWeek.THURSDAY -> "THU"
+            DayOfWeek.FRIDAY -> "FRI"
+            DayOfWeek.SATURDAY -> "SAT"
+            DayOfWeek.SUNDAY -> "SUN"
         }
+        myAvailability
+            .filter { it.day.uppercase() == dayKey }
+            .sortedBy { it.from }
+    }
 }
 
 sealed class ScheduleIntent {

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +32,12 @@ import com.skillexchange.app.domain.model.UserSkill
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
+private val MY_PROFILE_DAY_ORDER = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+private val MY_PROFILE_DAY_LABELS = mapOf(
+    "MON" to "Thứ 2", "TUE" to "Thứ 3", "WED" to "Thứ 4",
+    "THU" to "Thứ 5", "FRI" to "Thứ 6", "SAT" to "Thứ 7", "SUN" to "Chủ nhật"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyProfileScreen(
@@ -41,7 +48,7 @@ fun MyProfileScreen(
     onNavigateToSchedule: () -> Unit = {},
     viewModel: MyProfileViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -404,14 +411,14 @@ fun MyProfileScreen(
 
                         val availability = state.availability
                         if (availability.isNotEmpty()) {
-                            val dayOrder = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-                            val dayLabels = mapOf(
-                                "MON" to "Thứ 2", "TUE" to "Thứ 3", "WED" to "Thứ 4",
-                                "THU" to "Thứ 5", "FRI" to "Thứ 6", "SAT" to "Thứ 7", "SUN" to "Chủ nhật"
-                            )
-                            val sorted = availability.sortedWith(
-                                compareBy({ dayOrder.indexOf(it.day.uppercase()).let { idx -> if (idx >= 0) idx else 99 } }, { it.from })
-                            )
+                            val sorted = remember(availability) {
+                                availability.sortedWith(
+                                    compareBy(
+                                        { MY_PROFILE_DAY_ORDER.indexOf(it.day.uppercase()).let { idx -> if (idx >= 0) idx else 99 } },
+                                        { it.from }
+                                    )
+                                )
+                            }
 
                             sorted.forEach { window ->
                                 Row(
@@ -424,7 +431,7 @@ fun MyProfileScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = dayLabels[window.day.uppercase()] ?: window.day,
+                                        text = MY_PROFILE_DAY_LABELS[window.day.uppercase()] ?: window.day,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
                                         color = Brand600

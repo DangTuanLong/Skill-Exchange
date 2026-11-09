@@ -9,7 +9,9 @@ import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -60,6 +62,7 @@ class ProfileDetailViewModel(
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
+    val hasInitialTargetUser: Boolean = targetUserId != null
 
     private val _state = MutableStateFlow(ProfileDetailUiState())
     val state = _state.asStateFlow()
@@ -111,19 +114,29 @@ class ProfileDetailViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, isOwnProfile = isOwn) }
 
-            val profileRes = profileRepository.getUserProfile(userId)
+            val (profileRes, targetSkillsRes, mySkillsRes, reputationRes, reviewsRes, validPairsRes) = coroutineScope {
+                val profileDeferred = async { profileRepository.getUserProfile(userId) }
+                val targetSkillsDeferred = async { skillRepository.getUserSkills(userId) }
+                val mySkillsDeferred = async { skillRepository.getUserSkills("me") }
+                val reputationDeferred = async { ratingRepository.getUserReputation(userId) }
+                val reviewsDeferred = async { ratingRepository.getUserRatings(userId) }
+                val validPairsDeferred = async {
+                    if (!isOwn) exchangeRepository?.getValidPairs(userId)?.getOrNull() else null
+                }
+                 sextuple(
+                    profileDeferred.await(),
+                    targetSkillsDeferred.await(),
+                    mySkillsDeferred.await(),
+                    reputationDeferred.await(),
+                    reviewsDeferred.await(),
+                    validPairsDeferred.await()
+                )
+            }
+
             val profile = profileRes.getOrNull()
-
-            val targetSkillsRes = skillRepository.getUserSkills(userId)
             val targetSkills = targetSkillsRes.getOrDefault(emptyList())
-
-            val mySkillsRes = skillRepository.getUserSkills("me")
             val mySkills = mySkillsRes.getOrDefault(emptyList())
-
-            val reputationRes = ratingRepository.getUserReputation(userId)
             val reputation = reputationRes.getOrNull()
-
-            val reviewsRes = ratingRepository.getUserRatings(userId)
             val reviews = reviewsRes.getOrDefault(emptyList())
 
             val myHaves = mySkills.filter { it.type == SkillType.HAVE }
@@ -149,8 +162,6 @@ class ProfileDetailViewModel(
                 emptyList()
             }
 
-            // Gọi valid-pairs để lấy trạng thái cặp, quan hệ và cảnh báo mềm (DEC-028, TASK-083)
-            val validPairsRes = if (!isOwn) exchangeRepository?.getValidPairs(userId)?.getOrNull() else null
             val validPairs = validPairsRes?.pairs ?: emptyList()
             val recentlyRejected = validPairsRes?.recentlyRejected ?: false
             val relStatus = validPairsRes?.relationshipStatus
@@ -204,4 +215,16 @@ class ProfileDetailViewModel(
             }
         }
     }
+
+    private data class Sextuple<A, B, C, D, E, F>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D,
+        val fifth: E,
+        val sixth: F
+    )
+
+    private fun <A, B, C, D, E, F> sextuple(a: A, b: B, c: C, d: D, e: E, f: F) =
+        Sextuple(a, b, c, d, e, f)
 }

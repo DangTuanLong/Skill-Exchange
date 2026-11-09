@@ -3,7 +3,9 @@ package com.skillexchange.app.presentation.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.skillexchange.app.domain.repository.IAuthRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -165,8 +167,11 @@ class AuthViewModel(
     }
 
     private suspend fun checkProfileCompletionAndNavigate() {
-        val profileResult = profileRepository?.getMyProfile()
-        val skillsResult = skillRepository?.getUserSkills("me")
+        val (profileResult, skillsResult) = coroutineScope {
+            val profileDeferred = async { profileRepository?.getMyProfile() }
+            val skillsDeferred = async { skillRepository?.getUserSkills("me") }
+            Pair(profileDeferred.await(), skillsDeferred.await())
+        }
         val hasName = profileResult?.getOrNull()?.fullName?.isNotBlank() == true
         val hasSkills = skillsResult?.getOrNull()?.isNotEmpty() == true
         val isCompleted = hasName && hasSkills

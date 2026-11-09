@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,6 +23,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+private val RESCHEDULE_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
+
 @Composable
 fun PendingRescheduleCard(
     proposal: RescheduleProposal,
@@ -32,13 +36,15 @@ fun PendingRescheduleCard(
     isLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val formattedTime = try {
-        val instant = Instant.parse(proposal.newScheduledAt)
-        DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
-            .withZone(ZoneId.systemDefault())
-            .format(instant)
-    } catch (_: Exception) {
-        proposal.newScheduledAt
+    val formattedTime = remember(proposal.newScheduledAt) {
+        try {
+            val instant = Instant.parse(proposal.newScheduledAt)
+            RESCHEDULE_TIME_FORMATTER
+                .withZone(ZoneId.systemDefault())
+                .format(instant)
+        } catch (_: Exception) {
+            proposal.newScheduledAt
+        }
     }
 
     val cardBg = if (isProposer) Color(0xFFEFF6FF) else Color(0xFFFFFBEB)

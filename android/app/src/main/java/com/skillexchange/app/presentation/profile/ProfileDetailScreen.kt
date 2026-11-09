@@ -28,6 +28,7 @@ import com.skillexchange.app.domain.model.rating.Rating
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,12 @@ import com.skillexchange.app.domain.model.UserSkill
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
+private val PROFILE_DETAIL_DAY_ORDER = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+private val PROFILE_DETAIL_DAY_LABELS = mapOf(
+    "MON" to "Thứ 2", "TUE" to "Thứ 3", "WED" to "Thứ 4",
+    "THU" to "Thứ 5", "FRI" to "Thứ 6", "SAT" to "Thứ 7", "SUN" to "Chủ nhật"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileDetailScreen(
@@ -53,11 +60,13 @@ fun ProfileDetailScreen(
     onNavigateToSkillSelection: () -> Unit = {},
     viewModel: ProfileDetailViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(userId) {
-        viewModel.loadUserProfile(userId)
+        if (!viewModel.hasInitialTargetUser) {
+            viewModel.loadUserProfile(userId)
+        }
     }
 
     LaunchedEffect(viewModel.effect) {
@@ -547,7 +556,9 @@ fun ProfileDetailScreen(
                     }
 
                     // Skills HAVE Section
-                    val haveSkills = state.skills.filter { it.type == SkillType.HAVE }
+                    val haveSkills = remember(state.skills) {
+                        state.skills.filter { it.type == SkillType.HAVE }
+                    }
                     if (haveSkills.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -573,7 +584,9 @@ fun ProfileDetailScreen(
                     }
 
                     // Skills WANT Section
-                    val wantSkills = state.skills.filter { it.type == SkillType.WANT }
+                    val wantSkills = remember(state.skills) {
+                        state.skills.filter { it.type == SkillType.WANT }
+                    }
                     if (wantSkills.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -627,14 +640,14 @@ fun ProfileDetailScreen(
                                     )
                                 }
 
-                                val dayOrder = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-                                val dayLabels = mapOf(
-                                    "MON" to "Thứ 2", "TUE" to "Thứ 3", "WED" to "Thứ 4",
-                                    "THU" to "Thứ 5", "FRI" to "Thứ 6", "SAT" to "Thứ 7", "SUN" to "Chủ nhật"
-                                )
-                                val sorted = profile.availability.sortedWith(
-                                    compareBy({ dayOrder.indexOf(it.day.uppercase()).let { idx -> if (idx >= 0) idx else 99 } }, { it.from })
-                                )
+                                val sorted = remember(profile.availability) {
+                                    profile.availability.sortedWith(
+                                        compareBy(
+                                            { PROFILE_DETAIL_DAY_ORDER.indexOf(it.day.uppercase()).let { idx -> if (idx >= 0) idx else 99 } },
+                                            { it.from }
+                                        )
+                                    )
+                                }
 
                                 sorted.forEach { window ->
                                     Row(
@@ -647,7 +660,7 @@ fun ProfileDetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = dayLabels[window.day.uppercase()] ?: window.day,
+                                            text = PROFILE_DETAIL_DAY_LABELS[window.day.uppercase()] ?: window.day,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 14.sp,
                                             color = Brand600
@@ -758,7 +771,11 @@ fun ProfileDetailScreen(
                             .heightIn(max = 450.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(state.reviews) { review ->
+                        items(
+                            items = state.reviews,
+                            key = { it.id },
+                            contentType = { "review" }
+                        ) { review ->
                             ReviewItem(review)
                         }
                     }

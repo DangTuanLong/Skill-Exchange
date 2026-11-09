@@ -1,6 +1,7 @@
 package com.skillexchange.app.core.network
 
 import android.content.Context
+import com.skillexchange.app.BuildConfig
 import com.skillexchange.app.core.common.Constants
 import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.data.remote.auth.ApiWrapper
@@ -9,6 +10,7 @@ import com.skillexchange.app.data.remote.auth.RefreshRequestDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
@@ -49,21 +51,26 @@ fun provideHttpClient(context: Context, tokenManager: TokenManager): HttpClient 
             socketTimeout = Constants.SOCKET_TIMEOUT_MS.toInt()
         }
 
+        install(HttpTimeout) {
+            requestTimeoutMillis = Constants.SOCKET_TIMEOUT_MS
+            connectTimeoutMillis = Constants.CONNECT_TIMEOUT_MS
+            socketTimeoutMillis = Constants.SOCKET_TIMEOUT_MS
+        }
+
         install(ContentNegotiation) {
             json(Json {
-                prettyPrint = true
+                prettyPrint = BuildConfig.DEBUG
                 isLenient = true
                 ignoreUnknownKeys = true
                 encodeDefaults = true
             })
         }
 
-        // Log body nhưng KHÔNG log Authorization header (giá trị token)
+        // Chỉ bật log HTTP khi debug và KHÔNG log Authorization header hay toàn bộ body tệp nhị phân
         install(Logging) {
-            level = LogLevel.BODY
+            level = if (BuildConfig.DEBUG) LogLevel.INFO else LogLevel.NONE
             logger = object : Logger {
                 override fun log(message: String) {
-                    // Lọc dòng có "Authorization:" để không log token
                     if (!message.startsWith("Authorization:")) {
                         android.util.Log.d("KtorClient", message)
                     }

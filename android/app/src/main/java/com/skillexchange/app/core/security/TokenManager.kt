@@ -13,15 +13,23 @@ import com.skillexchange.app.core.common.Constants
  */
 open class TokenManager(context: Context? = null) {
 
-    private val prefs: SharedPreferences? = context?.let { ctx ->
-        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        EncryptedSharedPreferences.create(
-            "skillexchange_secure_prefs",
-            masterKeyAlias,
-            ctx,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+    private val appContext: Context? = context?.applicationContext ?: context
+
+    private val prefs: SharedPreferences? by lazy {
+        appContext?.let { ctx ->
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                "skillexchange_secure_prefs",
+                masterKeyAlias,
+                ctx,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
+    }
+
+    fun warmUp() {
+        prefs
     }
 
     private val inMemoryPrefs = mutableMapOf<String, Any?>()

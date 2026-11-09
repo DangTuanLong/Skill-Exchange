@@ -28,14 +28,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.skillexchange.app.MainActivity
+import com.skillexchange.app.core.call.InternalCallAuth
 import com.skillexchange.app.core.notification.IncomingCallNotificationHelper
 import com.skillexchange.app.core.service.CallForegroundService
 import com.skillexchange.app.core.ui.theme.SkillExchangeTheme
@@ -336,7 +337,10 @@ fun IncomingCallContent(
                     Box(
                         modifier = Modifier
                             .size(140.dp)
-                            .scale(pulseScale)
+                            .graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                            }
                             .background(Color(0xFF2E7D32).copy(alpha = 0.35f), shape = CircleShape)
                     )
                     // Avatar chính
@@ -490,10 +494,11 @@ private fun performJoinCall(
     coroutineScope.launch {
         // 1. Xác minh phiên gọi với server và lấy token
         val joinResult = callRepository.joinCall(sessionId)
-        joinResult.onSuccess {
+        joinResult.onSuccess { token ->
             // 2. Xác nhận đã kết nối với server
             val notifyResult = callRepository.notifyConnected(sessionId)
             notifyResult.onSuccess {
+                InternalCallAuth.cacheJoinedToken(sessionId, token)
                 onSuccess()
             }.onFailure { err ->
                 Log.w("IncomingCall", "notifyConnected thất bại: ${err.message}")

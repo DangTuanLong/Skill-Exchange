@@ -1,6 +1,7 @@
 package com.skillexchange.app.core.call
 
 import com.skillexchange.app.core.service.CallForegroundService
+import com.skillexchange.app.domain.model.call.CallToken
 
 /**
  * Cơ chế bảo vệ và xác thực Intent cuộc gọi nội bộ (TASK-080 Audit Fix).
@@ -10,6 +11,12 @@ import com.skillexchange.app.core.service.CallForegroundService
 object InternalCallAuth {
     @Volatile
     private var authorizedSessionId: String? = null
+
+    @Volatile
+    private var cachedTokenSessionId: String? = null
+
+    @Volatile
+    private var cachedCallToken: CallToken? = null
 
     fun authorize(sessionId: String) {
         authorizedSessionId = sessionId
@@ -23,8 +30,22 @@ object InternalCallAuth {
         return isAuth
     }
 
+    fun cacheJoinedToken(sessionId: String, token: CallToken) {
+        cachedTokenSessionId = sessionId
+        cachedCallToken = token
+    }
+
+    fun consumeJoinedToken(sessionId: String): CallToken? {
+        val token = if (cachedTokenSessionId == sessionId) cachedCallToken else null
+        cachedTokenSessionId = null
+        cachedCallToken = null
+        return token
+    }
+
     fun clear() {
         authorizedSessionId = null
+        cachedTokenSessionId = null
+        cachedCallToken = null
     }
 }
 

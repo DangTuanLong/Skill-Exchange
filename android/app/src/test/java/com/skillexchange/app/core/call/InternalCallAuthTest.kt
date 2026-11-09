@@ -1,8 +1,11 @@
 package com.skillexchange.app.core.call
 
 import com.skillexchange.app.core.service.CallForegroundService
+import com.skillexchange.app.domain.model.call.CallToken
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -49,6 +52,24 @@ class InternalCallAuthTest {
     fun isAuthorized_WhenMismatchSessionId_ReturnsFalse() {
         InternalCallAuth.authorize("valid-session-123")
         assertFalse(InternalCallAuth.isAuthorized("attacker-session-456"))
+    }
+
+    @Test
+    fun consumeJoinedToken_ReturnsCachedTokenOnceForMatchingSession() {
+        val sampleToken = CallToken(
+            url = "wss://livekit.example.com",
+            roomName = "room-123",
+            token = "jwt-livekit",
+            callType = com.skillexchange.app.domain.model.call.CallType.VOICE,
+            sessionId = "session-123"
+        )
+        InternalCallAuth.cacheJoinedToken("session-123", sampleToken)
+
+        val consumed = InternalCallAuth.consumeJoinedToken("session-123")
+        assertEquals(sampleToken, consumed)
+
+        // Lần gọi thứ hai phải trả về null vì đã được tiêu thụ
+        assertNull(InternalCallAuth.consumeJoinedToken("session-123"))
     }
 }
 

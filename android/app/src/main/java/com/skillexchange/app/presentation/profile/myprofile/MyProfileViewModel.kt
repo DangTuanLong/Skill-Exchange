@@ -6,7 +6,9 @@ import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.IRatingRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -48,7 +50,16 @@ class MyProfileViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
 
-            val profileRes = profileRepository.getMyProfile()
+            val knownUserId = tokenManager.getUserId()
+            val (profileRes, skillsRes, initialReputation) = coroutineScope {
+                val profileDeferred = async { profileRepository.getMyProfile() }
+                val skillsDeferred = async { skillRepository.getUserSkills("me") }
+                val reputationDeferred = async {
+                    knownUserId?.let { uid -> ratingRepository.getUserReputation(uid).getOrNull() }
+                }
+                Triple(profileDeferred.await(), skillsDeferred.await(), reputationDeferred.await())
+            }
+
             if (profileRes.isFailure) {
                 _state.update {
                     it.copy(
@@ -60,10 +71,8 @@ class MyProfileViewModel(
             }
 
             val profile = profileRes.getOrNull()
-            val skills = skillRepository.getUserSkills("me").getOrDefault(emptyList())
-
-            val currentUserId = tokenManager.getUserId() ?: profile?.userId
-            val reputation = currentUserId?.let { uid ->
+            val skills = skillsRes.getOrDefault(emptyList())
+            val reputation = initialReputation ?: profile?.userId?.let { uid ->
                 ratingRepository.getUserReputation(uid).getOrNull()
             }
 

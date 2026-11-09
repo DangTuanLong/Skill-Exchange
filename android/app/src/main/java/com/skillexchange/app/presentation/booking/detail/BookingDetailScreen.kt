@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+private val BOOKING_DETAIL_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingDetailScreen(
@@ -43,7 +47,7 @@ fun BookingDetailScreen(
     onNavigateToBookingRequest: ((receiverId: String) -> Unit)? = null,
     viewModel: BookingDetailViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -75,9 +79,12 @@ fun BookingDetailScreen(
     }
 
     DisposableEffect(lifecycleOwner) {
+        var skipInitialResume = true
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                if (viewModel.exchangeId.isNotBlank()) {
+                if (skipInitialResume) {
+                    skipInitialResume = false
+                } else if (viewModel.exchangeId.isNotBlank()) {
                     viewModel.loadDetail(viewModel.exchangeId)
                 }
             }
@@ -366,13 +373,15 @@ fun BookingDetailScreen(
                             }
 
                             // Thời gian & Địa điểm
-                            val formattedTime = try {
-                                val instant = Instant.parse(exchange.scheduledAt)
-                                val formatter = DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy")
-                                    .withZone(ZoneId.systemDefault())
-                                formatter.format(instant)
-                            } catch (e: Exception) {
-                                exchange.scheduledAt
+                            val formattedTime = remember(exchange.scheduledAt) {
+                                try {
+                                    val instant = Instant.parse(exchange.scheduledAt)
+                                    BOOKING_DETAIL_TIME_FORMATTER
+                                        .withZone(ZoneId.systemDefault())
+                                        .format(instant)
+                                } catch (e: Exception) {
+                                    exchange.scheduledAt
+                                }
                             }
 
                             DetailInfoRow(

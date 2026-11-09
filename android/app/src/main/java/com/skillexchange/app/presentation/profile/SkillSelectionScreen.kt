@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,13 +30,15 @@ import com.skillexchange.app.domain.model.SkillType
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 
+private val SKILL_SELECTION_SLUG_REGEX = Regex("^[a-zA-Z0-9_-]+$")
+
 @Composable
 fun SkillSelectionScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToProfileSetup: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.effect) {
@@ -48,8 +51,23 @@ fun SkillSelectionScreen(
         }
     }
 
-    val selectedCat = state.categories.find { it.id == state.selectedCategoryId }
-        ?: state.categories.firstOrNull()
+    val selectedCat = remember(state.categories, state.selectedCategoryId) {
+        state.categories.find { it.id == state.selectedCategoryId }
+            ?: state.categories.firstOrNull()
+    }
+    val tabType = if (state.selectedTab == 0) SkillType.HAVE else SkillType.WANT
+    val myTabSkills = remember(state.mySkills, tabType) {
+        state.mySkills.filter { it.type == tabType }
+    }
+    val editingSkill = remember(state.mySkills, state.selectedSkillIdForEdit) {
+        state.mySkills.find { it.id == state.selectedSkillIdForEdit }
+    }
+    val chunkedCategorySkills = remember(selectedCat?.skills) {
+        selectedCat?.skills?.chunked(2).orEmpty()
+    }
+    val myTabSkillsBySkillId = remember(myTabSkills) {
+        myTabSkills.associateBy { it.skillId }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -151,10 +169,8 @@ fun SkillSelectionScreen(
             }
 
             // My skills (current tab)
-            val tabType = if (state.selectedTab == 0) SkillType.HAVE else SkillType.WANT
-            val myTabSkills = state.mySkills.filter { it.type == tabType }
             if (myTabSkills.isNotEmpty()) {
-                item {
+                item(key = "selected_skills", contentType = "selected_skills") {
                     Text("Đã chọn (${myTabSkills.size})",
                         fontSize = 13.sp, color = TextSecondaryLight, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -175,8 +191,7 @@ fun SkillSelectionScreen(
 
             // Proficiency slider (only for HAVE)
             if (state.selectedTab == 0) {
-                item {
-                    val editingSkill = state.mySkills.find { it.id == state.selectedSkillIdForEdit }
+                item(key = "proficiency_slider", contentType = "proficiency_slider") {
                     ProficiencySlider(
                         level = state.proficiencyLevel,
                         editingSkillName = editingSkill?.skillName,
@@ -186,11 +201,15 @@ fun SkillSelectionScreen(
             }
 
             // Category picker
-            item {
+            item(key = "category_picker", contentType = "category_picker") {
                 Text("Danh mục", fontSize = 14.sp, color = TextSecondaryLight, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.categories) { cat ->
+                    items(
+                        items = state.categories,
+                        key = { it.id },
+                        contentType = { "category" }
+                    ) { cat ->
                         val isSelected = (state.selectedCategoryId ?: state.categories.firstOrNull()?.id) == cat.id
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -220,17 +239,20 @@ fun SkillSelectionScreen(
 
             // Skills in selected category
             if (selectedCat != null) {
-                item {
+                item(key = "category_header_${selectedCat.id}", contentType = "category_header") {
                     Text(selectedCat.name, fontSize = 15.sp,
                         fontWeight = FontWeight.Bold, color = TextPrimaryLight)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                items(selectedCat.skills.chunked(2)) { row ->
+                items(
+                    items = chunkedCategorySkills,
+                    key = { row -> row.first().id },
+                    contentType = { "skill_row" }
+                ) { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { skill ->
-                            val alreadyAdded = state.mySkills.any {
-                                it.skillId == skill.id && it.type == tabType
-                            }
+                            val existingUserSkill = myTabSkillsBySkillId[skill.id]
+                            val alreadyAdded = existingUserSkill != null
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -245,7 +267,6 @@ fun SkillSelectionScreen(
                                         if (!alreadyAdded) {
                                             viewModel.onIntent(ProfileIntent.AddSkill(skill.id))
                                         } else {
-                                            val existingUserSkill = state.mySkills.find { it.skillId == skill.id && it.type == tabType }
                                             viewModel.onIntent(ProfileIntent.SelectSkillForEdit(existingUserSkill?.id))
                                         }
                                     }
@@ -267,13 +288,13 @@ fun SkillSelectionScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(80.dp)) }
+            item(key = "bottom_spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
 }
 
 private fun formatCategoryLabel(icon: String, name: String): String {
-    return if (icon.isBlank() || icon.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+    return if (icon.isBlank() || icon.matches(SKILL_SELECTION_SLUG_REGEX)) {
         name
     } else {
         "$icon $name"

@@ -18,6 +18,7 @@ import com.skillexchange.app.presentation.call.IncomingCallActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
@@ -206,5 +207,10 @@ class SkillExchangeFirebaseMessagingService : FirebaseMessagingService() {
 
         val notificationId = entityId?.hashCode() ?: System.currentTimeMillis().toInt()
         notificationManager.notify(notificationId, notification)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
     }
 }

@@ -1,5 +1,8 @@
 package com.skillexchange.app.presentation.profile
 
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.skillexchange.app.domain.model.Profile
@@ -8,12 +11,14 @@ import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ─── State ────────────────────────────────────────────────────────────
 data class ProfileUiState(
@@ -68,6 +73,7 @@ sealed class ProfileIntent {
     data class CityChanged(val value: String) : ProfileIntent()
     data class AvatarUrlChanged(val value: String) : ProfileIntent()
     data class UploadAvatar(val fileBytes: ByteArray, val fileName: String, val mimeType: String) : ProfileIntent()
+    data class UploadAvatarUri(val contentResolver: ContentResolver, val uri: Uri) : ProfileIntent()
     data class AddAvailabilityWindow(val window: com.skillexchange.app.domain.model.AvailabilityWindow) : ProfileIntent()
     data class RemoveAvailabilityWindow(val window: com.skillexchange.app.domain.model.AvailabilityWindow) : ProfileIntent()
     object SaveProfile : ProfileIntent()
@@ -91,6 +97,7 @@ sealed class ProfileIntent {
     object DismissDocumentPrivacyDialog : ProfileIntent()
     object ConfirmDocumentPrivacyDialog : ProfileIntent()
     data class UploadDocument(val fileBytes: ByteArray, val fileName: String) : ProfileIntent()
+    data class UploadDocumentUri(val contentResolver: ContentResolver, val uri: Uri) : ProfileIntent()
     // OCR Image Extraction Intents (TASK-043 Mức 3)
     object RequestOcrScan : ProfileIntent()
     object DismissOcrPrivacyDialog : ProfileIntent()
@@ -138,6 +145,7 @@ class ProfileViewModel(
             is ProfileIntent.CityChanged      -> _state.update { it.copy(city = intent.value) }
             is ProfileIntent.AvatarUrlChanged -> _state.update { it.copy(avatarUrl = intent.value) }
             is ProfileIntent.UploadAvatar     -> uploadAvatar(intent.fileBytes, intent.fileName, intent.mimeType)
+            is ProfileIntent.UploadAvatarUri  -> uploadAvatarFromUri(intent.contentResolver, intent.uri)
             is ProfileIntent.AddAvailabilityWindow -> addAvailabilityWindow(intent.window)
             is ProfileIntent.RemoveAvailabilityWindow -> removeAvailabilityWindow(intent.window)
             is ProfileIntent.SaveProfile      -> saveProfile()
@@ -161,6 +169,7 @@ class ProfileViewModel(
                 viewModelScope.launch { _effect.send(ProfileEffect.OpenDocumentPicker) }
             }
             is ProfileIntent.UploadDocument -> uploadDocument(intent.fileBytes, intent.fileName)
+            is ProfileIntent.UploadDocumentUri -> uploadDocumentFromUri(intent.contentResolver, intent.uri)
             is ProfileIntent.RequestOcrScan -> _state.update { it.copy(showOcrPrivacyDialog = true) }
             is ProfileIntent.DismissOcrPrivacyDialog -> _state.update { it.copy(showOcrPrivacyDialog = false) }
             is ProfileIntent.ConfirmOcrPrivacyDialog -> {
@@ -175,6 +184,55 @@ class ProfileViewModel(
         }
     }
 
+
+    private fun uploadAvatarFromUri(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
+                    val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+                    val ext = when {
+                        mimeType.contains("png") -> "png"
+                        mimeType.contains("webp") -> "webp"
+                        else -> "jpg"
+                    }
+                    Triple(bytes, "avatar.$ext", mimeType)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (payload != null) {
+                uploadAvatar(payload.first, payload.second, payload.third)
+            } else {
+                _effect.send(ProfileEffect.ShowSnackbar("Không thể đọc ảnh từ thiết bị"))
+            }
+        }
+    }
+
+    private fun uploadDocumentFromUri(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
+                    var fileName = "document.txt"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1 && cursor.moveToFirst()) {
+                            fileName = cursor.getString(nameIndex) ?: fileName
+                        }
+                    }
+                    Pair(bytes, fileName)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (payload != null) {
+                uploadDocument(payload.first, payload.second)
+            } else {
+                _effect.send(ProfileEffect.ShowSnackbar("Không thể đọc tài liệu đã chọn"))
+            }
+        }
+    }
 
     private fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String) {
         if (fileBytes.size > 2 * 1024 * 1024) {

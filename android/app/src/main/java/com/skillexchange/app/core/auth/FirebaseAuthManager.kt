@@ -15,9 +15,17 @@ interface IFirebaseAuthManager {
 open class FirebaseAuthManager(
     private val authRemoteDataSource: AuthRemoteDataSource,
     private val tokenManager: TokenManager? = null,
-    private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance(),
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    firebaseAuthInstance: FirebaseAuth? = null,
+    firestoreInstance: FirebaseFirestore? = null
 ) : IFirebaseAuthManager {
+
+    private val firebaseAuth: FirebaseAuth by lazy {
+        firebaseAuthInstance ?: FirebaseAuth.getInstance()
+    }
+
+    private val firestore: FirebaseFirestore by lazy {
+        firestoreInstance ?: FirebaseFirestore.getInstance()
+    }
 
     companion object {
         private const val TAG = "FirebaseAuthManager"

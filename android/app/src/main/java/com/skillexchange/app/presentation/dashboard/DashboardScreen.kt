@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +39,7 @@ fun DashboardScreen(
     onNavigateToProfile: (String) -> Unit,
     viewModel: DashboardViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -173,7 +174,7 @@ fun DashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // 1. 3 Thẻ số thống kê
-                        item {
+                        item(key = "stat_cards", contentType = "stat_cards") {
                             StatCardsSection(
                                 totalSessions = stats.totalSessions,
                                 avgRating = stats.avgRating,
@@ -183,7 +184,7 @@ fun DashboardScreen(
                         }
 
                         // 2. Biểu đồ Radar 6 trục
-                        item {
+                        item(key = "radar_chart", contentType = "radar_chart") {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -212,7 +213,7 @@ fun DashboardScreen(
                         }
 
                         // 3. Biểu đồ cột 6 tháng
-                        item {
+                        item(key = "monthly_bar_chart", contentType = "monthly_bar_chart") {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -242,7 +243,7 @@ fun DashboardScreen(
 
                         // 4. Gợi ý khoảng trống kỹ năng (Skill Gap)
                         if (stats.skillGapSuggestions.isNotEmpty()) {
-                            item {
+                            item(key = "skill_gap", contentType = "skill_gap") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
@@ -331,7 +332,7 @@ fun DashboardScreen(
 
                         // 5. Bảng xếp hạng uy tín (Leaderboard Top 10)
                         if (state.leaderboard.isNotEmpty()) {
-                            item {
+                            item(key = "leaderboard", contentType = "leaderboard") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
@@ -376,7 +377,7 @@ fun DashboardScreen(
 
                         // 6. Lịch sử hoạt động gần đây
                         if (stats.timeline.isNotEmpty()) {
-                            item {
+                            item(key = "timeline", contentType = "timeline") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),

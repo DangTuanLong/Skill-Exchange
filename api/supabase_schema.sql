@@ -443,5 +443,144 @@ CREATE OR REPLACE TRIGGER set_call_sessions_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
+-- 14. BÁO CÁO VI PHẠM & CHẶN NGƯỜI DÙNG 2 CHIỀU (DEC-031)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.user_reports (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reporter_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    reported_user_id  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    exchange_id       UUID NULL REFERENCES public.exchange_requests(id) ON DELETE SET NULL,
+    reason            VARCHAR(50) NOT NULL,
+    description       VARCHAR(500) NULL,
+    status            VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at       TIMESTAMPTZ NULL,
+    CONSTRAINT chk_user_reports_different_users CHECK (reporter_id <> reported_user_id),
+    CONSTRAINT chk_user_reports_reason CHECK (
+        reason IN ('SPAM', 'HARASSMENT', 'INAPPROPRIATE_CONTENT', 'NO_SHOW', 'FAKE_PROFILE', 'OTHER')
+    ),
+    CONSTRAINT chk_user_reports_status CHECK (
+        status IN ('PENDING', 'REVIEWED', 'DISMISSED')
+    ),
+    CONSTRAINT chk_user_reports_desc_len CHECK (
+        description IS NULL OR char_length(description) <= 500
+    )
+);
+
+-- Chống spam báo cáo trùng lặp khi báo cáo trước đó còn đang PENDING
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_reports_open
+    ON public.user_reports (reporter_id, reported_user_id)
+    WHERE status = 'PENDING';
+
+CREATE INDEX IF NOT EXISTS idx_user_reports_reported
+    ON public.user_reports (reported_user_id, status, created_at DESC);
+
+ALTER TABLE public.user_reports ENABLE ROW LEVEL SECURITY;
+-- Không tạo public policy cho anon/authenticated: chỉ Ktor Backend truy cập qua postgres role.
+
+CREATE TABLE IF NOT EXISTS public.user_blocks (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    blocker_id        UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    blocked_user_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_user_blocks_different_users CHECK (blocker_id <> blocked_user_id),
+    CONSTRAINT uq_user_blocks_pair UNIQUE (blocker_id, blocked_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker
+    ON public.user_blocks (blocker_id, blocked_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked
+    ON public.user_blocks (blocked_user_id, blocker_id);
+
+ALTER TABLE public.user_blocks ENABLE ROW LEVEL SECURITY;
+-- Không tạo public policy cho anon/authenticated: chỉ Ktor Backend truy cập qua postgres role.
+
+-- ============================================================
+-- 15. THẺ ĐÁNH GIÁ NHANH TRONG RATINGS (DEC-032)
+-- ============================================================
+
+ALTER TABLE public.ratings
+    ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_ratings_tags_array'
+    ) THEN
+        ALTER TABLE public.ratings
+            ADD CONSTRAINT chk_ratings_tags_array
+            CHECK (jsonb_typeof(tags) = 'array' AND jsonb_array_length(tags) <= 5);
+    END IF;
+END $$;
+
+-- ============================================================
+-- 16. TRỌNG SỐ GỢI Ý CÁ NHÂN HÓA TRONG PROFILES (DEC-034)
+-- ============================================================
+
+ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS matching_weights JSONB NULL,
+    ADD COLUMN IF NOT EXISTS matching_feedback_count INT NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_profiles_feedback_count_nonneg'
+    ) THEN
+        ALTER TABLE public.profiles
+            ADD CONSTRAINT chk_profiles_feedback_count_nonneg
+            CHECK (matching_feedback_count >= 0);
+    END IF;
+END $$;
+
+-- ============================================================
+-- 17. CHUỖI KỸ NĂNG / LỘ TRÌNH HỌC TẬP DAG (DEC-035)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.skill_prerequisites (
+    id                      SERIAL PRIMARY KEY,
+    skill_id                INT NOT NULL REFERENCES public.skills(id) ON DELETE CASCADE,
+    prerequisite_skill_id   INT NOT NULL REFERENCES public.skills(id) ON DELETE CASCADE,
+    step_order              INT NOT NULL DEFAULT 1,
+    rationale               VARCHAR(255) NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_skill_prereq_no_self_loop CHECK (skill_id <> prerequisite_skill_id),
+    CONSTRAINT chk_skill_prereq_step_order CHECK (step_order >= 1),
+    CONSTRAINT uq_skill_prerequisite_pair UNIQUE (skill_id, prerequisite_skill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_prerequisites_target
+    ON public.skill_prerequisites (skill_id, step_order);
+
+CREATE INDEX IF NOT EXISTS idx_skill_prerequisites_prereq
+    ON public.skill_prerequisites (prerequisite_skill_id);
+
+ALTER TABLE public.skill_prerequisites ENABLE ROW LEVEL SECURITY;
+-- Không tạo write policy cho anon/authenticated; dữ liệu đọc qua Ktor Backend API.
+
+-- Seed dữ liệu lộ trình học tập chuẩn (DAG không chu trình) theo tên kỹ năng
+INSERT INTO public.skill_prerequisites (skill_id, prerequisite_skill_id, step_order, rationale)
+SELECT s_target.id, s_prereq.id, v.step_order, v.rationale
+FROM (
+    VALUES
+        ('Kotlin', 'Java', 1, 'Nắm vững OOP và JVM cơ bản từ Java giúp tiếp cận Kotlin và Android nhanh hơn.'),
+        ('Flutter', 'Kotlin', 2, 'Hiểu kiến trúc ứng dụng di động gốc giúp phát triển đa nền tảng với Flutter hiệu quả.'),
+        ('React', 'JavaScript', 1, 'JavaScript ES6+ là nền tảng cốt lõi trước khi học thư viện giao diện React.'),
+        ('Python', 'SQL', 1, 'Tư duy truy vấn dữ liệu SQL bổ trợ trực tiếp cho phân tích dữ liệu và backend với Python.'),
+        ('UI/UX', 'Figma', 1, 'Sử dụng thành thạo công cụ Figma giúp hiện thực hóa quy trình thiết kế UI/UX.'),
+        ('After Effects', 'Illustrator', 1, 'Thiết kế vector trên Illustrator là bước chuẩn bị quan trọng cho chuyển động đồ họa After Effects.'),
+        ('Chỉnh sửa ảnh', 'Photoshop', 1, 'Kỹ thuật xử lý lớp và màu sắc trong Photoshop là nền tảng cho chỉnh sửa ảnh chuyên sâu.'),
+        ('Ukulele', 'Guitar', 1, 'Cảm âm và bấm hợp âm Guitar giúp chuyển sang chơi Ukulele nhanh chóng.'),
+        ('Quay phim', 'Chụp chân dung', 1, 'Nắm vững bố cục và ánh sáng trong nhiếp ảnh tĩnh trước khi quay video chuyển động.'),
+        ('Đàm phán', 'Thuyết trình', 1, 'Kỹ năng trình bày rõ ràng và tự tin là tiền đề cho đàm phán thuyết phục.'),
+        ('Lãnh đạo', 'Đàm phán', 2, 'Khả năng lắng nghe và đàm phán giúp điều phối nhóm và lãnh đạo hiệu quả.'),
+        ('Lãnh đạo', 'Quản lý thời gian', 1, 'Làm chủ thời gian cá nhân trước khi quản lý tiến độ của tập thể.')
+) AS v(target_name, prereq_name, step_order, rationale)
+JOIN public.skills s_target ON s_target.name = v.target_name
+JOIN public.skills s_prereq ON s_prereq.name = v.prereq_name
+ON CONFLICT (skill_id, prerequisite_skill_id) DO NOTHING;
+
+-- ============================================================
 -- DONE — Cập nhật khi thay đổi schema (DEC-007)
 -- ============================================================

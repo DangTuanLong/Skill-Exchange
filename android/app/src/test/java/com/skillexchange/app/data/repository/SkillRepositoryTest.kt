@@ -68,6 +68,60 @@ class SkillRepositoryTest {
     }
 
     @Test
+    fun getCategories_WithinTtl_UsesInMemoryCache() = runTest {
+        var requestCount = 0
+        val json = """
+        {
+            "success": true,
+            "data": [
+                {
+                    "id": 1,
+                    "name": "Công nghệ",
+                    "icon": "code",
+                    "skills": [
+                        {"id": 10, "category_id": 1, "name": "Kotlin"}
+                    ]
+                }
+            ]
+        }
+        """.trimIndent()
+        val client = HttpClient(MockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+            engine {
+                addHandler {
+                    requestCount++
+                    respond(
+                        content = json,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            }
+        }
+        var currentTimeMs = 1_000_000L
+        val repository = SkillRepositoryImpl(
+            remoteDataSource = SkillRemoteDataSource(client),
+            tokenManager = TokenManager(null),
+            nowProvider = { currentTimeMs }
+        )
+
+        val first = repository.getCategories()
+        currentTimeMs += 60_000L // +1 phút (< 5 phút TTL)
+        val second = repository.getCategories()
+
+        assertTrue(first.isSuccess)
+        assertTrue(second.isSuccess)
+        assertEquals(1, requestCount)
+
+        currentTimeMs += 5 * 60_000L // Quá hạn TTL 5 phút
+        val third = repository.getCategories()
+        assertTrue(third.isSuccess)
+        assertEquals(2, requestCount)
+    }
+
+    @Test
     fun getUserSkills_Success_ReturnsUserSkills() = runTest {
         val json = """
         {

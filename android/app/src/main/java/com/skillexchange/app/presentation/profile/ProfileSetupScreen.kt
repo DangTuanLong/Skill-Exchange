@@ -18,7 +18,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import android.net.Uri
-import android.provider.OpenableColumns
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -70,7 +70,7 @@ fun ProfileSetupScreen(
     onNavigateToHome: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
     var visible by remember { mutableStateOf(false) }
@@ -81,20 +81,12 @@ fun ProfileSetupScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null) {
-                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                    val ext = when {
-                        mimeType.contains("png") -> "png"
-                        mimeType.contains("webp") -> "webp"
-                        else -> "jpg"
-                    }
-                    viewModel.onIntent(ProfileIntent.UploadAvatar(bytes, "avatar.$ext", mimeType))
-                }
-            } catch (e: Exception) {
-                // Handled in ViewModel
-            }
+            viewModel.onIntent(
+                ProfileIntent.UploadAvatarUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = uri
+                )
+            )
         }
     }
 
@@ -102,21 +94,12 @@ fun ProfileSetupScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null) {
-                    var fileName = "document.txt"
-                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        if (nameIndex != -1 && cursor.moveToFirst()) {
-                            fileName = cursor.getString(nameIndex)
-                        }
-                    }
-                    viewModel.onIntent(ProfileIntent.UploadDocument(bytes, fileName))
-                }
-            } catch (e: Exception) {
-                // Handled in ViewModel
-            }
+            viewModel.onIntent(
+                ProfileIntent.UploadDocumentUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = uri
+                )
+            )
         }
     }
 
@@ -151,9 +134,9 @@ fun ProfileSetupScreen(
     // Default preset avatar URLs
     val presetAvatars = remember {
         listOf(
-            "https://api.dicebear.com/7.x/bottts/svg?seed=SkillExchange1",
-            "https://api.dicebear.com/7.x/bottts/svg?seed=SkillExchange2",
-            "https://api.dicebear.com/7.x/bottts/svg?seed=SkillExchange3",
+            "https://api.dicebear.com/7.x/bottts/png?seed=SkillExchange1",
+            "https://api.dicebear.com/7.x/bottts/png?seed=SkillExchange2",
+            "https://api.dicebear.com/7.x/bottts/png?seed=SkillExchange3",
             "https://api.dicebear.com/7.x/avataaars/png?seed=Alex",
             "https://api.dicebear.com/7.x/avataaars/png?seed=Sarah",
             "https://api.dicebear.com/7.x/avataaars/png?seed=David"
@@ -421,7 +404,11 @@ fun ProfileSetupScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(presetAvatars) { avatar ->
+                        items(
+                            items = presetAvatars,
+                            key = { it },
+                            contentType = { "preset_avatar" }
+                        ) { avatar ->
                             val isSelected = state.avatarUrl == avatar
                             Box(
                                 modifier = Modifier
@@ -653,7 +640,11 @@ fun ProfileSetupScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(days) { (dayKey, dayLabel) ->
+                            items(
+                                items = days,
+                                key = { it.first },
+                                contentType = { "day_chip" }
+                            ) { (dayKey, dayLabel) ->
                                 val isSelected = selectedDay == dayKey
                                 Box(
                                     modifier = Modifier
@@ -839,7 +830,9 @@ fun ProfileSetupScreen(
 
                 // My skills in the current tab
                 val tabType = if (state.selectedTab == 0) SkillType.HAVE else SkillType.WANT
-                val myTabSkills = state.mySkills.filter { it.type == tabType }
+                val myTabSkills = remember(state.mySkills, tabType) {
+                    state.mySkills.filter { it.type == tabType }
+                }
                 if (myTabSkills.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
@@ -864,7 +857,9 @@ fun ProfileSetupScreen(
 
                 // Proficiency Slider (only for HAVE)
                 if (state.selectedTab == 0) {
-                    val editingSkill = state.mySkills.find { it.id == state.selectedSkillIdForEdit }
+                    val editingSkill = remember(state.mySkills, state.selectedSkillIdForEdit) {
+                        state.mySkills.find { it.id == state.selectedSkillIdForEdit }
+                    }
                     ProfileProficiencySlider(
                         level = state.proficiencyLevel,
                         editingSkillName = editingSkill?.skillName,
@@ -932,7 +927,11 @@ fun ProfileSetupScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.categories) { cat ->
+                        items(
+                            items = state.categories,
+                            key = { it.id },
+                            contentType = { "category" }
+                        ) { cat ->
                             val isSelected = (state.selectedCategoryId ?: state.categories.firstOrNull()?.id) == cat.id
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -961,9 +960,17 @@ fun ProfileSetupScreen(
                 }
 
                 // Skills in selected category
-                val selectedCat = state.categories.find { it.id == state.selectedCategoryId }
-                    ?: state.categories.firstOrNull()
+                val selectedCat = remember(state.categories, state.selectedCategoryId) {
+                    state.categories.find { it.id == state.selectedCategoryId }
+                        ?: state.categories.firstOrNull()
+                }
                 if (selectedCat != null) {
+                    val chunkedSkills = remember(selectedCat.skills) {
+                        selectedCat.skills.chunked(2)
+                    }
+                    val addedSkillIds = remember(myTabSkills) {
+                        myTabSkills.map { it.skillId }.toSet()
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = selectedCat.name,
@@ -971,13 +978,13 @@ fun ProfileSetupScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextPrimaryLight
                         )
-                        selectedCat.skills.chunked(2).forEach { row ->
+                        chunkedSkills.forEach { row ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 row.forEach { skill ->
-                                    val alreadyAdded = state.mySkills.any { it.skillId == skill.id && it.type == tabType }
+                                    val alreadyAdded = skill.id in addedSkillIds
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
@@ -1073,7 +1080,11 @@ fun ProfileSetupScreen(
                         .weight(1f, fill = false),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(state.extractedSkills, key = { it.skill.skillId }) { item ->
+                    items(
+                        items = state.extractedSkills,
+                        key = { it.skill.skillId },
+                        contentType = { "extracted_skill" }
+                    ) { item ->
                         val (badgeText, badgeBg, badgeTextColor) = when (item.skill.matchType) {
                             "EXACT" -> Triple("Chính xác", Color(0xFFECFDF5), Color(0xFF059669))
                             "ALIAS" -> Triple("Từ đồng nghĩa", Color(0xFFEFF6FF), Color(0xFF2563EB))

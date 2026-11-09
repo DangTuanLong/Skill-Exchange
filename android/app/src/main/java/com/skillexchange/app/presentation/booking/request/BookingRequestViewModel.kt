@@ -11,7 +11,9 @@ import com.skillexchange.app.domain.model.exchange.ValidSkillPair
 import com.skillexchange.app.domain.repository.IExchangeRepository
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.ISkillRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -68,14 +70,20 @@ class BookingRequestViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
 
-            // 1. Tải hồ sơ đối tác
-            val profileRes = profileRepository.getUserProfile(targetReceiverId)
+            // 1–3. Tải song song hồ sơ đối tác, kỹ năng hai bên và valid-pairs
+            val (profileRes, mySkillsRes, receiverSkillsRes, validPairsRes) = coroutineScope {
+                val profileDeferred = async { profileRepository.getUserProfile(targetReceiverId) }
+                val mySkillsDeferred = async { skillRepository.getUserSkills("me") }
+                val receiverSkillsDeferred = async { skillRepository.getUserSkills(targetReceiverId) }
+                val validPairsDeferred = async { exchangeRepository.getValidPairs(targetReceiverId) }
+                Quadruple(
+                    profileDeferred.await(),
+                    mySkillsDeferred.await(),
+                    receiverSkillsDeferred.await(),
+                    validPairsDeferred.await()
+                )
+            }
             val profile = profileRes.getOrNull()
-
-            // 2. Tải kỹ năng của tôi và kỹ năng của đối tác
-            val mySkillsRes = skillRepository.getUserSkills("me")
-            val receiverSkillsRes = skillRepository.getUserSkills(targetReceiverId)
-
             val mySkills = mySkillsRes.getOrDefault(emptyList())
             val receiverSkills = receiverSkillsRes.getOrDefault(emptyList())
 
@@ -94,8 +102,6 @@ class BookingRequestViewModel(
                 matchingWant != null && have.proficiencyLevel >= matchingWant.proficiencyLevel
             }
 
-            // 3. Tải cặp kỹ năng hợp lệ và cảnh báo mềm từ GET valid-pairs (DEC-028, TASK-083)
-            val validPairsRes = exchangeRepository.getValidPairs(targetReceiverId)
             val pairsResult = validPairsRes.getOrNull()
 
             val rawPairs = pairsResult?.pairs ?: emptyList()
@@ -235,4 +241,11 @@ class BookingRequestViewModel(
                 }
         }
     }
+
+    private data class Quadruple<A, B, C, D>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D
+    )
 }

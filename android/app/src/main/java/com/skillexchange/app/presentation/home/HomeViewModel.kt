@@ -116,7 +116,6 @@ class HomeViewModel(
     init {
         loadCategories()
         loadMatchingSuggestions()
-        performSearch(resetCursor = true)
         observeUnreadChatCount()
     }
 

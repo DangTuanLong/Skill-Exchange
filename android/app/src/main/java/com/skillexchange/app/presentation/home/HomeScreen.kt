@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +62,7 @@ fun HomeScreen(
     onNavigateToDiscovery: () -> Unit = {},
     viewModel: HomeViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
@@ -155,7 +156,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             // ── Item 1: Condensed TopBar with Search, Đổi vòng tròn, Tin nhắn ──
-            item {
+            item(key = "home_top_bar", contentType = "top_bar") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -308,7 +309,7 @@ fun HomeScreen(
 
             // ── Item 2: Category Chips (DEC-014: Multi-select OR, selected categories moved to front) ──
             if (state.categories.isNotEmpty()) {
-                item {
+                item(key = "home_category_chips", contentType = "category_chips") {
                     Spacer(modifier = Modifier.height(14.dp))
                     val selectedIds = state.selectedCategoryIds
                     val orderedCategories = remember(state.categories, selectedIds) {
@@ -359,7 +360,7 @@ fun HomeScreen(
             }
 
             // ── Item 4: Tab Toggle (Matching vs All Users) ───────────────────
-            item {
+            item(key = "home_tab_toggle", contentType = "tab_toggle") {
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier
@@ -385,7 +386,7 @@ fun HomeScreen(
 
             // ── Item 5: Loading / States / Candidate Items ───────────────────
             if (state.isLoading) {
-                item {
+                item(key = "home_loading", contentType = "loading") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -398,7 +399,7 @@ fun HomeScreen(
                     }
                 }
             } else if (state.error != null && state.displayedUsers.isEmpty()) {
-                item {
+                item(key = "home_error", contentType = "error") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -433,7 +434,7 @@ fun HomeScreen(
             } else if (state.displayedUsers.isEmpty()) {
                 if (state.selectedTab == HomeTab.MATCHING && state.potentialMatches.isNotEmpty()) {
                     // Header for potential 1-way matches (TASK-082)
-                    item {
+                    item(key = "home_potential_header", contentType = "potential_header") {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -483,7 +484,7 @@ fun HomeScreen(
                         }
                     }
                 } else {
-                    item {
+                    item(key = "home_empty", contentType = "empty") {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -543,7 +544,7 @@ fun HomeScreen(
                     }
                 }
             } else {
-                item {
+                item(key = "home_top_spacer", contentType = "spacer") {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 items(state.displayedUsers, key = { it.userId }, contentType = { "UserCard" }) { user ->
@@ -557,7 +558,7 @@ fun HomeScreen(
                 }
 
                 if (state.isLoadingMore) {
-                    item {
+                    item(key = "home_loading_more", contentType = "loading_more") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()

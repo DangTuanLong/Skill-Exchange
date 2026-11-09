@@ -8,20 +8,43 @@ import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.domain.model.UserSkill
 import com.skillexchange.app.domain.repository.ISkillRepository
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class SkillRepositoryImpl(
     private val remoteDataSource: SkillRemoteDataSource,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val nowProvider: () -> Long = { System.currentTimeMillis() }
 ) : ISkillRepository {
 
-    override suspend fun getCategories(): Result<List<SkillCategory>> = runCatching {
-        remoteDataSource.getCategories().data.map { cat ->
-            SkillCategory(
-                id = cat.id,
-                name = cat.name,
-                icon = cat.icon,
-                skills = cat.skills.map { Skill(it.id, it.categoryId, it.name) }
-            )
+    companion object {
+        private const val CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000L // 5 phút
+    }
+
+    private val cacheMutex = Mutex()
+    @Volatile
+    private var cachedCategories: List<SkillCategory>? = null
+    @Volatile
+    private var cacheTimestampMs: Long = 0L
+
+    override suspend fun getCategories(): Result<List<SkillCategory>> = cacheMutex.withLock {
+        val now = nowProvider()
+        val cached = cachedCategories
+        if (cached != null && (now - cacheTimestampMs) < CATEGORIES_CACHE_TTL_MS) {
+            return@withLock Result.success(cached)
+        }
+        runCatching {
+            remoteDataSource.getCategories().data.map { cat ->
+                SkillCategory(
+                    id = cat.id,
+                    name = cat.name,
+                    icon = cat.icon,
+                    skills = cat.skills.map { Skill(it.id, it.categoryId, it.name) }
+                )
+            }
+        }.onSuccess { categories ->
+            cachedCategories = categories
+            cacheTimestampMs = nowProvider()
         }
     }
 

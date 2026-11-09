@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -32,6 +33,20 @@ fun MonthlyBarChart(
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val countTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
+
+    val labelPaint = remember {
+        Paint().apply {
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+        }
+    }
+    val countPaint = remember {
+        Paint().apply {
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            isFakeBoldText = true
+        }
+    }
 
     Box(
         modifier = modifier
@@ -70,20 +85,11 @@ fun MonthlyBarChart(
                 strokeWidth = 0.8f.dp.toPx()
             )
 
-            val labelPaint = Paint().apply {
-                color = textColor
-                textSize = 11.sp.toPx()
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-            }
-
-            val countPaint = Paint().apply {
-                color = countTextColor
-                textSize = 11.sp.toPx()
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                isFakeBoldText = true
-            }
+            val labelTextSize = 11.sp.toPx()
+            labelPaint.color = textColor
+            labelPaint.textSize = labelTextSize
+            countPaint.color = countTextColor
+            countPaint.textSize = labelTextSize
 
             // 2. Vẽ từng cột
             for (i in 0 until numBars) {

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +48,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val SCHEDULE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
@@ -55,7 +58,7 @@ fun ScheduleScreen(
     onNavigateToChat: (exchangeId: String) -> Unit,
     viewModel: ScheduleViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -328,7 +331,7 @@ private fun ScheduleDailyContent(
         contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp)
     ) {
         // Tiêu đề ngày được chọn
-        item {
+        item(key = "selected_date_header", contentType = "date_header") {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -351,7 +354,7 @@ private fun ScheduleDailyContent(
 
         // Danh sách các buổi hẹn đã chốt trong ngày
         if (sessions.isNotEmpty()) {
-            item {
+            item(key = "sessions_header", contentType = "section_header") {
                 Text(
                     text = "Lịch hẹn đã chốt (${sessions.size})",
                     fontSize = 13.sp,
@@ -360,7 +363,11 @@ private fun ScheduleDailyContent(
                 )
             }
 
-            items(sessions, key = { it.id }) { exchange ->
+            items(
+                items = sessions,
+                key = { it.id },
+                contentType = { "session" }
+            ) { exchange ->
                 ConfirmedSessionCard(
                     exchange = exchange,
                     currentUserId = currentUserId,
@@ -372,7 +379,7 @@ private fun ScheduleDailyContent(
 
         // Khung rảnh cá nhân đã thiết lập cho ngày này
         if (availability.isNotEmpty()) {
-            item {
+            item(key = "availability_header", contentType = "section_header") {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Khung rảnh cá nhân của bạn",
@@ -382,18 +389,22 @@ private fun ScheduleDailyContent(
                 )
             }
 
-            items(availability) { window ->
+            items(
+                items = availability,
+                key = { "${it.day}_${it.from}_${it.to}" },
+                contentType = { "availability" }
+            ) { window ->
                 OpenAvailabilityCard(window = window)
             }
         }
 
         // Trạng thái trống (Không có lịch hẹn và không có khung rảnh)
         if (sessions.isEmpty() && availability.isEmpty()) {
-            item {
+            item(key = "empty_day", contentType = "empty_day") {
                 EmptyDayCard()
             }
         } else if (sessions.isEmpty()) {
-            item {
+            item(key = "no_session_info", contentType = "no_session_info") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -437,8 +448,7 @@ private fun ConfirmedSessionCard(
             val instant = Instant.parse(exchange.scheduledAt)
             val startTime = instant.atZone(ZoneId.systemDefault()).toLocalTime()
             val endTime = startTime.plusMinutes(exchange.durationMinutes.toLong())
-            val formatter = DateTimeFormatter.ofPattern("HH:mm")
-            "${formatter.format(startTime)} - ${formatter.format(endTime)}"
+            "${SCHEDULE_TIME_FORMATTER.format(startTime)} - ${SCHEDULE_TIME_FORMATTER.format(endTime)}"
         } catch (e: Exception) {
             exchange.scheduledAt
         }

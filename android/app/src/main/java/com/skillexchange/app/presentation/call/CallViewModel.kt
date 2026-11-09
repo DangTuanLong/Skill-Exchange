@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.skillexchange.app.core.call.AppAudioDevice
 import com.skillexchange.app.core.call.CallEngine
 import com.skillexchange.app.core.call.CallEngineStatus
+import com.skillexchange.app.core.call.InternalCallAuth
 import com.skillexchange.app.core.network.ApiException
 import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.domain.model.call.CallType
@@ -413,7 +414,20 @@ class CallViewModel(
                 return@launch
             }
 
-            // 2. Lấy token phòng cuộc gọi từ server
+            // 2. Sử dụng lại token đã join & xác nhận kết nối nếu có, tránh gọi đúp joinCall + notifyConnected
+            val cachedToken = InternalCallAuth.consumeJoinedToken(sessionId)
+            if (cachedToken != null) {
+                _state.update {
+                    it.copy(
+                        sessionId = cachedToken.sessionId,
+                        uiStatus = CallUiStatus.RINGING
+                    )
+                }
+                callEngine.connect(cachedToken.url, cachedToken.roomName, cachedToken.token, isVideo)
+                return@launch
+            }
+
+            // Fallback: Lấy token phòng cuộc gọi từ server nếu chưa được cache trước đó
             val tokenResult = callRepository.joinCall(sessionId)
             tokenResult.fold(
                 onSuccess = { token ->

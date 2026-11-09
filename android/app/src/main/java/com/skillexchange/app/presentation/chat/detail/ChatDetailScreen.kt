@@ -1,12 +1,9 @@
 package com.skillexchange.app.presentation.chat.detail
 
-import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -105,7 +102,7 @@ fun ChatDetailScreen(
     viewModel: ChatDetailViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -153,13 +150,27 @@ fun ChatDetailScreen(
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        uri?.let { handleImageSelected(context, it, viewModel) }
+        uri?.let {
+            viewModel.onIntent(
+                ChatDetailIntent.SendImageUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = it
+                )
+            )
+        }
     }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { handlePdfSelected(context, it, viewModel) }
+        uri?.let {
+            viewModel.onIntent(
+                ChatDetailIntent.SendPdfUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = it
+                )
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -613,7 +624,9 @@ private fun MessageBubble(
                                         model = message.fileUrl,
                                         contentDescription = "Hình ảnh đính kèm",
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(180.dp)
                                     )
                                 }
                             } else {
@@ -768,63 +781,6 @@ private fun MessageBubble(
                 )
             }
         }
-    }
-}
-
-private fun handleImageSelected(context: Context, uri: Uri, viewModel: ChatDetailViewModel) {
-    try {
-        var fileName = "image_${System.currentTimeMillis()}.jpg"
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (cursor.moveToFirst() && nameIndex >= 0) {
-                fileName = cursor.getString(nameIndex) ?: fileName
-            }
-        }
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream.close()
-        if (bitmap != null) {
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-            val compressedBytes = outputStream.toByteArray()
-            val cleanFileName = if (fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".jpeg", ignoreCase = true)) fileName else "$fileName.jpg"
-            viewModel.onIntent(
-                ChatDetailIntent.SendAttachment(
-                    fileBytes = compressedBytes,
-                    fileName = cleanFileName.take(100),
-                    mimeType = "image/jpeg",
-                    isImage = true
-                )
-            )
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("ChatDetailScreen", "Lỗi nén hình ảnh: ${e.message}")
-    }
-}
-
-private fun handlePdfSelected(context: Context, uri: Uri, viewModel: ChatDetailViewModel) {
-    try {
-        var fileName = "document_${System.currentTimeMillis()}.pdf"
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (cursor.moveToFirst() && nameIndex >= 0) {
-                fileName = cursor.getString(nameIndex) ?: fileName
-            }
-        }
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return
-        val bytes = inputStream.readBytes()
-        inputStream.close()
-        val cleanFileName = if (fileName.endsWith(".pdf", ignoreCase = true)) fileName else "$fileName.pdf"
-        viewModel.onIntent(
-            ChatDetailIntent.SendAttachment(
-                fileBytes = bytes,
-                fileName = cleanFileName.take(100),
-                mimeType = "application/pdf",
-                isImage = false
-            )
-        )
-    } catch (e: Exception) {
-        android.util.Log.e("ChatDetailScreen", "Lỗi đọc tệp PDF: ${e.message}")
     }
 }
 

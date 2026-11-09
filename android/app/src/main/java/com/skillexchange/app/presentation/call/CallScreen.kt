@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,15 +38,31 @@ import com.skillexchange.app.domain.model.call.CallUiStatus
 import com.skillexchange.app.presentation.call.components.VideoTrackView
 import org.koin.androidx.compose.koinViewModel
 
+private val CALL_BACKGROUND_BRUSH = Brush.verticalGradient(
+    colors = listOf(
+        Color(0xFF0F172A),
+        Color(0xFF1E293B),
+        Color(0xFF0F172A)
+    )
+)
+
+private val CALL_VIDEO_OVERLAY_BRUSH = Brush.verticalGradient(
+    colors = listOf(
+        Color(0xB30F172A),
+        Color.Transparent,
+        Color(0xCC0F172A)
+    )
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallScreen(
     onNavigateBack: () -> Unit,
     viewModel: CallViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
-    val localVideoTrack by viewModel.localVideoTrack.collectAsState()
-    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val localVideoTrack by viewModel.localVideoTrack.collectAsStateWithLifecycle()
+    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
@@ -136,15 +153,7 @@ fun CallScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF0F172A),
-                            Color(0xFF1E293B),
-                            Color(0xFF0F172A)
-                        )
-                    )
-                )
+                .background(CALL_BACKGROUND_BRUSH)
         ) {
             // Khi là cuộc gọi video và đang kết nối: hiển thị video đối tác toàn màn hình (nếu có track)
             if (state.isVideo && state.uiStatus == CallUiStatus.CONNECTED && remoteVideoTrack != null) {
@@ -157,15 +166,7 @@ fun CallScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xB30F172A),
-                                    Color.Transparent,
-                                    Color(0xCC0F172A)
-                                )
-                            )
-                        )
+                        .background(CALL_VIDEO_OVERLAY_BRUSH)
                 )
             }
 

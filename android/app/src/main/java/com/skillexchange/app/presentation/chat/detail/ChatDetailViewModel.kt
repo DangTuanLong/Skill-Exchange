@@ -1,5 +1,10 @@
 package com.skillexchange.app.presentation.chat.detail
 
+import android.content.ContentResolver
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -21,6 +26,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 data class ChatDetailState(
     val isLoading: Boolean = true,
@@ -66,6 +73,14 @@ sealed interface ChatDetailIntent {
         val mimeType: String,
         val isImage: Boolean
     ) : ChatDetailIntent
+    data class SendImageUri(
+        val contentResolver: ContentResolver,
+        val uri: Uri
+    ) : ChatDetailIntent
+    data class SendPdfUri(
+        val contentResolver: ContentResolver,
+        val uri: Uri
+    ) : ChatDetailIntent
     data class ResendMessage(val messageId: String) : ChatDetailIntent
     data class CallAgain(val isVideo: Boolean) : ChatDetailIntent
     data object NavigateToBookingDetail : ChatDetailIntent
@@ -83,11 +98,13 @@ class ChatDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val chatRepository: IChatRepository,
     private val tokenManager: TokenManager,
-    private val exchangeRepository: IExchangeRepository
+    private val exchangeRepository: IExchangeRepository,
+    private val applicationScope: CoroutineScope? = null
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "ChatDetailViewModel"
+        private const val MAX_IMAGE_DIMENSION = 1920
     }
 
     val chatId: String = checkNotNull(savedStateHandle["chatId"])
@@ -159,6 +176,12 @@ class ChatDetailViewModel(
             }
             is ChatDetailIntent.SendAttachment -> {
                 sendAttachment(intent.fileBytes, intent.fileName, intent.mimeType, intent.isImage)
+            }
+            is ChatDetailIntent.SendImageUri -> {
+                sendImageFromUri(intent.contentResolver, intent.uri)
+            }
+            is ChatDetailIntent.SendPdfUri -> {
+                sendPdfFromUri(intent.contentResolver, intent.uri)
             }
             is ChatDetailIntent.ResendMessage -> {
                 resendMessage(intent.messageId)
@@ -543,12 +566,127 @@ class ChatDetailViewModel(
         }
     }
 
+    private fun sendImageFromUri(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                try {
+                    var fileName = "image_${System.currentTimeMillis()}.jpg"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (cursor.moveToFirst() && nameIndex >= 0) {
+                            fileName = cursor.getString(nameIndex) ?: fileName
+                        }
+                    }
+
+                    val boundsOptions = BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, boundsOptions)
+                    } ?: return@withContext null
+
+                    val decodeOptions = BitmapFactory.Options().apply {
+                        inSampleSize = calculateInSampleSize(boundsOptions, MAX_IMAGE_DIMENSION)
+                    }
+                    val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, decodeOptions)
+                    } ?: return@withContext null
+
+                    val compressedBytes = try {
+                        val outputStream = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+                        outputStream.toByteArray()
+                    } finally {
+                        bitmap.recycle()
+                    }
+
+                    val cleanFileName = if (
+                        fileName.endsWith(".jpg", ignoreCase = true) ||
+                        fileName.endsWith(".jpeg", ignoreCase = true)
+                    ) {
+                        fileName
+                    } else {
+                        "$fileName.jpg"
+                    }
+                    Pair(compressedBytes, cleanFileName.take(100))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Lỗi nén hình ảnh: ${e.message}")
+                    null
+                }
+            }
+
+            if (payload != null) {
+                sendAttachment(
+                    fileBytes = payload.first,
+                    fileName = payload.second,
+                    mimeType = "image/jpeg",
+                    isImage = true
+                )
+            } else {
+                _effect.send(ChatDetailEffect.ShowSnackbar("Không thể đọc hoặc xử lý hình ảnh đã chọn"))
+            }
+        }
+    }
+
+    private fun sendPdfFromUri(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                try {
+                    var fileName = "document_${System.currentTimeMillis()}.pdf"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (cursor.moveToFirst() && nameIndex >= 0) {
+                            fileName = cursor.getString(nameIndex) ?: fileName
+                        }
+                    }
+                    val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.readBytes()
+                    } ?: return@withContext null
+                    val cleanFileName = if (fileName.endsWith(".pdf", ignoreCase = true)) {
+                        fileName
+                    } else {
+                        "$fileName.pdf"
+                    }
+                    Pair(bytes, cleanFileName.take(100))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Lỗi đọc tệp PDF: ${e.message}")
+                    null
+                }
+            }
+
+            if (payload != null) {
+                sendAttachment(
+                    fileBytes = payload.first,
+                    fileName = payload.second,
+                    mimeType = "application/pdf",
+                    isImage = false
+                )
+            } else {
+                _effect.send(ChatDetailEffect.ShowSnackbar("Không thể đọc tệp PDF đã chọn"))
+            }
+        }
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, maxDimension: Int): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+        if (height > maxDimension || width > maxDimension) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while ((halfHeight / inSampleSize) >= maxDimension || (halfWidth / inSampleSize) >= maxDimension) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
     override fun onCleared() {
         super.onCleared()
         typingDebounceJob?.cancel()
         if (isCurrentlyTypingLocally) {
             isCurrentlyTypingLocally = false
-            CoroutineScope(Dispatchers.IO).launch {
+            (applicationScope ?: CoroutineScope(Dispatchers.IO)).launch(Dispatchers.IO) {
                 chatRepository.setTypingStatus(chatId, false)
             }
         }

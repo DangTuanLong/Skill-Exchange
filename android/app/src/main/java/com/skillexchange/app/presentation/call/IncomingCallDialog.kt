@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +42,7 @@ fun IncomingCallHost(
     inAppCallManager: InAppCallManager,
     onCallAccepted: (IncomingCallData) -> Unit
 ) {
-    val incomingCallState by inAppCallManager.incomingCall.collectAsState()
+    val incomingCallState by inAppCallManager.incomingCall.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
 
