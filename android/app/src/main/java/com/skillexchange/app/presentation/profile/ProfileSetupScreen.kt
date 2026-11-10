@@ -466,14 +466,14 @@ fun ProfileSetupScreen(
                         OutlinedButton(
                             onClick = {
                                 focusManager.clearFocus()
-                                viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                                if (state.isProcessingOcr) {
+                                    viewModel.onIntent(ProfileIntent.CancelOcr)
+                                } else {
+                                    viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                                }
                             },
-                            enabled = !state.isProcessingOcr,
                             shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (!state.isProcessingOcr) Brand500 else Color(0xFFCBD5E1)
-                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Brand500),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             if (state.isProcessingOcr) {
@@ -483,7 +483,7 @@ fun ProfileSetupScreen(
                                     color = Brand500
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Đang quét...", fontSize = 13.sp, color = Brand500)
+                                Text("Đang quét (Hủy)", fontSize = 13.sp, color = Brand500)
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
@@ -882,24 +882,47 @@ fun ProfileSetupScreen(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Gợi ý AI", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        if (state.isExtractingSkills) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đang xử lý...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Gợi ý AI", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
                     }
 
                     OutlinedButton(
                         onClick = {
                             focusManager.clearFocus()
-                            viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                            if (state.isProcessingOcr) {
+                                viewModel.onIntent(ProfileIntent.CancelOcr)
+                            } else {
+                                viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                            }
                         },
-                        enabled = !state.isProcessingOcr,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        if (state.isProcessingOcr) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Hủy quét", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
                     }
 
                     OutlinedButton(
@@ -912,9 +935,19 @@ fun ProfileSetupScreen(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        Icon(Icons.Default.UploadFile, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Tài liệu", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        if (state.isExtractingDocument) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đang tải...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.UploadFile, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Tài liệu", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
@@ -1035,9 +1068,21 @@ fun ProfileSetupScreen(
         }
     }
 
+    ProfileExtractionDialogsAndSheet(
+        state = state,
+        onIntent = viewModel::onIntent
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ProfileExtractionDialogsAndSheet(
+    state: ProfileUiState,
+    onIntent: (ProfileIntent) -> Unit
+) {
     if (state.showSkillExtractionSheet) {
         ModalBottomSheet(
-            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) },
+            onDismissRequest = { onIntent(ProfileIntent.DismissSkillExtractionSheet) },
             containerColor = Color.White,
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
@@ -1065,8 +1110,27 @@ fun ProfileSetupScreen(
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         )
                     }
-                    IconButton(onClick = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) }) {
+                    IconButton(onClick = { onIntent(ProfileIntent.DismissSkillExtractionSheet) }) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng", tint = Color(0xFF64748B))
+                    }
+                }
+
+                if (!state.extractionWarning.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFFFBEB))
+                            .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = state.extractionWarning,
+                            fontSize = 12.sp,
+                            color = Color(0xFFB45309),
+                            lineHeight = 16.sp
+                        )
                     }
                 }
 
@@ -1110,7 +1174,7 @@ fun ProfileSetupScreen(
                             ) {
                                 Checkbox(
                                     checked = item.isSelected,
-                                    onCheckedChange = { viewModel.onIntent(ProfileIntent.ToggleExtractedSkillSelection(item.skill.skillId)) },
+                                    onCheckedChange = { onIntent(ProfileIntent.ToggleExtractedSkillSelection(item.skill.skillId)) },
                                     enabled = !item.isAlreadyAdded,
                                     colors = CheckboxDefaults.colors(checkedColor = Brand500)
                                 )
@@ -1199,7 +1263,7 @@ fun ProfileSetupScreen(
                                                             .clip(CircleShape)
                                                             .background(if (isLvlSelected) Brand500 else Color(0xFFF1F5F9))
                                                             .clickable {
-                                                                viewModel.onIntent(ProfileIntent.SetExtractedSkillLevel(item.skill.skillId, lvl))
+                                                                onIntent(ProfileIntent.SetExtractedSkillLevel(item.skill.skillId, lvl))
                                                             },
                                                         contentAlignment = Alignment.Center
                                                     ) {
@@ -1227,7 +1291,7 @@ fun ProfileSetupScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { viewModel.onIntent(ProfileIntent.DismissSkillExtractionSheet) },
+                        onClick = { onIntent(ProfileIntent.DismissSkillExtractionSheet) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -1235,7 +1299,7 @@ fun ProfileSetupScreen(
                     }
 
                     Button(
-                        onClick = { viewModel.onIntent(ProfileIntent.ConfirmAddExtractedSkills) },
+                        onClick = { onIntent(ProfileIntent.ConfirmAddExtractedSkills) },
                         modifier = Modifier.weight(1.5f),
                         enabled = toAddCount > 0,
                         shape = RoundedCornerShape(12.dp),
@@ -1256,7 +1320,7 @@ fun ProfileSetupScreen(
 
     if (state.showDocumentPrivacyDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog) },
+            onDismissRequest = { onIntent(ProfileIntent.DismissDocumentPrivacyDialog) },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -1276,7 +1340,7 @@ fun ProfileSetupScreen(
             },
             text = {
                 Text(
-                    text = "Tệp của bạn sẽ được gửi lên máy chủ để đọc trong bộ nhớ và trích xuất từ khóa kỹ năng. Hệ thống cam kết không lưu trữ tệp, không ghi log nội dung cá nhân và dữ liệu sẽ tự động hủy ngay sau khi xử lý.",
+                    text = "Tệp của bạn (.txt, .md, .pdf) sẽ được gửi lên máy chủ để đọc trong bộ nhớ và trích xuất từ khóa kỹ năng. Hệ thống cam kết không lưu trữ tệp, không ghi log nội dung cá nhân và dữ liệu sẽ tự động hủy ngay sau khi xử lý.",
                     fontSize = 14.sp,
                     color = TextSecondaryLight,
                     lineHeight = 20.sp
@@ -1284,7 +1348,7 @@ fun ProfileSetupScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog) },
+                    onClick = { onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog) },
                     colors = ButtonDefaults.buttonColors(containerColor = Brand500),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -1293,7 +1357,7 @@ fun ProfileSetupScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog) }
+                    onClick = { onIntent(ProfileIntent.DismissDocumentPrivacyDialog) }
                 ) {
                     Text("Hủy", color = Color(0xFF64748B))
                 }
@@ -1303,7 +1367,7 @@ fun ProfileSetupScreen(
 
     if (state.showOcrPrivacyDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog) },
+            onDismissRequest = { onIntent(ProfileIntent.DismissOcrPrivacyDialog) },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -1331,7 +1395,7 @@ fun ProfileSetupScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.onIntent(ProfileIntent.ConfirmOcrPrivacyDialog) },
+                    onClick = { onIntent(ProfileIntent.ConfirmOcrPrivacyDialog) },
                     colors = ButtonDefaults.buttonColors(containerColor = Brand500),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -1340,7 +1404,7 @@ fun ProfileSetupScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog) }
+                    onClick = { onIntent(ProfileIntent.DismissOcrPrivacyDialog) }
                 ) {
                     Text("Hủy", color = Color(0xFF64748B))
                 }
@@ -1350,7 +1414,7 @@ fun ProfileSetupScreen(
 
     if (state.showOcrPreviewDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.onIntent(ProfileIntent.DismissOcrPreviewDialog) },
+            onDismissRequest = { onIntent(ProfileIntent.DismissOcrPreviewDialog) },
             title = {
                 Column {
                     Text(
@@ -1375,7 +1439,7 @@ fun ProfileSetupScreen(
                 ) {
                     OutlinedTextField(
                         value = state.ocrRecognizedText,
-                        onValueChange = { viewModel.onIntent(ProfileIntent.OcrTextChanged(it)) },
+                        onValueChange = { onIntent(ProfileIntent.OcrTextChanged(it)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = false),
@@ -1416,7 +1480,7 @@ fun ProfileSetupScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.onIntent(ProfileIntent.SubmitOcrText) },
+                    onClick = { onIntent(ProfileIntent.SubmitOcrText) },
                     enabled = state.ocrRecognizedText.isNotBlank() && state.ocrTextError == null,
                     colors = ButtonDefaults.buttonColors(containerColor = Brand500),
                     shape = RoundedCornerShape(10.dp)
@@ -1426,7 +1490,7 @@ fun ProfileSetupScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { viewModel.onIntent(ProfileIntent.DismissOcrPreviewDialog) }
+                    onClick = { onIntent(ProfileIntent.DismissOcrPreviewDialog) }
                 ) {
                     Text("Hủy", color = Color(0xFF64748B))
                 }

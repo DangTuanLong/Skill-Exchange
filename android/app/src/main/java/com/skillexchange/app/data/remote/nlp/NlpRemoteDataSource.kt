@@ -27,7 +27,7 @@ class NlpRemoteDataSource(private val httpClient: HttpClient) {
         accessToken: String,
         fileBytes: ByteArray,
         fileName: String,
-        mimeType: String = "text/plain"
+        mimeType: String = inferMimeType(fileName)
     ): ExtractSkillsResponse =
         httpClient.submitFormWithBinaryData(
             url = "${Constants.BASE_URL}/api/nlp/extract-skills-document",
@@ -40,4 +40,15 @@ class NlpRemoteDataSource(private val httpClient: HttpClient) {
         ) {
             header(HttpHeaders.Authorization, "Bearer $accessToken")
         }.body()
+
+    companion object {
+        fun inferMimeType(fileName: String): String {
+            val lower = fileName.lowercase()
+            return when {
+                lower.endsWith(".pdf") -> "application/pdf"
+                lower.endsWith(".md") -> "text/markdown"
+                else -> "text/plain"
+            }
+        }
+    }
 }

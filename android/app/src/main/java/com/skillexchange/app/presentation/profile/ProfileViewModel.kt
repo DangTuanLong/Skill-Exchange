@@ -47,6 +47,7 @@ data class ProfileUiState(
     val isExtractingSkills: Boolean = false,
     val showSkillExtractionSheet: Boolean = false,
     val extractedSkills: List<ExtractedSkillItem> = emptyList(),
+    val extractionWarning: String? = null,
     val showDocumentPrivacyDialog: Boolean = false,
     val isExtractingDocument: Boolean = false,
     // OCR Image Scanning (TASK-043 Mức 3)
@@ -158,7 +159,7 @@ class ProfileViewModel(
             is ProfileIntent.GoToSkillStep    -> _state.update { it.copy(step = ProfileStep.SKILL_SELECTION) }
             is ProfileIntent.GoToDone         -> _state.update { it.copy(step = ProfileStep.DONE) }
             is ProfileIntent.RequestSkillExtraction -> requestSkillExtraction()
-            is ProfileIntent.DismissSkillExtractionSheet -> _state.update { it.copy(showSkillExtractionSheet = false) }
+            is ProfileIntent.DismissSkillExtractionSheet -> _state.update { it.copy(showSkillExtractionSheet = false, extractionWarning = null) }
             is ProfileIntent.ToggleExtractedSkillSelection -> toggleExtractedSkillSelection(intent.skillId)
             is ProfileIntent.SetExtractedSkillLevel -> setExtractedSkillLevel(intent.skillId, intent.level)
             is ProfileIntent.ConfirmAddExtractedSkills -> confirmAddExtractedSkills()
@@ -185,11 +186,45 @@ class ProfileViewModel(
     }
 
 
+    private fun readBytesBounded(stream: java.io.InputStream, maxBytes: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = stream.read(buffer)
+            if (read == -1) break
+            total += read
+            out.write(buffer, 0, read)
+            if (total > maxBytes) {
+                break
+            }
+        }
+        return out.toByteArray()
+    }
+
     private fun uploadAvatarFromUri(contentResolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
+            val maxBytes = 2 * 1024 * 1024
+            var declaredSize: Long? = null
+            withContext(Dispatchers.IO) {
+                try {
+                    contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                        val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (sizeIdx != -1 && cursor.moveToFirst() && !cursor.isNull(sizeIdx)) {
+                            declaredSize = cursor.getLong(sizeIdx)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+            if (declaredSize != null && declaredSize!! > maxBytes) {
+                _effect.send(ProfileEffect.ShowSnackbar("Kích thước ảnh vượt quá giới hạn 2MB"))
+                return@launch
+            }
+
             val payload = withContext(Dispatchers.IO) {
                 try {
-                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
+                    val bytes = contentResolver.openInputStream(uri)?.use { readBytesBounded(it, maxBytes) }
+                        ?: return@withContext null
                     val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
                     val ext = when {
                         mimeType.contains("png") -> "png"
@@ -211,23 +246,55 @@ class ProfileViewModel(
 
     private fun uploadDocumentFromUri(contentResolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
-            val payload = withContext(Dispatchers.IO) {
+            val maxBytes = 2 * 1024 * 1024
+            var fileName = "document.txt"
+            var declaredSize: Long? = null
+            withContext(Dispatchers.IO) {
                 try {
-                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
-                    var fileName = "document.txt"
-                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        if (nameIndex != -1 && cursor.moveToFirst()) {
-                            fileName = cursor.getString(nameIndex) ?: fileName
+                    contentResolver.query(
+                        uri,
+                        arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                        null,
+                        null,
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1 && !cursor.isNull(nameIndex)) {
+                                fileName = cursor.getString(nameIndex) ?: fileName
+                            }
+                            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                                declaredSize = cursor.getLong(sizeIndex)
+                            }
                         }
                     }
-                    Pair(bytes, fileName)
+                } catch (_: Exception) {}
+            }
+
+            val lowerName = fileName.lowercase()
+            if (lowerName.endsWith(".zip")) {
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+                return@launch
+            }
+            if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md") && !lowerName.endsWith(".pdf")) {
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+                return@launch
+            }
+            if (declaredSize != null && declaredSize!! > maxBytes) {
+                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn 2MB."))
+                return@launch
+            }
+
+            val bytes = withContext(Dispatchers.IO) {
+                try {
+                    contentResolver.openInputStream(uri)?.use { readBytesBounded(it, maxBytes) }
                 } catch (_: Exception) {
                     null
                 }
             }
-            if (payload != null) {
-                uploadDocument(payload.first, payload.second)
+            if (bytes != null) {
+                uploadDocument(bytes, fileName)
             } else {
                 _effect.send(ProfileEffect.ShowSnackbar("Không thể đọc tài liệu đã chọn"))
             }
@@ -457,7 +524,13 @@ class ProfileViewModel(
                                 isAlreadyAdded = alreadyHas
                             )
                         }
-                        _state.update { it.copy(extractedSkills = items, showSkillExtractionSheet = true) }
+                        _state.update {
+                            it.copy(
+                                extractedSkills = items,
+                                extractionWarning = null,
+                                showSkillExtractionSheet = true
+                            )
+                        }
                     }
                 }
                 .onFailure { e ->
@@ -492,7 +565,7 @@ class ProfileViewModel(
     private fun confirmAddExtractedSkills() {
         val toAdd = _state.value.extractedSkills.filter { it.isSelected && !it.isAlreadyAdded }
         if (toAdd.isEmpty()) {
-            _state.update { it.copy(showSkillExtractionSheet = false) }
+            _state.update { it.copy(showSkillExtractionSheet = false, extractionWarning = null) }
             viewModelScope.launch {
                 _effect.send(ProfileEffect.ShowSnackbar("Không có kỹ năng mới nào được chọn để thêm."))
             }
@@ -500,7 +573,7 @@ class ProfileViewModel(
         }
 
         viewModelScope.launch {
-            _state.update { it.copy(showSkillExtractionSheet = false, isLoading = true) }
+            _state.update { it.copy(showSkillExtractionSheet = false, extractionWarning = null, isLoading = true) }
             var successCount = 0
             for (item in toAdd) {
                 skillRepo.addUserSkill(item.skill.skillId, "HAVE", item.level, null)
@@ -521,13 +594,13 @@ class ProfileViewModel(
         val lowerName = fileName.lowercase()
         if (lowerName.endsWith(".zip")) {
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt và .md."))
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
             }
             return
         }
-        if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md")) {
+        if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md") && !lowerName.endsWith(".pdf")) {
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt và .md."))
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
             }
             return
         }
@@ -554,8 +627,9 @@ class ProfileViewModel(
 
         viewModelScope.launch {
             _state.update { it.copy(isExtractingDocument = true) }
-            nlp.extractSkillsFromDocument(fileBytes, fileName)
-                .onSuccess { extracted ->
+            nlp.extractSkillsFromDocumentWithWarning(fileBytes, fileName)
+                .onSuccess { docResult ->
+                    val extracted = docResult.skills
                     _state.update { it.copy(isExtractingDocument = false) }
                     if (extracted.isEmpty()) {
                         _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong tài liệu."))
@@ -574,7 +648,13 @@ class ProfileViewModel(
                                 isAlreadyAdded = alreadyHas
                             )
                         }
-                        _state.update { it.copy(extractedSkills = items, showSkillExtractionSheet = true) }
+                        _state.update {
+                            it.copy(
+                                extractedSkills = items,
+                                extractionWarning = docResult.warning,
+                                showSkillExtractionSheet = true
+                            )
+                        }
                     }
                 }
                 .onFailure { e ->
@@ -668,8 +748,9 @@ class ProfileViewModel(
         _state.update { it.copy(showOcrPreviewDialog = false, isExtractingDocument = true) }
         viewModelScope.launch {
             val fileBytes = text.toByteArray(Charsets.UTF_8)
-            nlp.extractSkillsFromDocument(fileBytes, "ocr_text.txt")
-                .onSuccess { extracted ->
+            nlp.extractSkillsFromDocumentWithWarning(fileBytes, "ocr_text.txt")
+                .onSuccess { docResult ->
+                    val extracted = docResult.skills
                     _state.update { it.copy(isExtractingDocument = false) }
                     if (extracted.isEmpty()) {
                         _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong văn bản OCR."))
@@ -688,7 +769,13 @@ class ProfileViewModel(
                                 isAlreadyAdded = alreadyHas
                             )
                         }
-                        _state.update { it.copy(extractedSkills = items, showSkillExtractionSheet = true) }
+                        _state.update {
+                            it.copy(
+                                extractedSkills = items,
+                                extractionWarning = docResult.warning,
+                                showSkillExtractionSheet = true
+                            )
+                        }
                     }
                 }
                 .onFailure { e ->

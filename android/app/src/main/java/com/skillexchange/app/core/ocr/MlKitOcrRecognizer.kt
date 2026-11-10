@@ -3,7 +3,6 @@ package com.skillexchange.app.core.ocr
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
@@ -21,14 +20,21 @@ class MlKitOcrRecognizer(
     private val targetMaxDimension: Int = 1600
 ) : IOcrRecognizer {
 
+    private data class DecodedOcrBitmap(
+        val bitmap: Bitmap,
+        val rotationDegrees: Int
+    )
+
     override suspend fun recognizeText(imageUri: Uri): Result<String> = withContext(Dispatchers.Default) {
         var bitmap: Bitmap? = null
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
-            bitmap = decodeAndDownscaleBitmap(context, imageUri, targetMaxDimension)
-                ?: return@withContext Result.failure(IllegalArgumentException("Không thể đọc hoặc giải mã hình ảnh."))
+            val decoded = withContext(Dispatchers.IO) {
+                decodeAndDownscaleBitmap(context, imageUri, targetMaxDimension)
+            } ?: return@withContext Result.failure(IllegalArgumentException("Không thể đọc hoặc giải mã hình ảnh."))
 
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
+            bitmap = decoded.bitmap
+            val inputImage = InputImage.fromBitmap(bitmap, decoded.rotationDegrees)
 
             val visionText = suspendCancellableCoroutine<Text> { continuation ->
                 val task = recognizer.process(inputImage)
@@ -47,7 +53,7 @@ class MlKitOcrRecognizer(
                 }
             }
 
-            val text = visionText.text.trim()
+            val text = extractOrderedText(visionText)
             if (text.isEmpty()) {
                 Result.failure(IllegalStateException("Không nhận dạng được văn bản nào từ hình ảnh."))
             } else {
@@ -63,7 +69,25 @@ class MlKitOcrRecognizer(
         }
     }
 
-    private fun decodeAndDownscaleBitmap(context: Context, uri: Uri, targetMaxDimension: Int): Bitmap? {
+    private fun extractOrderedText(visionText: Text): String {
+        val blocks = visionText.textBlocks
+        if (blocks.size <= 1 || blocks.any { it.boundingBox == null }) {
+            return visionText.text.trim()
+        }
+        return blocks
+            .sortedWith(
+                compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / 24 }
+                    .thenBy { it.boundingBox?.left ?: 0 }
+            )
+            .joinToString("\n") { it.text.trim() }
+            .trim()
+    }
+
+    private fun decodeAndDownscaleBitmap(
+        context: Context,
+        uri: Uri,
+        targetMaxDimension: Int
+    ): DecodedOcrBitmap? {
         // 1st pass: Decode bounds only
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -120,18 +144,9 @@ class MlKitOcrRecognizer(
             }
         }
 
-        // Handle EXIF orientation rotation
+        // Read EXIF orientation rotation and let ML Kit InputImage handle rotation without copying pixels
         val rotation = getRotationDegrees(context, uri)
-        if (rotation != 0) {
-            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            if (rotated != bitmap) {
-                bitmap.recycle()
-                bitmap = rotated
-            }
-        }
-
-        return bitmap
+        return DecodedOcrBitmap(bitmap = bitmap, rotationDegrees = rotation)
     }
 
     private fun getRotationDegrees(context: Context, uri: Uri): Int {
@@ -139,9 +154,9 @@ class MlKitOcrRecognizer(
             openStream(context, uri)?.use { stream ->
                 val exif = ExifInterface(stream)
                 when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-                    ExifInterface.ORIENTATION_ROTATE_90 -> 90
-                    ExifInterface.ORIENTATION_ROTATE_180 -> 180
-                    ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                    ExifInterface.ORIENTATION_ROTATE_90, ExifInterface.ORIENTATION_TRANSPOSE -> 90
+                    ExifInterface.ORIENTATION_ROTATE_180, ExifInterface.ORIENTATION_FLIP_VERTICAL -> 180
+                    ExifInterface.ORIENTATION_ROTATE_270, ExifInterface.ORIENTATION_TRANSVERSE -> 270
                     else -> 0
                 }
             } ?: 0

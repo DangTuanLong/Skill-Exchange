@@ -22,7 +22,8 @@ class SkillExtractionService(
     @Volatile
     private var cachedSkills: List<SkillDefinition>? = null
     private var lastCacheTime: Long = 0
-    private val CACHE_TTL_MS = 60_000L // 1 phút
+    private val CACHE_TTL_MS = 600_000L // 10 phút
+    private val regexCache = ConcurrentHashMap<String, Regex>()
 
     /**
      * Tự nạp kỹ năng từ DB hoặc từ provider được cấu hình.
@@ -76,9 +77,9 @@ class SkillExtractionService(
      */
     fun normalizeDocumentText(text: String): String {
         var normalized = normalizeNfc(text)
-        normalized = normalized.replace(Regex("[\u00A0\u200B\u2000-\u200A\uFEFF]"), " ")
-        normalized = normalized.replace(Regex("(\\p{L}+)-\\s*\\r?\\n\\s*(\\p{L}+)"), "$1$2")
-        normalized = normalized.replace(Regex("^[ \t]*[•▪▫–—*+][ \t]*", RegexOption.MULTILINE), "- ")
+        normalized = normalized.replace(UNICODE_SPACE_REGEX, " ")
+        normalized = normalized.replace(HYPHENATION_REGEX, "$1$2")
+        normalized = normalized.replace(BULLET_REGEX, "- ")
         return normalized
     }
 
@@ -122,6 +123,11 @@ class SkillExtractionService(
     )
 
     companion object {
+        private val UNICODE_SPACE_REGEX = Regex("[\u00A0\u200B\u2000-\u200A\uFEFF]")
+        private val HYPHENATION_REGEX = Regex("(\\p{L}+)-\\s*\\r?\\n\\s*(\\p{L}+)")
+        private val BULLET_REGEX = Regex("^[ \t]*[•▪▫–—*+][ \t]*", RegexOption.MULTILINE)
+        private val TRONG_ACCENTED_REGEX = Regex("(?<![\\p{L}\\p{N}])[Tt]rống(?![\\p{L}\\p{N}])")
+        private val WORD_TOKEN_REGEX = Regex("[\\p{L}\\p{N}]+")
         private val CLAUSE_DELIMITERS = charArrayOf(',', ';', '.', '!', '?', '\n', '\r', '—', '–')
 
         private val SECTION_HEADER_PATTERNS = listOf(
@@ -365,13 +371,15 @@ class SkillExtractionService(
      */
     fun buildWordBoundaryRegex(rawTerm: String): Regex {
         val normalized = rawTerm.trim().lowercase()
-        return when (normalized) {
-            "c" -> Regex("(?<![\\p{L}\\p{N}])c(?![\\p{L}\\p{N}+#])", RegexOption.IGNORE_CASE)
-            "c++", "cpp" -> Regex("(?<![\\p{L}\\p{N}])(?:c\\+\\+|cpp)(?![\\p{L}\\p{N}+])", RegexOption.IGNORE_CASE)
-            "c#", "csharp" -> Regex("(?<![\\p{L}\\p{N}])(?:c#|csharp)(?![\\p{L}\\p{N}#])", RegexOption.IGNORE_CASE)
-            else -> {
-                val escaped = Regex.escape(normalized)
-                Regex("(?<![\\p{L}\\p{N}])$escaped(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
+        return regexCache.getOrPut(normalized) {
+            when (normalized) {
+                "c" -> Regex("(?<![\\p{L}\\p{N}])c(?![\\p{L}\\p{N}+#])", RegexOption.IGNORE_CASE)
+                "c++", "cpp" -> Regex("(?<![\\p{L}\\p{N}])(?:c\\+\\+|cpp)(?![\\p{L}\\p{N}+])", RegexOption.IGNORE_CASE)
+                "c#", "csharp" -> Regex("(?<![\\p{L}\\p{N}])(?:c#|csharp)(?![\\p{L}\\p{N}#])", RegexOption.IGNORE_CASE)
+                else -> {
+                    val escaped = Regex.escape(normalized)
+                    Regex("(?<![\\p{L}\\p{N}])$escaped(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
+                }
             }
         }
     }
@@ -401,8 +409,7 @@ class SkillExtractionService(
             // Để exact match "Trống", văn bản có dấu phải thực sự chứa "trống"/"Trống".
             // Nếu là văn bản không dấu, "trống" phải đi qua Alias match ("danh trong", "choi trong", "bo trong", "trong jazz").
             if (skill.name == "Trống") {
-                val accentedRegex = Regex("(?<![\\p{L}\\p{N}])[Tt]rống(?![\\p{L}\\p{N}])")
-                val matches = accentedRegex.findAll(nfcText).toList()
+                val matches = TRONG_ACCENTED_REGEX.findAll(nfcText).toList()
                 if (matches.isNotEmpty()) {
                     val hasHaveMatch = matches.any { match ->
                         !isInsideOrganizationName(unaccentedBio, match.range.first) &&
@@ -516,10 +523,11 @@ class SkillExtractionService(
         }
 
         // 3. TẦNG 3: FUZZY MATCH CHO TỪ ĐƠN >= 5 KÝ TỰ, LEVENSHTEIN <= 1 (Confidence: 0.75)
-        // Lấy tất cả các từ trong unaccentedBio
-        val bioTokens = unaccentedBio
-            .split("[^\\p{L}\\p{N}]+".toRegex())
-            .filter { it.length >= 5 }
+        // Lấy tất cả các từ >= 5 ký tự trong unaccentedBio kèm đúng vị trí xuất hiện thực tế (offset)
+        val bioTokensWithOffset = WORD_TOKEN_REGEX.findAll(unaccentedBio)
+            .filter { it.value.length >= 5 }
+            .map { it.value to it.range.first }
+            .toList()
 
         // Tập các từ mục tiêu để fuzzy match (từ đơn >= 5 ký tự)
         val singleWordTargets = mutableListOf<Pair<String, SkillDefinition>>()
@@ -539,7 +547,7 @@ class SkillExtractionService(
             }
         }
 
-        for (token in bioTokens) {
+        for ((token, tokenIndex) in bioTokensWithOffset) {
             for ((targetWord, skill) in singleWordTargets) {
                 // Bỏ qua các từ mục tiêu bị loại trừ (trùng giới từ phổ biến)
                 if (targetWord in FUZZY_EXCLUDED_TARGETS) continue
@@ -552,14 +560,11 @@ class SkillExtractionService(
                 if (Math.abs(token.length - targetWord.length) <= 1) {
                     val dist = damerauLevenshteinDistance(token, targetWord)
                     if (dist == 1) { // dist == 0 đã được xử lý ở Tầng 1/2
-                        val tokenIndex = unaccentedBio.indexOf(token)
-                        val isHave = if (tokenIndex != -1) {
-                            !isInsideOrganizationName(unaccentedBio, tokenIndex) &&
-                                determineIntentAt(unaccentedBio, tokenIndex, sections) == MatchIntent.HAVE
-                        } else true
+                        val isHave = !isInsideOrganizationName(unaccentedBio, tokenIndex) &&
+                            determineIntentAt(unaccentedBio, tokenIndex, sections) == MatchIntent.HAVE
 
                         if (isHave) {
-                            val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, listOf(tokenIndex.coerceAtLeast(0)))
+                            val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, listOf(tokenIndex))
                             resultMap[skill.id] = ExtractedSkillDto(
                                 skillId = skill.id,
                                 skillName = skill.name,

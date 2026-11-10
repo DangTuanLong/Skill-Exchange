@@ -1,5 +1,9 @@
 package com.skillexchange.app.presentation.profile
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,8 +14,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -20,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,12 +48,40 @@ fun SkillSelectionScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.onIntent(
+                ProfileIntent.UploadDocumentUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = uri
+                )
+            )
+        }
+    }
+
+    val ocrImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.onIntent(ProfileIntent.ProcessOcrImage(uri))
+        }
+    }
 
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
-                is ProfileEffect.ShowSnackbar   -> snackbarHostState.showSnackbar(effect.message)
-                is ProfileEffect.NavigateToHome -> onNavigateToHome()
+                is ProfileEffect.ShowSnackbar       -> snackbarHostState.showSnackbar(effect.message)
+                is ProfileEffect.NavigateToHome     -> onNavigateToHome()
+                is ProfileEffect.OpenDocumentPicker -> documentPickerLauncher.launch("*/*")
+                is ProfileEffect.OpenImagePicker    -> {
+                    ocrImagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                }
                 else -> {}
             }
         }
@@ -200,6 +236,85 @@ fun SkillSelectionScreen(
                 }
             }
 
+            // Smart AI / OCR / Document extraction row
+            item(key = "smart_extraction_row", contentType = "smart_extraction_row") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.onIntent(ProfileIntent.RequestSkillExtraction) },
+                        enabled = !state.isExtractingSkills,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        if (state.isExtractingSkills) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đang xử lý...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Gợi ý AI", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (state.isProcessingOcr) {
+                                viewModel.onIntent(ProfileIntent.CancelOcr)
+                            } else {
+                                viewModel.onIntent(ProfileIntent.RequestOcrScan)
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        if (state.isProcessingOcr) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Hủy quét", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.onIntent(ProfileIntent.RequestDocumentUpload) },
+                        enabled = !state.isExtractingDocument,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        if (state.isExtractingDocument) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Brand500
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đang tải...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(Icons.Default.UploadFile, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Tài liệu", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+
             // Category picker
             item(key = "category_picker", contentType = "category_picker") {
                 Text("Danh mục", fontSize = 14.sp, color = TextSecondaryLight, fontWeight = FontWeight.SemiBold)
@@ -291,6 +406,11 @@ fun SkillSelectionScreen(
             item(key = "bottom_spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
+
+    ProfileExtractionDialogsAndSheet(
+        state = state,
+        onIntent = viewModel::onIntent
+    )
 }
 
 private fun formatCategoryLabel(icon: String, name: String): String {

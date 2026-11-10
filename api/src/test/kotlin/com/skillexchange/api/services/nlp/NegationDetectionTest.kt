@@ -65,4 +65,15 @@ class NegationDetectionTest {
         assertEquals(SkillExtractionService.MatchIntent.WANT, extractor.determineIntentAt(text, guitarIndex))
         assertEquals(SkillExtractionService.MatchIntent.WANT, extractor.determineIntentAt(text, boiLoiIndex))
     }
+
+    @Test
+    fun `fuzzy match uses exact token offset instead of first substring indexOf`() {
+        // Từ đầu tiên "kotlntest" nằm trong mệnh đề phủ định và chứa chuỗi con "kotln";
+        // mệnh đề thứ hai sau dấu chấm phẩy khẳng định "thanh thao kotln" (fuzzy ~ kotlin -> Android (Kotlin)).
+        val text = "Chưa biết kotlntest; hiện tại đã thành thạo kotln 3 năm."
+        val extracted = extractor.extractSkills(text)
+        val kotlinSkill = extracted.find { it.skillName == "Android (Kotlin)" }
+        kotlin.test.assertNotNull(kotlinSkill)
+        assertEquals("FUZZY", kotlinSkill.matchType)
+    }
 }

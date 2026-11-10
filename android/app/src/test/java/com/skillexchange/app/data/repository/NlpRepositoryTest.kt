@@ -116,4 +116,37 @@ class NlpRepositoryTest {
         assertTrue(result.isFailure)
         assertEquals("Văn bản trong tài liệu vượt quá 10.000 ký tự", result.exceptionOrNull()?.message)
     }
+
+    @Test
+    fun extractSkillsFromDocumentWithWarning_PreservesWarningAndInfersPdfMimeType() = runTest {
+        val responseWithWarningJson = """
+        {
+            "success": true,
+            "data": [
+                {
+                    "skillId": 1,
+                    "skillName": "Kotlin",
+                    "categoryId": 1,
+                    "categoryName": "Lập trình & Công nghệ",
+                    "confidence": 1.0,
+                    "matchType": "EXACT",
+                    "matchedTerm": "Kotlin"
+                }
+            ],
+            "warning": "Tài liệu dài hơn 10.000 ký tự"
+        }
+        """.trimIndent()
+        val client = createMockClient(HttpStatusCode.OK, responseWithWarningJson)
+        val tokenManager = TokenManager(null).apply { saveAccessToken("test_token") }
+        val repo = NlpRepositoryImpl(NlpRemoteDataSource(client), tokenManager)
+
+        assertEquals("application/pdf", NlpRemoteDataSource.inferMimeType("cv_2026.PDF"))
+        assertEquals("text/markdown", NlpRemoteDataSource.inferMimeType("notes.md"))
+        assertEquals("text/plain", NlpRemoteDataSource.inferMimeType("bio.txt"))
+
+        val result = repo.extractSkillsFromDocumentWithWarning("%PDF-1.4".toByteArray(), "cv_2026.pdf")
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrNull()?.skills?.size)
+        assertEquals("Tài liệu dài hơn 10.000 ký tự", result.getOrNull()?.warning)
+    }
 }

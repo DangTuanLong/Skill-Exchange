@@ -545,8 +545,61 @@ class ProfileViewModelTest {
         advanceUntilIdle()
 
         assertTrue(effectReceived is ProfileEffect.ShowSnackbar)
-        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains(".txt và .md"))
+        assertTrue((effectReceived as ProfileEffect.ShowSnackbar).message.contains(".pdf"))
         job.cancel()
+    }
+
+    @Test
+    fun `UploadDocument accepts pdf file and stores extractionWarning when present`() = runTest {
+        val mockNlpRepo = object : com.skillexchange.app.domain.repository.INlpRepository {
+            override suspend fun extractSkills(text: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> =
+                Result.success(emptyList())
+
+            override suspend fun extractSkillsFromDocument(fileBytes: ByteArray, fileName: String): Result<List<com.skillexchange.app.data.remote.nlp.ExtractedSkillDto>> =
+                Result.success(emptyList())
+
+            override suspend fun extractSkillsFromDocumentWithWarning(
+                fileBytes: ByteArray,
+                fileName: String
+            ): Result<com.skillexchange.app.domain.repository.DocumentExtractionResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.repository.DocumentExtractionResult(
+                        skills = listOf(
+                            com.skillexchange.app.data.remote.nlp.ExtractedSkillDto(
+                                skillId = 10,
+                                skillName = "Kotlin",
+                                categoryId = 1,
+                                categoryName = "Lập trình",
+                                confidence = 1.0,
+                                matchType = "EXACT",
+                                matchedTerm = "Kotlin"
+                            )
+                        ),
+                        warning = "Tài liệu dài hơn 10.000 ký tự; hệ thống đã ưu tiên phân tích các phần Kỹ năng & Kinh nghiệm chính."
+                    )
+                )
+            }
+        }
+
+        val viewModel = ProfileViewModel(
+            profileRepo = mockProfileRepository,
+            skillRepo = mockSkillRepository,
+            nlpRepo = mockNlpRepo
+        )
+        advanceUntilIdle()
+
+        val pdfBytes = "%PDF-1.4 dummy".toByteArray(Charsets.UTF_8)
+        viewModel.onIntent(ProfileIntent.UploadDocument(pdfBytes, "resume.pdf"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.isExtractingDocument)
+        assertTrue(state.showSkillExtractionSheet)
+        assertEquals(1, state.extractedSkills.size)
+        assertEquals(
+            "Tài liệu dài hơn 10.000 ký tự; hệ thống đã ưu tiên phân tích các phần Kỹ năng & Kinh nghiệm chính.",
+            state.extractionWarning
+        )
     }
 
     @Test

@@ -46,6 +46,8 @@ object DocumentParser {
     const val MAX_PDF_PAGES: Int = 5
     const val MIN_PDF_TEXT_CHARS: Int = 20
 
+    private val sectionExtractor by lazy { SkillExtractionService() }
+
     private val ZIP_MAGIC_HEADER = byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte())
     private val ZIP_EMPTY_HEADER = byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x05.toByte(), 0x06.toByte())
     private val ZIP_SPANNED_HEADER = byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x07.toByte(), 0x08.toByte())
@@ -172,8 +174,7 @@ object DocumentParser {
         }
 
         // Trích lọc thông minh các mục quan trọng (DEC-029)
-        val service = SkillExtractionService()
-        val sections = service.parseCvSections(service.unaccent(fullText))
+        val sections = sectionExtractor.parseCvSections(sectionExtractor.unaccent(fullText))
 
         val extracted = StringBuilder()
         val warning = "Tài liệu dài hơn 10.000 ký tự (${fullText.length} ký tự); hệ thống đã ưu tiên phân tích các phần Kỹ năng & Kinh nghiệm chính."
