@@ -428,16 +428,17 @@ class BookingDetailViewModelTest {
 
     @Test
     fun `confirmCompletion blocked with snackbar when pending reschedule proposal exists`() = runTest {
+        val now = java.time.Instant.now()
         currentExchange = currentExchange.copy(status = ExchangeStatus.ACCEPTED)
         currentProposal = RescheduleProposal(
             id = "prop_1",
             exchangeId = "ex_999",
             proposerId = "user_sender",
-            newScheduledAt = "2026-11-10T14:00:00Z",
+            newScheduledAt = now.plus(java.time.Duration.ofDays(3)).toString(),
             status = RescheduleStatus.PENDING,
             proposalNumber = 1,
-            createdAt = java.time.Instant.now().toString(),
-            updatedAt = java.time.Instant.now().toString()
+            createdAt = now.toString(),
+            updatedAt = now.toString()
         )
 
         val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))

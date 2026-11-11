@@ -74,26 +74,43 @@ class SkillExtractionService(
      * 2. Chuẩn hóa khoảng trắng Unicode (NBSP, zero-width space, tabs, en/em space).
      * 3. Gộp các từ bị ngắt dòng có gạch nối (hyphenation): (\p{L}+)-\s*\r?\n\s*(\p{L}+) -> $1$2.
      * 4. Chuẩn hóa các ký hiệu đầu dòng bullet points (•, ▪, ▫, –, —, *, +) thành '- '.
+     * 5. Chuẩn hóa các cụm ký hiệu kỹ thuật bị OCR chèn khoảng trắng hoặc đọc lệch (C ++, Node .js, Al/ML, Ul/UX).
      */
     fun normalizeDocumentText(text: String): String {
         var normalized = normalizeNfc(text)
         normalized = normalized.replace(UNICODE_SPACE_REGEX, " ")
         normalized = normalized.replace(HYPHENATION_REGEX, "$1$2")
         normalized = normalized.replace(BULLET_REGEX, "- ")
+        for ((pattern, replacement) in OCR_TECH_TOKEN_PATTERNS) {
+            normalized = normalized.replace(pattern, replacement)
+        }
         return normalized
     }
 
     /**
-     * Loại bỏ dấu tiếng Việt (Unaccent) và chuyển về chữ thường.
+     * Loại bỏ dấu tiếng Việt (Unaccent), chuyển về chữ thường và khử nhiễu ký tự OCR phổ biến.
      * Xử lý cả NFD combining marks và ký tự 'đ'/'Đ'.
      */
     fun unaccent(text: String): String {
         val nfd = Normalizer.normalize(text, Normalizer.Form.NFD)
-        val withoutMarks = nfd.replace(Regex("\\p{M}"), "")
-        return withoutMarks
+        val withoutMarks = UNACCENT_MARKS_REGEX.replace(nfd, "")
+        val base = withoutMarks
             .replace('đ', 'd')
             .replace('Đ', 'd')
             .lowercase()
+        return normalizeOcrUnaccented(base)
+    }
+
+    /**
+     * Khử các lỗi nhận diện ký tự quang học (Optical Character Confusions: l/I/1, O/0, S/5, G/6)
+     * phổ biến của ML Kit trên văn bản đã bỏ dấu với ranh giới từ chặt chẽ.
+     */
+    fun normalizeOcrUnaccented(unaccentedText: String): String {
+        var cleaned = unaccentedText
+        for ((pattern, replacement) in OCR_CONFUSABLE_WORD_PATTERNS) {
+            cleaned = cleaned.replace(pattern, replacement)
+        }
+        return cleaned
     }
 
     // Loại trừ các từ tiếng Việt thông dụng / giới từ khỏi danh sách mục tiêu fuzzy để tránh dương tính giả.
@@ -123,19 +140,54 @@ class SkillExtractionService(
     )
 
     companion object {
+        private val UNACCENT_MARKS_REGEX = Regex("\\p{M}")
         private val UNICODE_SPACE_REGEX = Regex("[\u00A0\u200B\u2000-\u200A\uFEFF]")
-        private val HYPHENATION_REGEX = Regex("(\\p{L}+)-\\s*\\r?\\n\\s*(\\p{L}+)")
+        private val HYPHENATION_REGEX = Regex("(\\p{L}+)[ \t]*-\\s*\\r?\\n\\s*(\\p{L}+)")
         private val BULLET_REGEX = Regex("^[ \t]*[•▪▫–—*+][ \t]*", RegexOption.MULTILINE)
         private val TRONG_ACCENTED_REGEX = Regex("(?<![\\p{L}\\p{N}])[Tt]rống(?![\\p{L}\\p{N}])")
         private val WORD_TOKEN_REGEX = Regex("[\\p{L}\\p{N}]+")
-        private val CLAUSE_DELIMITERS = charArrayOf(',', ';', '.', '!', '?', '\n', '\r', '—', '–')
+        private val DOUBLE_NEWLINE_REGEX = Regex("\\r?\\n\\s*\\r?\\n")
+        private val CLAUSE_DELIMITERS = charArrayOf(',', ';', '.', '!', '?', '\n', '\r', '—', '–', '|', '•', '▪', '▫', '·')
+
+        private val OCR_TECH_TOKEN_PATTERNS = listOf(
+            Regex("(?<![\\p{L}\\p{N}])c[ \t]*\\+[ \t]*\\+(?![\\p{L}\\p{N}+])", RegexOption.IGNORE_CASE) to "C++",
+            Regex("(?<![\\p{L}\\p{N}])c[ \t]*#(?![\\p{L}\\p{N}#])", RegexOption.IGNORE_CASE) to "C#",
+            Regex("\\bnode[ \t]*[.,][ \t]*js\\b", RegexOption.IGNORE_CASE) to "Node.js",
+            Regex("\\breact[ \t]*[.,][ \t]*js\\b", RegexOption.IGNORE_CASE) to "React.js",
+            Regex("\\bvue[ \t]*[.,][ \t]*js\\b", RegexOption.IGNORE_CASE) to "Vue.js",
+            Regex("\\bnext[ \t]*[.,][ \t]*js\\b", RegexOption.IGNORE_CASE) to "Next.js",
+            Regex("(?<![\\p{L}\\p{N}])(?:ai|al|a1)[ \t]*/[ \t]*(?:ml|m1)(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE) to "AI/ML",
+            Regex("(?<![\\p{L}\\p{N}])(?:ui|ul|u1)[ \t]*/[ \t]*(?:ux|uk)(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE) to "UI/UX"
+        )
+
+        private val OCR_CONFUSABLE_WORD_PATTERNS = listOf(
+            Regex("\\b(?:tleng|ti6ng|t1eng|tieag|tiengs|tjeng)\\b") to "tieng",
+            Regex("\\b(?:sq1|5ql|s0l)\\b") to "sql",
+            Regex("\\b(?:kot1in|kotiin|k0tlin)\\b") to "kotlin",
+            Regex("\\b(?:f1utter|fiutter|flutler)\\b") to "flutter",
+            Regex("\\b(?:pyth0n|pythan)\\b") to "python",
+            Regex("\\b(?:1llustrator|i1lustrator|llustrator|iiustrator)\\b") to "illustrator",
+            Regex("\\b(?:phot0shop|ph0toshop|photoshep)\\b") to "photoshop",
+            Regex("\\b(?:f1gma|fiqma)\\b") to "figma",
+            Regex("\\b(?:exce1|excei)\\b") to "excel",
+            Regex("\\b(?:ukule1e|uku1ele)\\b") to "ukulele",
+            Regex("\\b(?:vio1in|v1olin|vi0lin)\\b") to "violin",
+            Regex("\\b(?:p1ano|plan0)\\b") to "piano",
+            Regex("\\b(?:gu1tar|gultar)\\b") to "guitar",
+            Regex("\\b(?:tenn1s|tennls)\\b") to "tennis",
+            Regex("\\bcau[ \t]+(?:1ong|iong)\\b") to "cau long",
+            Regex("\\b(?:boi[ \t]+(?:1oi|ioi)|bo'i[ \t]+loi)\\b") to "boi loi",
+            Regex("\\b(?:bong[ \t]+(?:oa|aa)|b0ng[ \t]+da)\\b") to "bong da",
+            Regex("\\b(?:co'[ \t]+vua|c0[ \t]+vua)\\b") to "co vua"
+        )
 
         private val SECTION_HEADER_PATTERNS = listOf(
-            CvSectionType.OBJECTIVE_WANT to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:muc\\s+tieu(?:\\s+nghe\\s+nghiep|\\s+ca\\s+nhan)?|dinh\\s+huong|nhu\\s+cau\\s+(?:trao\\s+doi\\s+&\\s+)?hoc\\s+tap|nhu\\s+cau\\s+hoc\\s+hoi\\s+them|ky\\s+nang\\s+muon\\s+hoc|career\\s+objective|objective|goals|want\\s+to\\s+learn)[^\n:]*[:\n]"),
-            CvSectionType.SKILLS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:ky\\s+nang(?:\\s+chuyen\\s+mon|\\s+chinh|\\s+ca\\s+nhan|\\s+hien\\s+co)?|chuyen\\s+mon|nang\\s+luc\\s+chuyen\\s+mon|skills(?:\\s+&\\s+technologies|\\s+&\\s+tools)?|technical\\s+skills|core\\s+competencies)[^\n:]*[:\n]"),
+            CvSectionType.OBJECTIVE_WANT to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:muc\\s+tieu\\s+ca\\s+nhan\\s*&\\s*ky\\s+nang\\s+muon\\s+hoc|nhu\\s+cau\\s+(?:trao\\s+doi\\s+&\\s+)?hoc\\s+tap|nhu\\s+cau\\s+hoc\\s+hoi\\s+them|ky\\s+nang\\s+muon\\s+hoc|want\\s+to\\s+learn)[^\n:]*[:\n]"),
+            CvSectionType.SKILLS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:ky\\s+nang(?:\\s+chuyen\\s+mon|\\s+chinh|\\s+ca\\s+nhan|\\s+hien\\s+co|\\s+van\\s+dong|\\s+quan\\s+ly|\\s+nghe\\s+thuat|\\s+cong\\s+nghe|\\s*&\\s*cong\\s+cu)?|cong\\s+nghe\\s*&\\s*ky\\s+nang|chuyen\\s+mon|nang\\s+luc(?:\\s+ngon\\s+ngu|\\s+chuyen\\s+mon)?|ngoai\\s+ngu|tin\\s+hoc|chung\\s+chi(?:\\s*&\\s*ky\\s+nang)?|tech\\s+stack|skills(?:\\s+&\\s+technologies|\\s+&\\s+tools)?|technical\\s+skills|core\\s+competencies)[^\n:]*[:\n]"),
             CvSectionType.EXPERIENCE to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:kinh\\s+nghiem(?:\\s+lam\\s+viec|\\s+nghe\\s+nghiep)?|lich\\s+su\\s+lam\\s+viec|work\\s+experience|professional\\s+experience|experience)[^\n:]*[:\n]"),
             CvSectionType.EDUCATION to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:hoc\\s+van|trinh\\s+do|bang\\s+cap|education|academic\\s+background)[^\n:]*[:\n]"),
-            CvSectionType.PROJECTS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:du\\s+an(?:\\s+tieu\\s+bieu|\\s+ca\\s+nhan)?|projects|personal\\s+projects)[^\n:]*[:\n]")
+            CvSectionType.PROJECTS to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:du\\s+an(?:\\s+tieu\\s+bieu|\\s+ca\\s+nhan)?|danh\\s+muc\\s+cong\\s+trinh|projects|personal\\s+projects)[^\n:]*[:\n]"),
+            CvSectionType.OTHER to Regex("(?im)^[ \t]*[-#*•\\[\\]]*[ \t]*(?:muc\\s+tieu(?:\\s+nghe\\s+nghiep)?|dinh\\s+huong|tom\\s+tat(?:\\s+nang\\s+luc|\\s+ban\\s+than)?|so\\s+thich|hoat\\s+dong|ghi\\s+chu|luu\\s+y|interests|sports\\s*&\\s*hobbies|summary|career\\s+objective|objective)[^\n:]*[:\n]")
         )
 
         // 5 cụm danh từ tổ chức cố định (Bước d - Organization Context Guard)
@@ -147,17 +199,17 @@ class SkillExtractionService(
             Regex("\\b(?:truong(?:\\s+thpt|\\s+thcs|\\s+tieu\\s+hoc)?|benh\\s+vien)\\b", RegexOption.IGNORE_CASE)
         )
 
-        // Các động từ / ranh giới ngắt cụm tổ chức (Ví dụ: "Học viện X dạy Python")
+        // Các động từ / ranh giới ngắt cụm tổ chức (Ví dụ: "Học viện X dạy Python", "cấp trường và thích chơi tennis")
         private val ACTION_VERBS_DELIMITERS = Regex(
-            "\\b(?:day|hoc|tuyen|tuyen\\s+dung|dao\\s+tao|nghien\\s+cuu|phat\\s+trien|su\\s+dung|lam\\s+viec\\s+voi)\\b",
+            "\\b(?:day|hoc|tuyen|tuyen\\s+dung|dao\\s+tao|nghien\\s+cuu|phat\\s+trien|su\\s+dung|lam\\s+viec\\s+voi|choi|thich|tap|biet)\\b",
             RegexOption.IGNORE_CASE
         )
 
         private val NEGATIVE_PATTERNS = listOf(
             // Tiếng Việt (unaccented)
             Regex("\\b(?:chua\\s+tung|chua\\s+co\\s+kinh\\s+nghiem|khong\\s+co\\s+kinh\\s+nghiem|khong\\s+co\\s+chuyen\\s+mon|khong\\s+chuyen|khong\\s+biet|chua\\s+biet|hoan\\s+toan\\s+khong|khong\\s+thao|yeu\\s+ve|mat\\s+goc|chua|khong|kem)\\b", RegexOption.IGNORE_CASE),
-            // Tiếng Anh
-            Regex("\\b(?:no\\s+hands-on\\s+experience\\s+in|no\\s+experience\\s+with|no\\s+experience\\s+in|have\\s+no\\s+experience|not\\s+familiar\\s+with|not\\s+good\\s+at|cannot|can't|haven't|never|not|no)\\b", RegexOption.IGNORE_CASE)
+            // Tiếng Anh (tránh dùng từ đơn "no" đứng lẻ vì trùng lỗi OCR tiếng Việt như "nỗ lực" -> "no luc")
+            Regex("\\b(?:no\\s+hands-on\\s+experience\\s+in|no\\s+experience\\s+with|no\\s+experience\\s+in|have\\s+no\\s+experience|no\\s+knowledge\\s+of|not\\s+familiar\\s+with|not\\s+good\\s+at|cannot|can't|haven't|never|not)\\b", RegexOption.IGNORE_CASE)
         )
 
         private val AFFIRMATIVE_EXCEPTIONS = listOf(
@@ -169,7 +221,12 @@ class SkillExtractionService(
         private val FALSE_NEGATIVE_WORDS = listOf(
             Regex("\\bkhong\\s+gian\\b", RegexOption.IGNORE_CASE),
             Regex("\\bkhong\\s+dau\\b", RegexOption.IGNORE_CASE),
-            Regex("\\bkhong\\s+khi\\b", RegexOption.IGNORE_CASE)
+            Regex("\\bkhong\\s+khi\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+ngung\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+gioi\\s+han\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkhong\\s+loi\\b", RegexOption.IGNORE_CASE),
+            Regex("\\b(?:day|hoc|dinh)\\s+kem\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bkem\\s+(?:theo|cap|gia\\s+su)\\b", RegexOption.IGNORE_CASE)
         )
 
         private val WANT_PATTERNS = listOf(
@@ -182,6 +239,8 @@ class SkillExtractionService(
 
     /**
      * Phân tách các phần mục của CV (Bước b - Section-aware Parsing).
+     * Giới hạn phạm vi tối đa của mục OBJECTIVE_WANT để tránh việc mất tiêu đề kế tiếp khi quét OCR
+     * làm nuốt trọn toàn bộ phần kỹ năng còn lại của CV.
      */
     fun parseCvSections(text: String): List<TextSection> {
         val detected = mutableListOf<Pair<Int, Pair<CvSectionType, String>>>()
@@ -198,8 +257,16 @@ class SkillExtractionService(
         for (i in detected.indices) {
             val (start, pair) = detected[i]
             val (type, header) = pair
-            val end = if (i + 1 < detected.size) detected[i + 1].first else text.length
-            sections.add(TextSection(type, start, end, header))
+            val rawEnd = if (i + 1 < detected.size) detected[i + 1].first else text.length
+            val boundedEnd = if (type == CvSectionType.OBJECTIVE_WANT) {
+                val afterHeader = (start + header.length).coerceAtMost(rawEnd)
+                val blankLineMatch = DOUBLE_NEWLINE_REGEX.find(text, afterHeader)
+                val blankLineEnd = blankLineMatch?.range?.first ?: rawEnd
+                minOf(rawEnd, blankLineEnd, afterHeader + 350)
+            } else {
+                rawEnd
+            }
+            sections.add(TextSection(type, start, boundedEnd, header))
         }
         return sections
     }
@@ -522,27 +589,37 @@ class SkillExtractionService(
             }
         }
 
-        // 3. TẦNG 3: FUZZY MATCH CHO TỪ ĐƠN >= 5 KÝ TỰ, LEVENSHTEIN <= 1 (Confidence: 0.75)
-        // Lấy tất cả các từ >= 5 ký tự trong unaccentedBio kèm đúng vị trí xuất hiện thực tế (offset)
-        val bioTokensWithOffset = WORD_TOKEN_REGEX.findAll(unaccentedBio)
+        // 3. TẦNG 3: FUZZY MATCH CHO TỪ ĐƠN >= 5 KÝ TỰ VÀ CỤM 2 TỪ (2-GRAM), LEVENSHTEIN <= 1 (Confidence: 0.75)
+        val allWordMatches = WORD_TOKEN_REGEX.findAll(unaccentedBio).toList()
+
+        // Lấy tất cả các từ đơn >= 5 ký tự trong unaccentedBio kèm đúng vị trí xuất hiện thực tế (offset)
+        val bioTokensWithOffset = allWordMatches
             .filter { it.value.length >= 5 }
             .map { it.value to it.range.first }
-            .toList()
 
-        // Tập các từ mục tiêu để fuzzy match (từ đơn >= 5 ký tự)
+        // Tập các mục tiêu đơn từ (>= 5 ký tự) và cụm 2 từ (2-gram)
         val singleWordTargets = mutableListOf<Pair<String, SkillDefinition>>()
+        val twoWordTargets = mutableListOf<Triple<String, String, SkillDefinition>>()
         for (skill in skills) {
             val unaccentedName = unaccent(skill.name)
-            // Nếu tên là 1 từ >= 5 ký tự
             if (!unaccentedName.contains(" ") && unaccentedName.length >= 5) {
                 singleWordTargets.add(unaccentedName to skill)
+            } else {
+                val parts = unaccentedName.split(" ").filter { it.isNotBlank() }
+                if (parts.size == 2 && (parts[0].length >= 5 || parts[1].length >= 5)) {
+                    twoWordTargets.add(Triple(parts[0], parts[1], skill))
+                }
             }
-            // Thêm các alias đơn từ >= 5 ký tự
             val aliases = findAliasesForSkill(skill.name)
             for (alias in aliases) {
                 val unaccentedAlias = unaccent(alias)
                 if (!unaccentedAlias.contains(" ") && unaccentedAlias.length >= 5) {
                     singleWordTargets.add(unaccentedAlias to skill)
+                } else {
+                    val parts = unaccentedAlias.split(" ").filter { it.isNotBlank() }
+                    if (parts.size == 2 && (parts[0].length >= 5 || parts[1].length >= 5)) {
+                        twoWordTargets.add(Triple(parts[0], parts[1], skill))
+                    }
                 }
             }
         }
@@ -573,6 +650,53 @@ class SkillExtractionService(
                                 confidence = 0.75,
                                 matchType = "FUZZY",
                                 matchedTerm = "$token ~ $targetWord",
+                                frequency = 1,
+                                score = 0.75,
+                                reason = sReason,
+                                suggestedLevel = sLevel
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3b. FUZZY MATCH CHO CỤM 2 TỪ LIỀN KỀ (2-GRAM): 1 từ khớp 100%, từ kia (>= 5 ký tự) có Levenshtein == 1
+        for (i in 0 until allWordMatches.size - 1) {
+            val m1 = allWordMatches[i]
+            val m2 = allWordMatches[i + 1]
+            val gap = unaccentedBio.substring(m1.range.last + 1, m2.range.first)
+            if (gap.isBlank() && !gap.contains('\n') && !gap.contains('\r')) {
+                val w1 = m1.value
+                val w2 = m2.value
+                val startOffset = m1.range.first
+
+                for ((t1, t2, skill) in twoWordTargets) {
+                    val current = resultMap[skill.id]
+                    if (current != null && current.confidence >= 0.75) continue
+
+                    val matchFirstExactSecondFuzzy = (w1 == t1) &&
+                        t2.length >= 5 &&
+                        Math.abs(w2.length - t2.length) <= 1 &&
+                        damerauLevenshteinDistance(w2, t2) == 1
+                    val matchSecondExactFirstFuzzy = (w2 == t2) &&
+                        t1.length >= 5 &&
+                        Math.abs(w1.length - t1.length) <= 1 &&
+                        damerauLevenshteinDistance(w1, t1) == 1
+
+                    if (matchFirstExactSecondFuzzy || matchSecondExactFirstFuzzy) {
+                        val isHave = !isInsideOrganizationName(unaccentedBio, startOffset) &&
+                            determineIntentAt(unaccentedBio, startOffset, sections) == MatchIntent.HAVE
+                        if (isHave) {
+                            val (sLevel, sReason) = inferSkillProficiency(unaccentedBio, listOf(startOffset))
+                            resultMap[skill.id] = ExtractedSkillDto(
+                                skillId = skill.id,
+                                skillName = skill.name,
+                                categoryId = skill.categoryId,
+                                categoryName = skill.categoryName,
+                                confidence = 0.75,
+                                matchType = "FUZZY",
+                                matchedTerm = "$w1 $w2 ~ $t1 $t2",
                                 frequency = 1,
                                 score = 0.75,
                                 reason = sReason,

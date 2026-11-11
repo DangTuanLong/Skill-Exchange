@@ -17,7 +17,7 @@ import kotlin.coroutines.resumeWithException
 
 class MlKitOcrRecognizer(
     private val context: Context,
-    private val targetMaxDimension: Int = 1600
+    private val targetMaxDimension: Int = 2560
 ) : IOcrRecognizer {
 
     private data class DecodedOcrBitmap(
@@ -71,15 +71,45 @@ class MlKitOcrRecognizer(
 
     private fun extractOrderedText(visionText: Text): String {
         val blocks = visionText.textBlocks
-        if (blocks.size <= 1 || blocks.any { it.boundingBox == null }) {
+        if (blocks.isEmpty()) {
             return visionText.text.trim()
         }
-        return blocks
-            .sortedWith(
-                compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / 24 }
+        if (blocks.size == 1 && blocks.first().lines.size <= 1) {
+            return visionText.text.trim()
+        }
+
+        val allLineHeights = blocks.flatMap { it.lines }
+            .mapNotNull { it.boundingBox?.height()?.takeIf { h -> h > 0 } }
+        val avgLineHeight = if (allLineHeights.isNotEmpty()) {
+            allLineHeights.average().toInt().coerceIn(14, 64)
+        } else {
+            28
+        }
+        val bucketSize = (avgLineHeight * 0.65).toInt().coerceAtLeast(12)
+
+        val sortedBlocks = if (blocks.any { it.boundingBox == null }) {
+            blocks
+        } else {
+            blocks.sortedWith(
+                compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / (bucketSize * 2) }
                     .thenBy { it.boundingBox?.left ?: 0 }
             )
-            .joinToString("\n") { it.text.trim() }
+        }
+
+        return sortedBlocks
+            .mapNotNull { block ->
+                val lines = block.lines
+                val blockText = if (lines.size <= 1 || lines.any { it.boundingBox == null }) {
+                    block.text.trim()
+                } else {
+                    lines.sortedWith(
+                        compareBy<Text.Line> { (it.boundingBox?.top ?: 0) / bucketSize }
+                            .thenBy { it.boundingBox?.left ?: 0 }
+                    ).joinToString("\n") { it.text.trim() }
+                }
+                blockText.takeIf { it.isNotEmpty() }
+            }
+            .joinToString("\n\n")
             .trim()
     }
 
@@ -110,11 +140,12 @@ class MlKitOcrRecognizer(
 
         var inSampleSize = 1
         val maxRaw = maxOf(rawWidth, rawHeight)
-        while (maxRaw / (inSampleSize * 2) >= targetMaxDimension) {
+        val minTargetAfterSample = minOf(targetMaxDimension, 2000)
+        while (maxRaw / (inSampleSize * 2) >= minTargetAfterSample) {
             inSampleSize *= 2
         }
 
-        // 2nd pass: Decode actual bitmap directly from stream with inSampleSize
+        // 2nd pass: Decode actual bitmap directly from stream with integer inSampleSize (sharp pixels)
         val decodeOptions = BitmapFactory.Options().apply {
             this.inSampleSize = inSampleSize
             inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -131,7 +162,7 @@ class MlKitOcrRecognizer(
             return null
         }
 
-        // Fine scaling if still slightly larger than targetMaxDimension
+        // Only scale down if the sampled bitmap still exceeds targetMaxDimension (avoids double-resample blur)
         val currentMax = maxOf(bitmap.width, bitmap.height)
         if (currentMax > targetMaxDimension) {
             val scale = targetMaxDimension.toFloat() / currentMax

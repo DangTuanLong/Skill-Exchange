@@ -76,4 +76,40 @@ class NegationDetectionTest {
         kotlin.test.assertNotNull(kotlinSkill)
         assertEquals("FUZZY", kotlinSkill.matchType)
     }
+
+    @Test
+    fun `extracts skills accurately from noisy OCR text with character confusions`() {
+        val noisyOcrText = """
+            MỤC TIÊU NGHỀ NGHIỆP:
+            Lập trình viên có tinh thần nỗ lực không ngừng, kèm theo kỹ năng làm việc nhóm tốt.
+            CÔNG NGHỆ SỬ DỤNG:
+            Kot1in | Pyth0n | SQ1 | Node .js | Al/ML | Ul/UX
+            Ngoại ngữ & Thể thao:
+            - Tlếng Anh, Ti6ng Nhật
+            - Chơi Cầu 1ông và Bóng oa cuối tuần
+        """.trimIndent()
+
+        val extracted = extractor.extractSkills(noisyOcrText).map { it.skillName }.toSet()
+        kotlin.test.assertTrue(extracted.contains("Android (Kotlin)"), "Phải bắt được Kotlin từ Kot1in")
+        kotlin.test.assertTrue(extracted.contains("Python"), "Phải bắt được Python từ Pyth0n")
+        kotlin.test.assertTrue(extracted.contains("SQL"), "Phải bắt được SQL từ SQ1")
+        kotlin.test.assertTrue(extracted.contains("Node.js"), "Phải bắt được Node.js từ Node .js")
+        kotlin.test.assertTrue(extracted.contains("AI/ML"), "Phải bắt được AI/ML từ Al/ML")
+        kotlin.test.assertTrue(extracted.contains("Figma / UI Design"), "Phải bắt được Figma / UI Design từ Ul/UX")
+        kotlin.test.assertTrue(extracted.contains("Tiếng Anh"), "Phải bắt được Tiếng Anh từ Tlếng Anh")
+        kotlin.test.assertTrue(extracted.contains("Tiếng Nhật"), "Phải bắt được Tiếng Nhật từ Ti6ng Nhật")
+        kotlin.test.assertTrue(extracted.contains("Cầu lông"), "Phải bắt được Cầu lông từ Cầu 1ông")
+        kotlin.test.assertTrue(extracted.contains("Bóng đá"), "Phải bắt được Bóng đá từ Bóng oa")
+    }
+
+    @Test
+    fun `two-word bigram fuzzy match rescues 1-char typo in multi-word skills`() {
+        val text = "Thành thạo tieg anh giao tiếp, dựng video edting và triển khai marketing digtal."
+        val extracted = extractor.extractSkills(text)
+        val names = extracted.map { it.skillName }.toSet()
+
+        kotlin.test.assertTrue(names.contains("Tiếng Anh"))
+        kotlin.test.assertTrue(names.contains("Video Editing"))
+        kotlin.test.assertTrue(names.contains("Marketing Digital"))
+    }
 }
