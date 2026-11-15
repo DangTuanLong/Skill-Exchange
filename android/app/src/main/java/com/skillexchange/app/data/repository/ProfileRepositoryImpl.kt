@@ -97,4 +97,9 @@ class ProfileRepositoryImpl(
         url
     }
 
+    override suspend fun clearLocalProfile() {
+        runCatching {
+            localDataSource.clearProfile()
+        }
+    }
 }

@@ -186,7 +186,14 @@ fun SkillExchangeNavHost(
                     navController.navigate(Screen.SkillSelection.route)
                 },
                 onNavigateToHome = {
-                    if (!navController.popBackStack(Screen.Home.route, false)) {
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                        }
+                    }
+                },
+                onNavigateBack = {
+                    if (!navController.popBackStack()) {
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.ProfileSetup.route) { inclusive = true }
                         }

@@ -334,6 +334,24 @@ class ExchangeStateMachineTest {
     }
 
     @Test
+    fun `complete - Handles case-insensitive and trimmed UUID caller IDs`() {
+        val result = ExchangeStateMachine.complete(
+            currentStatus = ExchangeStatus.ACCEPTED,
+            senderId = "a3e1b6d4-fa56-4c93-8cc1-747322c69b7a",
+            receiverId = "b2c3d4e5-fa56-4c93-8cc1-747322c69b7b",
+            callerUserId = "  A3E1B6D4-FA56-4C93-8CC1-747322C69B7A  ",
+            now = testTime,
+            senderCompletedAt = null,
+            receiverCompletedAt = null,
+            cancellationReason = null
+        )
+
+        assertEquals(ExchangeStatus.ACCEPTED, result.newStatus)
+        assertEquals(testTime, result.senderCompletedAt)
+        assertTrue(result.isChanged)
+    }
+
+    @Test
     fun `complete - Idempotent when already COMPLETED`() {
         val result = ExchangeStateMachine.complete(
             currentStatus = ExchangeStatus.COMPLETED,

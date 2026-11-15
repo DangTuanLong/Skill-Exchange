@@ -21,10 +21,10 @@ data class BookingDetailState(
     val error: String? = null
 ) {
     val isSender: Boolean
-        get() = exchange?.senderId == currentUserId
+        get() = exchange?.isSender(currentUserId) == true
 
     val isReceiver: Boolean
-        get() = exchange?.receiverId == currentUserId
+        get() = exchange?.isReceiver(currentUserId) == true
 
     val status: ExchangeStatus?
         get() = exchange?.status

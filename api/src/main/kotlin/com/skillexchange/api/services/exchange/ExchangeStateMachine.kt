@@ -36,7 +36,7 @@ object ExchangeStateMachine {
     ): TransitionResult {
         validateParticipant(callerUserId, senderId, receiverId)
 
-        if (callerUserId != receiverId) {
+        if (!callerUserId.trim().equals(receiverId.trim(), ignoreCase = true)) {
             throw ExchangeForbiddenException("Chỉ người nhận mới có quyền chấp nhận yêu cầu")
         }
 
@@ -80,7 +80,7 @@ object ExchangeStateMachine {
     ): TransitionResult {
         validateParticipant(callerUserId, senderId, receiverId)
 
-        if (callerUserId != receiverId) {
+        if (!callerUserId.trim().equals(receiverId.trim(), ignoreCase = true)) {
             throw ExchangeForbiddenException("Chỉ người nhận mới có quyền từ chối yêu cầu")
         }
 
@@ -139,7 +139,7 @@ object ExchangeStateMachine {
 
         when (currentStatus) {
             ExchangeStatus.PENDING -> {
-                if (callerUserId != senderId) {
+                if (!callerUserId.trim().equals(senderId.trim(), ignoreCase = true)) {
                     throw ExchangeForbiddenException("Chỉ người gửi mới có quyền hủy yêu cầu đang chờ duyệt. Người nhận vui lòng chọn từ chối.")
                 }
                 return TransitionResult(
@@ -206,12 +206,16 @@ object ExchangeStateMachine {
         var newReceiverCompleted = receiverCompletedAt
         var changed = false
 
-        if (callerUserId == senderId) {
+        val caller = callerUserId.trim()
+        val s = senderId.trim()
+        val r = receiverId.trim()
+
+        if (caller.equals(s, ignoreCase = true)) {
             if (senderCompletedAt == null) {
                 newSenderCompleted = now
                 changed = true
             }
-        } else if (callerUserId == receiverId) {
+        } else if (caller.equals(r, ignoreCase = true)) {
             if (receiverCompletedAt == null) {
                 newReceiverCompleted = now
                 changed = true
@@ -232,7 +236,10 @@ object ExchangeStateMachine {
     }
 
     private fun validateParticipant(callerUserId: String, senderId: String, receiverId: String) {
-        if (callerUserId != senderId && callerUserId != receiverId) {
+        val caller = callerUserId.trim()
+        val s = senderId.trim()
+        val r = receiverId.trim()
+        if (!caller.equals(s, ignoreCase = true) && !caller.equals(r, ignoreCase = true)) {
             throw ExchangeForbiddenException("Bạn không phải thành viên tham gia yêu cầu trao đổi này")
         }
     }

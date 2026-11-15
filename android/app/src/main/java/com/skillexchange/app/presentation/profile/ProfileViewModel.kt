@@ -163,7 +163,9 @@ class ProfileViewModel(
             is ProfileIntent.ToggleExtractedSkillSelection -> toggleExtractedSkillSelection(intent.skillId)
             is ProfileIntent.SetExtractedSkillLevel -> setExtractedSkillLevel(intent.skillId, intent.level)
             is ProfileIntent.ConfirmAddExtractedSkills -> confirmAddExtractedSkills()
-            is ProfileIntent.RequestDocumentUpload -> _state.update { it.copy(showDocumentPrivacyDialog = true) }
+            is ProfileIntent.RequestDocumentUpload -> {
+                viewModelScope.launch { _effect.send(ProfileEffect.OpenDocumentPicker) }
+            }
             is ProfileIntent.DismissDocumentPrivacyDialog -> _state.update { it.copy(showDocumentPrivacyDialog = false) }
             is ProfileIntent.ConfirmDocumentPrivacyDialog -> {
                 _state.update { it.copy(showDocumentPrivacyDialog = false) }
@@ -171,7 +173,9 @@ class ProfileViewModel(
             }
             is ProfileIntent.UploadDocument -> uploadDocument(intent.fileBytes, intent.fileName)
             is ProfileIntent.UploadDocumentUri -> uploadDocumentFromUri(intent.contentResolver, intent.uri)
-            is ProfileIntent.RequestOcrScan -> _state.update { it.copy(showOcrPrivacyDialog = true) }
+            is ProfileIntent.RequestOcrScan -> {
+                viewModelScope.launch { _effect.send(ProfileEffect.OpenImagePicker) }
+            }
             is ProfileIntent.DismissOcrPrivacyDialog -> _state.update { it.copy(showOcrPrivacyDialog = false) }
             is ProfileIntent.ConfirmOcrPrivacyDialog -> {
                 _state.update { it.copy(showOcrPrivacyDialog = false) }

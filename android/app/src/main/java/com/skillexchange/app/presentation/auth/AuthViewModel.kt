@@ -113,6 +113,9 @@ class AuthViewModel(
             try {
                 firebaseAuthManager?.signOutAndCleanup()
             } catch (_: Exception) {}
+            try {
+                profileRepository?.clearLocalProfile()
+            } catch (_: Exception) {}
             tokenManager.clearSession()
             _effect.send(AuthEffect.NavigateToLogin)
         }

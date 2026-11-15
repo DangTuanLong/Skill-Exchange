@@ -500,50 +500,6 @@ fun BookingDetailScreen(
                                 }
 
                                 ExchangeStatus.ACCEPTED -> {
-                                    // Gọi thoại & Gọi video trong app (TASK-074, DEC-026)
-                                    state.exchange?.let { ex ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = { handleCallClick(ex.id, false) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(48.dp),
-                                                shape = RoundedCornerShape(12.dp),
-                                                enabled = cooldownRemaining <= 0,
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
-                                            ) {
-                                                Icon(Icons.Default.Phone, contentDescription = "Gọi thoại", modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    if (cooldownRemaining > 0) "Chờ ${cooldownRemaining}s" else "Gọi thoại",
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 13.sp
-                                                )
-                                            }
-
-                                            OutlinedButton(
-                                                onClick = { handleCallClick(ex.id, true) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(48.dp),
-                                                shape = RoundedCornerShape(12.dp),
-                                                enabled = cooldownRemaining <= 0,
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
-                                            ) {
-                                                Icon(Icons.Default.Videocam, contentDescription = "Gọi video", modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    if (cooldownRemaining > 0) "Chờ ${cooldownRemaining}s" else "Gọi video",
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 13.sp
-                                                )
-                                            }
-                                        }
-                                    }
-
                                     // Nhắn tin (TASK-030)
                                     OutlinedButton(
                                         onClick = {
@@ -560,70 +516,6 @@ fun BookingDetailScreen(
                                         Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Nhắn tin trao đổi", fontWeight = FontWeight.SemiBold)
-                                    }
-
-                                    // Thêm vào lịch điện thoại (TASK-066, DEC-025)
-                                    OutlinedButton(
-                                        onClick = {
-                                            state.exchange?.let { ex ->
-                                                try {
-                                                    val eventData = CalendarIntentHelper.buildEventData(ex, state.currentUserId)
-                                                    val intent = CalendarIntentHelper.buildCalendarIntent(eventData)
-                                                    context.startActivity(intent)
-                                                } catch (_: android.content.ActivityNotFoundException) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("Không tìm thấy ứng dụng Lịch trên thiết bị")
-                                                    }
-                                                } catch (e: Exception) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar(e.message ?: "Không thể mở ứng dụng Lịch")
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
-                                    ) {
-                                        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Thêm vào lịch", fontWeight = FontWeight.SemiBold)
-                                    }
-
-                                    // Đề xuất giờ khác (TASK-071, DEC-025)
-                                    if (state.canProposeReschedule) {
-                                        OutlinedButton(
-                                            onClick = { viewModel.onIntent(BookingDetailIntent.OpenRescheduleDialog) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            enabled = !state.isActionLoading && !state.isRescheduleLoading,
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand500)
-                                        ) {
-                                            Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            val proposalCount = state.rescheduleProposal?.proposalNumber ?: 0
-                                            Text(
-                                                if (proposalCount > 0) "Đề xuất giờ khác (Lượt $proposalCount/3)" else "Đề xuất giờ khác",
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                        }
-                                    } else if ((state.rescheduleProposal?.proposalNumber ?: 0) >= 3 && !state.isReschedulePending) {
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color = Color(0xFFF1F5F9),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(
-                                                "Đã sử dụng hết 3/3 lần đề xuất đổi lịch",
-                                                fontSize = 12.sp,
-                                                color = TextSecondaryLight,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                            )
-                                        }
                                     }
 
                                     // Xác nhận hoàn thành

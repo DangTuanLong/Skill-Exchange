@@ -74,43 +74,26 @@ class MlKitOcrRecognizer(
         if (blocks.isEmpty()) {
             return visionText.text.trim()
         }
-        if (blocks.size == 1 && blocks.first().lines.size <= 1) {
+        if (blocks.size == 1) {
             return visionText.text.trim()
         }
-
-        val allLineHeights = blocks.flatMap { it.lines }
-            .mapNotNull { it.boundingBox?.height()?.takeIf { h -> h > 0 } }
-        val avgLineHeight = if (allLineHeights.isNotEmpty()) {
-            allLineHeights.average().toInt().coerceIn(14, 64)
-        } else {
-            28
-        }
-        val bucketSize = (avgLineHeight * 0.65).toInt().coerceAtLeast(12)
 
         val sortedBlocks = if (blocks.any { it.boundingBox == null }) {
             blocks
         } else {
             blocks.sortedWith(
-                compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / (bucketSize * 2) }
+                compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / 32 }
                     .thenBy { it.boundingBox?.left ?: 0 }
             )
         }
 
-        return sortedBlocks
-            .mapNotNull { block ->
-                val lines = block.lines
-                val blockText = if (lines.size <= 1 || lines.any { it.boundingBox == null }) {
-                    block.text.trim()
-                } else {
-                    lines.sortedWith(
-                        compareBy<Text.Line> { (it.boundingBox?.top ?: 0) / bucketSize }
-                            .thenBy { it.boundingBox?.left ?: 0 }
-                    ).joinToString("\n") { it.text.trim() }
-                }
-                blockText.takeIf { it.isNotEmpty() }
-            }
-            .joinToString("\n\n")
+        val ordered = sortedBlocks
+            .map { it.text.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
             .trim()
+
+        return ordered.ifBlank { visionText.text.trim() }
     }
 
     private fun decodeAndDownscaleBitmap(

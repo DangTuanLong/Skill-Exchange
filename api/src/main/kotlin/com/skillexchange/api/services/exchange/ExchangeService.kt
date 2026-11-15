@@ -212,8 +212,9 @@ open class ExchangeService(
 
         val sId = row[ExchangeRequestsTable.senderId]
         val rId = row[ExchangeRequestsTable.receiverId]
+        val caller = callerUserId.trim()
 
-        if (callerUserId != sId && callerUserId != rId) {
+        if (!caller.equals(sId.trim(), ignoreCase = true) && !caller.equals(rId.trim(), ignoreCase = true)) {
             throw ExchangeForbiddenException("Bạn không phải thành viên tham gia yêu cầu này")
         }
 

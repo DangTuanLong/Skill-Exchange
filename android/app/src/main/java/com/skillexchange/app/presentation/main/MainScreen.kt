@@ -233,7 +233,7 @@ fun MainScreen(
                             rootNavController.navigate(Screen.ProfileSetup.route)
                         },
                         onNavigateToManageSkills = {
-                            rootNavController.navigate(Screen.SkillSelection.route)
+                            rootNavController.navigate(Screen.ProfileSetup.route)
                         },
                         onNavigateToLogin = {
                             rootNavController.navigate(Screen.Login.route) {

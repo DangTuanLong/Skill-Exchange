@@ -186,8 +186,17 @@ class BookingDetailViewModel(
             _state.update { it.copy(isActionLoading = true) }
             exchangeRepository.completeRequest(exchangeId)
                 .onSuccess { updated ->
-                    _state.update { it.copy(isActionLoading = false, exchange = updated) }
+                    _state.update {
+                        it.copy(
+                            isActionLoading = false,
+                            exchange = updated,
+                            currentUserId = tokenManager.getUserId() ?: it.currentUserId
+                        )
+                    }
                     _effect.send(BookingDetailEffect.ShowSnackbar("Đã xác nhận hoàn thành buổi trao đổi"))
+                    if (updated.status == com.skillexchange.app.domain.model.exchange.ExchangeStatus.COMPLETED) {
+                        checkRatingStatus(exchangeId)
+                    }
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isActionLoading = false) }

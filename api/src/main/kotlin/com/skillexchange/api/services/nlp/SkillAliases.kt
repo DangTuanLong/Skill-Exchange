@@ -11,10 +11,12 @@ object SkillAliases {
      * Mọi alias ở đây đều mang nghĩa tương đương 1-1 về mặt kỹ thuật/ngôn ngữ.
      */
     val CANONICAL_TO_ALIASES: Map<String, List<String>> = mapOf(
-        // Lập trình
-        "Android (Kotlin)" to listOf("android", "kotlin", "android studio", "jetpack compose", "lap trinh android"),
+        // Lập trình & Công nghệ (Hỗ trợ cả tên DB thực tế lẫn tên canonical)
+        "Android (Kotlin)" to listOf("android", "kotlin", "kotlin android", "android studio", "jetpack compose", "lap trinh android"),
+        "Kotlin Android" to listOf("android", "kotlin", "android (kotlin)", "android studio", "jetpack compose", "lap trinh android"),
         "iOS (Swift)" to listOf("ios", "swift", "swiftui", "xcode", "lap trinh ios"),
-        "Web (React)" to listOf("react", "reactjs", "react.js", "react native", "nextjs", "next.js"),
+        "Web (React)" to listOf("react", "reactjs", "react.js", "react native", "nextjs", "next.js", "react / next.js"),
+        "React / Next.js" to listOf("react", "reactjs", "react.js", "nextjs", "next.js", "react native", "web (react)"),
         "Web (Vue)" to listOf("vue", "vuejs", "vue.js", "nuxtjs", "nuxt.js"),
         "Python" to listOf("python", "py"),
         "Java" to listOf("java"),
@@ -24,11 +26,15 @@ object SkillAliases {
         "C" to listOf("c"),
         "Flutter" to listOf("flutter"),
         "Node.js" to listOf("nodejs", "node.js", "node js", "expressjs", "express.js", "nestjs"),
-        "SQL" to listOf("sql", "postgresql", "postgres", "mysql", "sqlite", "sql server", "ms sql", "mariadb"),
+        "SQL" to listOf("sql", "postgresql", "postgres", "mysql", "sqlite", "sql server", "ms sql", "mariadb", "sql & database", "database"),
+        "SQL & Database" to listOf("sql", "database", "postgresql", "postgres", "mysql", "sqlite", "sql server", "csdl", "co so du lieu"),
         "AI/ML" to listOf("ai/ml", "machine learning", "ml", "tri tue nhan tao", "deep learning", "hoc may", "hoc sau", "ai ml"),
+        "Machine Learning" to listOf("machine learning", "ml", "ai/ml", "deep learning", "hoc may", "tri tue nhan tao", "ai"),
 
         // Thiết kế
         "Figma / UI Design" to listOf("figma", "ui ux", "ui/ux", "ui design", "ux design", "ux/ui", "ui/ux design"),
+        "UI/UX Design" to listOf("ui/ux", "ui ux", "ui", "ux", "ui design", "ux design", "thiet ke ui/ux", "figma / ui design", "figma"),
+        "Figma" to listOf("figma", "figma design", "figma / ui design"),
         "Adobe Photoshop" to listOf("photoshop", "ps", "pts", "adobe ps"),
         "Illustrator" to listOf("illustrator", "adobe illustrator", "adobe ai"),
         "Video Editing" to listOf("video editing", "edit video", "dung phim", "chinh sua video", "premiere", "premiere pro", "capcut", "davinci resolve", "final cut", "quay dung phim", "dung video"),

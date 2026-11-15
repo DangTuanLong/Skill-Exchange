@@ -465,33 +465,7 @@ class ProfileViewModelTest {
     // ─── Document Upload Tests (TASK-043 Mức 1) ──────────────────────────
 
     @Test
-    fun `RequestDocumentUpload sets showDocumentPrivacyDialog to true`() = runTest {
-        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
-        advanceUntilIdle()
-
-        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
-        viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
-        advanceUntilIdle()
-
-        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
-    }
-
-    @Test
-    fun `DismissDocumentPrivacyDialog sets showDocumentPrivacyDialog to false`() = runTest {
-        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
-        advanceUntilIdle()
-
-        viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
-        advanceUntilIdle()
-        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
-
-        viewModel.onIntent(ProfileIntent.DismissDocumentPrivacyDialog)
-        advanceUntilIdle()
-        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
-    }
-
-    @Test
-    fun `ConfirmDocumentPrivacyDialog hides dialog and emits OpenDocumentPicker effect`() = runTest {
+    fun `RequestDocumentUpload directly emits OpenDocumentPicker effect without privacy dialog`() = runTest {
         val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
         advanceUntilIdle()
 
@@ -502,7 +476,21 @@ class ProfileViewModelTest {
 
         viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
         advanceUntilIdle()
-        assertTrue(viewModel.state.value.showDocumentPrivacyDialog)
+
+        assertFalse(viewModel.state.value.showDocumentPrivacyDialog)
+        assertEquals(ProfileEffect.OpenDocumentPicker, effectReceived)
+        job.cancel()
+    }
+
+    @Test
+    fun `ConfirmDocumentPrivacyDialog emits OpenDocumentPicker effect`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
 
         viewModel.onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog)
         advanceUntilIdle()
@@ -737,19 +725,7 @@ class ProfileViewModelTest {
     }
 
     @Test
-    fun `RequestOcrScan opens privacy dialog`() = runTest {
-        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
-        advanceUntilIdle()
-
-        viewModel.onIntent(ProfileIntent.RequestOcrScan)
-        assertTrue(viewModel.state.value.showOcrPrivacyDialog)
-
-        viewModel.onIntent(ProfileIntent.DismissOcrPrivacyDialog)
-        assertFalse(viewModel.state.value.showOcrPrivacyDialog)
-    }
-
-    @Test
-    fun `ConfirmOcrPrivacyDialog dismisses dialog and emits OpenImagePicker effect`() = runTest {
+    fun `RequestOcrScan directly emits OpenImagePicker effect without privacy dialog`() = runTest {
         val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
         advanceUntilIdle()
 
@@ -759,6 +735,23 @@ class ProfileViewModelTest {
         }
 
         viewModel.onIntent(ProfileIntent.RequestOcrScan)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.showOcrPrivacyDialog)
+        assertTrue(effectReceived is ProfileEffect.OpenImagePicker)
+        job.cancel()
+    }
+
+    @Test
+    fun `ConfirmOcrPrivacyDialog emits OpenImagePicker effect`() = runTest {
+        val viewModel = ProfileViewModel(mockProfileRepository, mockSkillRepository)
+        advanceUntilIdle()
+
+        var effectReceived: ProfileEffect? = null
+        val job = launch {
+            viewModel.effect.collect { effectReceived = it }
+        }
+
         viewModel.onIntent(ProfileIntent.ConfirmOcrPrivacyDialog)
         advanceUntilIdle()
 

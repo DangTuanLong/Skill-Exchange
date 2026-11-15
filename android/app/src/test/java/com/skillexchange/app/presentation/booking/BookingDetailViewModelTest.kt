@@ -74,7 +74,11 @@ class BookingDetailViewModelTest {
         }
 
         override suspend fun completeRequest(id: String): Result<ExchangeRequest> {
-            currentExchange = currentExchange.copy(receiverCompletedAt = "2026-10-15T11:00:00Z")
+            val isBoth = currentExchange.senderCompletedAt != null
+            currentExchange = currentExchange.copy(
+                status = if (isBoth) ExchangeStatus.COMPLETED else currentExchange.status,
+                receiverCompletedAt = "2026-10-15T11:00:00Z"
+            )
             return Result.success(currentExchange)
         }
     }
@@ -230,6 +234,46 @@ class BookingDetailViewModelTest {
         assertTrue(state.hasUserConfirmed)
         assertTrue(state.isWaitingForOtherToConfirm)
         assertNotNull(state.exchange?.receiverCompletedAt)
+    }
+
+    @Test
+    fun `confirmCompletion when both confirmed updates status to COMPLETED and checks rating`() = runTest {
+        currentExchange = currentExchange.copy(
+            status = ExchangeStatus.ACCEPTED,
+            senderCompletedAt = "2026-10-15T10:00:00Z"
+        )
+        mockHasRated = false
+
+        val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, tokenManager, mockRatingRepo, mockRescheduleRepo)
+
+        advanceUntilIdle()
+
+        viewModel.onIntent(BookingDetailIntent.ConfirmCompletion)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(ExchangeStatus.COMPLETED, state.status)
+        assertTrue(state.hasUserConfirmed)
+        assertFalse(state.isWaitingForOtherToConfirm)
+    }
+
+    @Test
+    fun `hasUserConfirmed handles case-insensitive UUIDs`() = runTest {
+        val uppercaseTokenManager = TokenManager(null).apply { saveUserId("USER_RECEIVER") }
+        currentExchange = currentExchange.copy(
+            status = ExchangeStatus.ACCEPTED,
+            receiverId = "user_receiver",
+            receiverCompletedAt = "2026-10-15T10:00:00Z"
+        )
+
+        val savedStateHandle = SavedStateHandle(mapOf("exchangeId" to "ex_999"))
+        val viewModel = BookingDetailViewModel(savedStateHandle, mockExchangeRepo, uppercaseTokenManager, mockRatingRepo, mockRescheduleRepo)
+
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertTrue(state.hasUserConfirmed)
     }
 
     @Test

@@ -23,6 +23,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
+import androidx.activity.compose.BackHandler
 import com.skillexchange.app.domain.model.SkillType
 import com.skillexchange.app.core.ui.util.CategoryIconHelper
 import androidx.compose.material3.*
@@ -68,14 +70,40 @@ enum class ProfileSetupTab {
 fun ProfileSetupScreen(
     onNavigateToSkillSelection: () -> Unit = {},
     onNavigateToHome: () -> Unit = {},
+    onNavigateBack: () -> Unit = onNavigateToHome,
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
     var visible by remember { mutableStateOf(false) }
-    var currentTab by remember { mutableStateOf(ProfileSetupTab.INFO) }
+    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    val hasChanges = remember(state.fullName, state.bio, state.city, state.avatarUrl, state.savedProfile) {
+        val saved = state.savedProfile
+        if (saved != null) {
+            state.fullName.trim() != saved.fullName.trim() ||
+            state.bio.trim() != (saved.bio ?: "").trim() ||
+            state.city.trim() != (saved.city ?: "").trim() ||
+            state.avatarUrl.trim() != (saved.avatarUrl ?: "").trim()
+        } else {
+            state.fullName.isNotBlank() || state.bio.isNotBlank() || state.city.isNotBlank()
+        }
+    }
+
+    fun handleBack() {
+        focusManager.clearFocus()
+        if (hasChanges) {
+            showUnsavedChangesDialog = true
+        } else {
+            onNavigateBack()
+        }
+    }
+
+    BackHandler {
+        handleBack()
+    }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -116,10 +144,9 @@ fun ProfileSetupScreen(
         viewModel.effect.collectLatest { effect ->
             when (effect) {
                 is ProfileEffect.NavigateToSkillSelection -> {
-                    currentTab = ProfileSetupTab.SKILLS
                     onNavigateToSkillSelection()
                 }
-                is ProfileEffect.NavigateToHome           -> onNavigateToHome()
+                is ProfileEffect.NavigateToHome           -> onNavigateBack()
                 is ProfileEffect.OpenDocumentPicker       -> documentPickerLauncher.launch("*/*")
                 is ProfileEffect.OpenImagePicker          -> {
                     ocrImagePickerLauncher.launch(
@@ -143,69 +170,76 @@ fun ProfileSetupScreen(
         )
     }
 
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            title = {
+                Text(
+                    text = "Lưu thay đổi?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = TextPrimaryLight
+                )
+            },
+            text = {
+                Text(
+                    text = "Bạn có muốn lưu các thay đổi trước khi quay lại không?",
+                    fontSize = 14.sp,
+                    color = TextSecondaryLight
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        focusManager.clearFocus()
+                        viewModel.onIntent(ProfileIntent.SaveProfile)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Có", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onNavigateBack()
+                    }
+                ) {
+                    Text("Không", color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             Surface(
                 color = Color(0xFFF8FAFF),
                 shadowElevation = 0.dp
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 10.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFE2E8F0).copy(alpha = 0.8f))
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        // Tab: Thông tin
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (currentTab == ProfileSetupTab.INFO) Brand500 else Color.Transparent)
-                                .clickable {
-                                    focusManager.clearFocus()
-                                    currentTab = ProfileSetupTab.INFO
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Thông tin",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = if (currentTab == ProfileSetupTab.INFO) Color.White else TextPrimaryLight
-                            )
-                        }
-
-                        // Tab: Kỹ năng
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (currentTab == ProfileSetupTab.SKILLS) Brand500 else Color.Transparent)
-                                .clickable {
-                                    focusManager.clearFocus()
-                                    currentTab = ProfileSetupTab.SKILLS
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Kỹ năng",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = if (currentTab == ProfileSetupTab.SKILLS) Color.White else TextPrimaryLight
-                            )
-                        }
+                    IconButton(onClick = { handleBack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Quay về",
+                            tint = TextPrimaryLight
+                        )
                     }
+                    Text(
+                        text = "Chỉnh sửa hồ sơ",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimaryLight
+                    )
                 }
             }
         },
@@ -235,12 +269,7 @@ fun ProfileSetupScreen(
                         Button(
                             onClick = {
                                 focusManager.clearFocus()
-                                if (state.fullName.isBlank()) {
-                                    currentTab = ProfileSetupTab.INFO
-                                    viewModel.onIntent(ProfileIntent.SaveProfile)
-                                } else {
-                                    viewModel.onIntent(ProfileIntent.SaveProfile)
-                                }
+                                viewModel.onIntent(ProfileIntent.SaveProfile)
                             },
                             enabled = !state.isSaving,
                             modifier = Modifier.fillMaxSize(),
@@ -259,7 +288,7 @@ fun ProfileSetupScreen(
                                 )
                             } else {
                                 Text(
-                                    "Xong",
+                                    "Lưu",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     color = Color.White
@@ -284,12 +313,14 @@ fun ProfileSetupScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (currentTab == ProfileSetupTab.INFO) {
-                AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            AnimatedVisibility(visible = visible, enter = fadeIn() + slideInVertically { -40 }) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.Start
+                ) {
                     Text(
                         "Thông tin cá nhân",
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimaryLight
                     )
@@ -592,7 +623,8 @@ fun ProfileSetupScreen(
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                     )
 
-                    // ── Lịch rảnh hàng tuần (Availability Editor) ─────────────
+                    // ── Lịch rảnh hàng tuần (tạm ẩn) ─────────────
+                    /*
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -765,8 +797,7 @@ fun ProfileSetupScreen(
                             }
                         }
                     }
-
-
+                    */
 
                     if (state.error != null) {
                         Text(
@@ -778,8 +809,10 @@ fun ProfileSetupScreen(
 
                 }
             }
-        } else {
-            // ── SKILLS TAB ──────────────────────────────────────────────
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── KỸ NĂNG CỦA TÔI ──────────────────────────────────────────────
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1062,7 +1095,6 @@ fun ProfileSetupScreen(
                     }
                 }
             }
-        }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -1318,99 +1350,7 @@ internal fun ProfileExtractionDialogsAndSheet(
         }
     }
 
-    if (state.showDocumentPrivacyDialog) {
-        AlertDialog(
-            onDismissRequest = { onIntent(ProfileIntent.DismissDocumentPrivacyDialog) },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Bảo mật",
-                        modifier = Modifier.size(20.dp),
-                        tint = Brand500
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Bảo mật & Quyền riêng tư",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = TextPrimaryLight
-                    )
-                }
-            },
-            text = {
-                Text(
-                    text = "Tệp của bạn (.txt, .md, .pdf) sẽ được gửi lên máy chủ để đọc trong bộ nhớ và trích xuất từ khóa kỹ năng. Hệ thống cam kết không lưu trữ tệp, không ghi log nội dung cá nhân và dữ liệu sẽ tự động hủy ngay sau khi xử lý.",
-                    fontSize = 14.sp,
-                    color = TextSecondaryLight,
-                    lineHeight = 20.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { onIntent(ProfileIntent.ConfirmDocumentPrivacyDialog) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Tiếp tục chọn tệp", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { onIntent(ProfileIntent.DismissDocumentPrivacyDialog) }
-                ) {
-                    Text("Hủy", color = Color(0xFF64748B))
-                }
-            }
-        )
-    }
 
-    if (state.showOcrPrivacyDialog) {
-        AlertDialog(
-            onDismissRequest = { onIntent(ProfileIntent.DismissOcrPrivacyDialog) },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Bảo mật OCR",
-                        modifier = Modifier.size(20.dp),
-                        tint = Brand500
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Bảo mật & Quét ảnh OCR",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = TextPrimaryLight
-                    )
-                }
-            },
-            text = {
-                Text(
-                    text = "Hình ảnh được xử lý trực tiếp trên thiết bị của bạn (offline) bằng mô hình máy học trên máy. Hệ thống cam kết không lưu trữ và không tải hình ảnh lên máy chủ.\n\nVĂN BẢN nhận dạng được sẽ được gửi lên máy chủ khi bạn bấm trích xuất kỹ năng, vì vậy bạn hãy xóa số điện thoại, email hoặc thông tin nhạy cảm khác nếu có trước khi gửi.",
-                    fontSize = 14.sp,
-                    color = TextSecondaryLight,
-                    lineHeight = 20.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { onIntent(ProfileIntent.ConfirmOcrPrivacyDialog) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Tiếp tục chọn ảnh", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { onIntent(ProfileIntent.DismissOcrPrivacyDialog) }
-                ) {
-                    Text("Hủy", color = Color(0xFF64748B))
-                }
-            }
-        )
-    }
 
     if (state.showOcrPreviewDialog) {
         AlertDialog(

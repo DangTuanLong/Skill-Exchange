@@ -378,7 +378,8 @@ fun MyProfileScreen(
                     }
                 }
 
-                // ── 4. Lịch rảnh hàng tuần ─────────────────────────────────────────
+                // ── 4. Lịch rảnh hàng tuần (tạm ẩn) ──────────────────────────────────
+                /*
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -468,6 +469,7 @@ fun MyProfileScreen(
                         }
                     }
                 }
+                */
 
                 // ── 5. Thống kê hoạt động (Dashboard) ──────────────────────────────
                 Card(

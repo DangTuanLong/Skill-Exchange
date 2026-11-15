@@ -719,12 +719,32 @@ class SkillExtractionService(
 
     private fun findAliasesForSkill(skillName: String): List<String> {
         val unaccented = unaccent(skillName)
+        val result = mutableSetOf<String>()
         for ((canonical, aliases) in SkillAliases.CANONICAL_TO_ALIASES) {
-            if (unaccent(canonical) == unaccented) {
-                return aliases
+            val unaccentedCanonical = unaccent(canonical)
+            if (unaccentedCanonical == unaccented || aliases.any { unaccent(it) == unaccented }) {
+                result.addAll(aliases)
+                result.add(unaccentedCanonical)
             }
         }
-        return emptyList()
+
+        // Bóc tách thêm các từ thành phần đối với tên ghép dạng "/", "&", "(", ")" (ví dụ: "React / Next.js", "SQL & Database")
+        val subTokens = unaccented.split('/', '&', '(', ')', ',')
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+        for (sub in subTokens) {
+            if (sub != unaccented) {
+                result.add(sub)
+                for ((canonical, aliases) in SkillAliases.CANONICAL_TO_ALIASES) {
+                    val unaccentedCanonical = unaccent(canonical)
+                    if (unaccentedCanonical == sub || aliases.any { unaccent(it) == sub }) {
+                        result.addAll(aliases)
+                        result.add(unaccentedCanonical)
+                    }
+                }
+            }
+        }
+        return result.toList()
     }
 
     private fun defaultSkills(): List<SkillDefinition> = listOf(

@@ -33,10 +33,22 @@ open class TokenManager(context: Context? = null) {
     }
 
     private val inMemoryPrefs = mutableMapOf<String, Any?>()
+    private var onSessionChangedListener: (() -> Unit)? = null
+
+    open fun setOnSessionChangedListener(listener: (() -> Unit)?) {
+        this.onSessionChangedListener = listener
+    }
+
+    private fun notifySessionChanged() {
+        try {
+            onSessionChangedListener?.invoke()
+        } catch (_: Exception) {}
+    }
 
     open fun saveAccessToken(token: String) {
         prefs?.edit()?.putString(Constants.PREF_ACCESS_TOKEN, token)?.apply()
         inMemoryPrefs[Constants.PREF_ACCESS_TOKEN] = token
+        notifySessionChanged()
     }
 
     open fun getAccessToken(): String? =
@@ -45,6 +57,7 @@ open class TokenManager(context: Context? = null) {
     open fun saveRefreshToken(token: String) {
         prefs?.edit()?.putString(Constants.PREF_REFRESH_TOKEN, token)?.apply()
         inMemoryPrefs[Constants.PREF_REFRESH_TOKEN] = token
+        notifySessionChanged()
     }
 
     open fun getRefreshToken(): String? =
@@ -84,6 +97,7 @@ open class TokenManager(context: Context? = null) {
         inMemoryPrefs[Constants.PREF_ACCESS_TOKEN] = accessToken
         inMemoryPrefs[Constants.PREF_REFRESH_TOKEN] = refreshToken
         inMemoryPrefs["user_id"] = userId
+        notifySessionChanged()
     }
 
     /**
@@ -102,6 +116,7 @@ open class TokenManager(context: Context? = null) {
         inMemoryPrefs.remove(Constants.PREF_REFRESH_TOKEN)
         inMemoryPrefs.remove("user_id")
         inMemoryPrefs.remove("profile_completed")
+        notifySessionChanged()
     }
 
     open fun clearAll() {
@@ -111,6 +126,7 @@ open class TokenManager(context: Context? = null) {
         if (onboardingSeen) {
             saveOnboardingSeen(true)
         }
+        notifySessionChanged()
     }
 
     open fun isLoggedIn(): Boolean = getAccessToken() != null && getRefreshToken() != null

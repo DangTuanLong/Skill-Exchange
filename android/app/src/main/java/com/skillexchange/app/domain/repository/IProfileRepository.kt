@@ -15,6 +15,7 @@ interface IProfileRepository {
         availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>? = null
     ): Result<Profile>
     suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String>
+    suspend fun clearLocalProfile() {}
 }
 
 interface ISkillRepository {

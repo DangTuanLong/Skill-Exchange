@@ -66,6 +66,7 @@ class MyProfileViewModelTest {
     private var profileResult: Result<Profile> = Result.success(fakeProfile)
     private var skillsResult: Result<List<UserSkill>> = Result.success(fakeSkills)
     private var reputationResult: Result<Reputation> = Result.success(fakeReputation)
+    private var clearLocalProfileCalled = false
 
     private val mockProfileRepo = object : IProfileRepository {
         override suspend fun getMyProfile(): Result<Profile> = profileResult
@@ -75,6 +76,9 @@ class MyProfileViewModelTest {
             availability: List<AvailabilityWindow>?
         ): Result<Profile> = error("Not used")
         override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> = error("Not used")
+        override suspend fun clearLocalProfile() {
+            clearLocalProfileCalled = true
+        }
     }
 
     private val mockSkillRepo = object : ISkillRepository {
@@ -190,6 +194,7 @@ class MyProfileViewModelTest {
         viewModel.onIntent(MyProfileIntent.Logout)
         advanceUntilIdle()
 
+        assertTrue(clearLocalProfileCalled)
         assertFalse(tokenManager.isLoggedIn())
         assertTrue(effectReceived is MyProfileEffect.NavigateToLogin)
         job.cancel()

@@ -611,7 +611,8 @@ fun ProfileDetailScreen(
                         }
                     }
 
-                    // Availability Section
+                    // Availability Section (tạm ẩn)
+                    /*
                     if (profile.availability.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -676,6 +677,7 @@ fun ProfileDetailScreen(
                             }
                         }
                     }
+                    */
 
                     // Reviews Section
                     Card(

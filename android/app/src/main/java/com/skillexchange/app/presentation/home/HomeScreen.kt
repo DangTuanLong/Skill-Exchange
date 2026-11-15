@@ -256,21 +256,21 @@ fun HomeScreen(
                             })
                         )
 
-                        // 2. Đổi vòng tròn button
-                        IconButton(
-                            onClick = onNavigateToSkillGraph,
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Autorenew,
-                                contentDescription = "Đổi vòng tròn",
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        // 2. Đổi vòng tròn button (tạm ẩn)
+                        // IconButton(
+                        //     onClick = onNavigateToSkillGraph,
+                        //     modifier = Modifier
+                        //         .size(46.dp)
+                        //         .clip(CircleShape)
+                        //         .background(Color.White.copy(alpha = 0.2f))
+                        // ) {
+                        //     Icon(
+                        //         imageVector = Icons.Default.Autorenew,
+                        //         contentDescription = "Đổi vòng tròn",
+                        //         tint = Color.White,
+                        //         modifier = Modifier.size(22.dp)
+                        //     )
+                        // }
 
                         // 3. Tin nhắn button
                         IconButton(

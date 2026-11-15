@@ -2,6 +2,8 @@ package com.skillexchange.app.presentation.profile.myprofile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.skillexchange.app.core.auth.IFirebaseAuthManager
+import com.skillexchange.app.core.notification.FcmTokenManager
 import com.skillexchange.app.core.security.TokenManager
 import com.skillexchange.app.domain.repository.IProfileRepository
 import com.skillexchange.app.domain.repository.IRatingRepository
@@ -19,7 +21,9 @@ class MyProfileViewModel(
     private val profileRepository: IProfileRepository,
     private val skillRepository: ISkillRepository,
     private val ratingRepository: IRatingRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val firebaseAuthManager: IFirebaseAuthManager? = null,
+    private val fcmTokenManager: FcmTokenManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MyProfileUiState())
@@ -90,6 +94,15 @@ class MyProfileViewModel(
 
     private fun logout() {
         viewModelScope.launch {
+            try {
+                fcmTokenManager?.unregisterCurrentToken()
+            } catch (_: Exception) {}
+            try {
+                firebaseAuthManager?.signOutAndCleanup()
+            } catch (_: Exception) {}
+            try {
+                profileRepository.clearLocalProfile()
+            } catch (_: Exception) {}
             tokenManager.clearSession()
             _effect.send(MyProfileEffect.NavigateToLogin)
         }

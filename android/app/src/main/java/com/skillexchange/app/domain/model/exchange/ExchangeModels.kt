@@ -55,7 +55,11 @@ data class ExchangeRequest(
     val createdAt: String,
     val updatedAt: String
 ) {
-    fun isSender(currentUserId: String): Boolean = senderId == currentUserId
+    fun isSender(currentUserId: String): Boolean =
+        senderId.trim().equals(currentUserId.trim(), ignoreCase = true)
+
+    fun isReceiver(currentUserId: String): Boolean =
+        receiverId.trim().equals(currentUserId.trim(), ignoreCase = true)
 
     fun otherUserName(currentUserId: String): String =
         if (isSender(currentUserId)) (receiverName ?: "Đối tác") else (senderName ?: "Đối tác")
@@ -69,8 +73,14 @@ data class ExchangeRequest(
     fun learnSkillName(currentUserId: String): String =
         if (isSender(currentUserId)) skillWantedName else skillOfferedName
 
-    fun hasUserCompleted(currentUserId: String): Boolean =
-        if (isSender(currentUserId)) senderCompletedAt != null else receiverCompletedAt != null
+    fun hasUserCompleted(currentUserId: String): Boolean {
+        val uid = currentUserId.trim()
+        return when {
+            senderId.trim().equals(uid, ignoreCase = true) -> senderCompletedAt != null
+            receiverId.trim().equals(uid, ignoreCase = true) -> receiverCompletedAt != null
+            else -> false
+        }
+    }
 
     fun isWaitingForOtherToConfirm(currentUserId: String): Boolean =
         status == ExchangeStatus.ACCEPTED && hasUserCompleted(currentUserId) && !isBothCompleted()
