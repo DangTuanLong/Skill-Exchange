@@ -25,9 +25,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 @Serializable
@@ -36,7 +38,6 @@ data class GeminiSkillRawItem(
     val category: String? = "Khác",
     val type: String? = "HAVE",
     val proficiency_level: Int? = 2,
-    val experience_years: Double? = 0.0,
     val confidence: Double? = 1.0,
     val evidence: String? = null
 )
@@ -78,17 +79,84 @@ class GeminiSkillExtractionService(
     private val apiKey: String
         get() = EnvLoader.get("GEMINI_API_KEY", "")
 
-    private val systemPrompt = """
-        Bạn là chuyên gia phân tích kỹ năng và đánh giá hồ sơ năng lực của SkillExchange.
-        Nhiệm vụ của bạn là đọc kỹ tài liệu, hình ảnh chứng chỉ/bằng cấp/CV hoặc nội dung bio được cung cấp.
-        Hãy trích xuất:
-        1. Tất cả các kỹ năng chuyên môn, công nghệ, công cụ, ngoại ngữ, kỹ năng mềm được đề cập.
-        2. Xác định rõ loại kỹ năng: 'HAVE' (kỹ năng ứng viên đã có, đã làm, có chứng chỉ) hoặc 'WANT' (kỹ năng ứng viên ghi rõ muốn học, trao đổi).
-        3. Đánh giá mức độ thành thạo từ 1 đến 5 (1: Mới bắt đầu, 2: Cơ bản, 3: Khá, 4: Thành thạo, 5: Chuyên gia).
-        4. Xác định số năm kinh nghiệm nếu có thông tin (nếu không nêu rõ, để 0.0).
-        5. Tóm tắt ngắn gọn hồ sơ năng lực (profile_summary) không quá 3 câu bằng tiếng Việt.
-        Trả về kết quả dưới dạng JSON tuân thủ đúng responseSchema.
-    """.trimIndent()
+    // ─── IN-MEMORY TAXONOMY CACHE ─────────────────────────────────────────────
+    // Lưu trữ nhóm kỹ năng -> danh sách tên kỹ năng, cùng bộ nhớ ánh xạ ID để phản hồi siêu tốc
+    private val taxonomyCache = ConcurrentHashMap<String, MutableSet<String>>()
+    private val categoryIdCache = ConcurrentHashMap<String, Int>()
+    private val skillIdCache = ConcurrentHashMap<String, Int>()
+
+    @Volatile
+    private var isTaxonomyInitialized = false
+
+    private fun ensureTaxonomyLoaded() {
+        if (isTaxonomyInitialized) return
+        synchronized(this) {
+            if (isTaxonomyInitialized) return
+            try {
+                transaction {
+                    val categories = SkillCategoriesTable.selectAll().toList()
+                    for (cat in categories) {
+                        val catId = cat[SkillCategoriesTable.id]
+                        val catName = cat[SkillCategoriesTable.name]
+                        categoryIdCache[catName.lowercase()] = catId
+                        taxonomyCache.computeIfAbsent(catName) { ConcurrentHashMap.newKeySet() }
+                    }
+
+                    val skills = (SkillsTable innerJoin SkillCategoriesTable).selectAll().toList()
+                    for (row in skills) {
+                        val skillId = row[SkillsTable.id]
+                        val skillName = row[SkillsTable.name]
+                        val catName = row[SkillCategoriesTable.name]
+                        skillIdCache[skillName.lowercase()] = skillId
+                        taxonomyCache.computeIfAbsent(catName) { ConcurrentHashMap.newKeySet() }.add(skillName)
+                    }
+                }
+                isTaxonomyInitialized = true
+            } catch (e: Exception) {
+                // Nếu DB tạm thời chưa sẵn sàng, sẽ thử lại ở lượt sau
+            }
+        }
+    }
+
+    private fun formatTaxonomyForPrompt(): String {
+        ensureTaxonomyLoaded()
+        if (taxonomyCache.isEmpty()) return ""
+        val sb = StringBuilder("Danh mục nhóm kỹ năng và kỹ năng hiện có trong cơ sở dữ liệu hệ thống:\n")
+        for ((catName, skills) in taxonomyCache) {
+            sb.append("- Nhóm \"").append(catName).append("\": ")
+            if (skills.isEmpty()) {
+                sb.append("(chưa có kỹ năng cụ thể)")
+            } else {
+                sb.append(skills.joinToString(", "))
+            }
+            sb.append("\n")
+        }
+        return sb.toString()
+    }
+
+    private fun buildSystemPrompt(): String {
+        val taxonomy = formatTaxonomyForPrompt()
+        return """
+            Bạn là chuyên gia phân tích kỹ năng và đánh giá hồ sơ năng lực của nền tảng SkillExchange.
+            Nhiệm vụ của bạn là đọc kỹ tài liệu, hình ảnh chứng chỉ/bằng cấp/CV hoặc nội dung bio được cung cấp.
+
+            $taxonomy
+
+            Quy tắc trích xuất và phân loại bắt buộc:
+            1. ƯU TIÊN CHUẨN HÓA VỚI DATABASE:
+               - Nếu kỹ năng trong tài liệu/ảnh tương đương hoặc là biến thể của kỹ năng đã có trong danh mục trên (ví dụ: 'ReactJS', 'React Native' -> 'React'; 'Python 3', 'Python Programming' -> 'Python'), hãy CHUẨN HÓA về đúng tên kỹ năng và nhóm có sẵn trong danh mục.
+            2. PHÁT HIỆN KỸ NĂNG MỚI:
+               - Nếu người dùng có kỹ năng chưa xuất hiện trong danh mục trên:
+                 + Đặt tên kỹ năng rõ ràng, chuẩn hóa (Title Case, ngắn gọn, ví dụ: 'Vận hành máy CNC', 'Thiết kế Vi mạch', 'Nuôi cấy mô').
+                 + Xem xét kỹ năng đó có thuộc về nhóm kỹ năng nào đã có sẵn ở trên không. Nếu có, hãy dùng đúng tên nhóm đó.
+                 + Nếu không thuộc bất kỳ nhóm nào đã có, hãy đề xuất một tên nhóm kỹ năng mới ngắn gọn, phù hợp (ví dụ: 'Cơ khí & Chế tạo', 'Nông nghiệp & Sinh học').
+            3. Xác định rõ loại kỹ năng: 'HAVE' (kỹ năng ứng viên đã có, đã làm, có chứng chỉ) hoặc 'WANT' (kỹ năng ứng viên ghi rõ muốn học, tìm kiếm, trao đổi).
+            4. Đánh giá mức độ thành thạo từ 1 đến 5 (1: Mới bắt đầu, 2: Cơ bản, 3: Khá, 4: Thành thạo, 5: Chuyên gia).
+            5. Tóm tắt ngắn gọn hồ sơ năng lực (profile_summary) không quá 3 câu bằng tiếng Việt.
+
+            Trả về kết quả dưới dạng JSON tuân thủ đúng responseSchema.
+        """.trimIndent()
+    }
 
     private fun buildGenerationConfig(): JsonObject {
         return buildJsonObject {
@@ -98,21 +166,33 @@ class GeminiSkillExtractionService(
                 put("properties", buildJsonObject {
                     put("profile_summary", buildJsonObject {
                         put("type", "STRING")
-                        put("description", "Tóm tắt ngắn gọn năng lực chuyên môn hoặc giới thiệu bản thân từ nội dung cung cấp (tối đa 3 câu).")
+                        put(
+                            "description",
+                            "Tóm tắt ngắn gọn năng lực chuyên môn hoặc giới thiệu bản thân từ nội dung cung cấp (tối đa 3 câu)."
+                        )
                     })
                     put("skills", buildJsonObject {
                         put("type", "ARRAY")
-                        put("description", "Danh sách các kỹ năng được trích xuất từ tài liệu, ảnh chứng chỉ/CV hoặc bio.")
+                        put(
+                            "description",
+                            "Danh sách các kỹ năng được trích xuất từ tài liệu, ảnh chứng chỉ/CV hoặc bio."
+                        )
                         put("items", buildJsonObject {
                             put("type", "OBJECT")
                             put("properties", buildJsonObject {
                                 put("name", buildJsonObject {
                                     put("type", "STRING")
-                                    put("description", "Tên kỹ năng chuẩn hóa (ví dụ: Kotlin Android, Python, Thiết kế UI/UX, Tiếng Nhật, v.v.)")
+                                    put(
+                                        "description",
+                                        "Tên kỹ năng chuẩn hóa (ví dụ: Kotlin, Python, Thiết kế UI/UX, Tiếng Nhật, v.v.)"
+                                    )
                                 })
                                 put("category", buildJsonObject {
                                     put("type", "STRING")
-                                    put("description", "Nhóm kỹ năng: Lập trình & Công nghệ, Ngoại ngữ, Thiết kế & Sáng tạo, Kinh doanh & Marketing, Kỹ năng mềm, Khác")
+                                    put(
+                                        "description",
+                                        "Nhóm kỹ năng tương ứng (ưu tiên nhóm có sẵn hoặc nhóm mới đề xuất)"
+                                    )
                                 })
                                 put("type", buildJsonObject {
                                     put("type", "STRING")
@@ -120,15 +200,14 @@ class GeminiSkillExtractionService(
                                         add("HAVE")
                                         add("WANT")
                                     })
-                                    put("description", "HAVE nếu là kỹ năng người dùng đã có; WANT nếu là kỹ năng muốn học")
+                                    put(
+                                        "description",
+                                        "HAVE nếu là kỹ năng người dùng đã có; WANT nếu là kỹ năng muốn học"
+                                    )
                                 })
                                 put("proficiency_level", buildJsonObject {
                                     put("type", "INTEGER")
                                     put("description", "Mức độ thành thạo từ 1 đến 5")
-                                })
-                                put("experience_years", buildJsonObject {
-                                    put("type", "NUMBER")
-                                    put("description", "Số năm kinh nghiệm nếu có đề cập (mặc định 0.0)")
                                 })
                                 put("confidence", buildJsonObject {
                                     put("type", "NUMBER")
@@ -157,12 +236,13 @@ class GeminiSkillExtractionService(
     }
 
     private fun buildTextRequestBody(text: String): JsonObject {
+        val prompt = buildSystemPrompt()
         return buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
                     put("parts", buildJsonArray {
                         add(buildJsonObject {
-                            put("text", "$systemPrompt\n\n[NỘI DUNG BIO / GIỚI THIỆU BẢN THÂN CỦA ỨNG VIÊN]:\n$text")
+                            put("text", "$prompt\n\n[NỘI DUNG BIO / GIỚI THIỆU BẢN THÂN CỦA ỨNG VIÊN]:\n$text")
                         })
                     })
                 })
@@ -180,9 +260,11 @@ class GeminiSkillExtractionService(
             fileName.lowercase().endsWith(".png") -> "image/png"
             fileName.lowercase().endsWith(".jpg") || fileName.lowercase().endsWith(".jpeg") -> "image/jpeg"
             fileName.lowercase().endsWith(".webp") -> "image/webp"
-            else -> "text/plain"
+            fileName.lowercase().endsWith(".txt") || fileName.lowercase().endsWith(".md") -> "text/plain"
+            else -> "application/pdf"
         }
 
+        val prompt = buildSystemPrompt()
         return buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
@@ -194,7 +276,10 @@ class GeminiSkillExtractionService(
                             })
                         })
                         add(buildJsonObject {
-                            put("text", "$systemPrompt\n\nTệp đính kèm: $fileName. Hãy phân tích toàn diện nội dung tệp này để trích xuất kỹ năng và tóm tắt hồ sơ.")
+                            put(
+                                "text",
+                                "$prompt\n\n[TÊN TỆP TẢI LÊN]: $fileName\nHãy phân tích kỹ lưỡng nội dung tệp trên để trích xuất hồ sơ năng lực và danh sách kỹ năng."
+                            )
                         })
                     })
                 })
@@ -203,15 +288,21 @@ class GeminiSkillExtractionService(
         }
     }
 
-    private suspend fun callGeminiEndpoint(modelName: String, key: String, body: JsonObject): Result<String> = runCatching {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$key"
+    private suspend fun callGeminiEndpoint(
+        model: String,
+        apiKey: String,
+        requestBody: JsonObject
+    ): Result<String> = runCatching {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
         val response = httpClient.post(url) {
             contentType(ContentType.Application.Json)
-            setBody(body.toString())
+            header("Accept", "application/json")
+            setBody(requestBody.toString())
         }
+
         val responseText = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw RuntimeException("Gemini API error (${response.status.value}): $responseText")
+            throw RuntimeException("Gemini API [$model] trả về HTTP ${response.status.value}: $responseText")
         }
         responseText
     }
@@ -228,7 +319,7 @@ class GeminiSkillExtractionService(
             return primaryRes.getOrThrow()
         }
 
-        // 2. Nếu model chính lỗi và khác fallback, thử fallback
+        // 2. Nếu model chính lỗi và khác fallback, thử fallback sang gemini-3.8-flash
         val primaryError = primaryRes.exceptionOrNull()
         if (!primaryModel.equals(fallbackModel, ignoreCase = true)) {
             val fallbackRes = callGeminiEndpoint(fallbackModel, key, requestBody)
@@ -257,40 +348,75 @@ class GeminiSkillExtractionService(
         return json.decodeFromString<GeminiSkillRawResponse>(textPart)
     }
 
-    private fun resolveSkillInDb(skillName: String, categoryName: String): ResolvedSkillInfo {
+    private fun resolveSkillInDb(rawSkillName: String, rawCategoryName: String): ResolvedSkillInfo {
+        val skillName = rawSkillName.trim()
+        val categoryName = rawCategoryName.trim().ifBlank { "Khác" }
+
+        ensureTaxonomyLoaded()
+
         return try {
             transaction {
+                // 1. Kiểm tra kỹ năng đã tồn tại chưa (case-insensitive)
                 val existing = (SkillsTable innerJoin SkillCategoriesTable)
                     .selectAll()
-                    .firstOrNull { it[SkillsTable.name].equals(skillName, ignoreCase = true) }
+                    .where { SkillsTable.name.lowerCase() eq skillName.lowercase() }
+                    .firstOrNull()
 
                 if (existing != null) {
+                    val sId = existing[SkillsTable.id]
+                    val sName = existing[SkillsTable.name]
+                    val cId = existing[SkillsTable.categoryId]
+                    val cName = existing[SkillCategoriesTable.name]
+
+                    // Đồng bộ RAM cache
+                    skillIdCache[sName.lowercase()] = sId
+                    categoryIdCache[cName.lowercase()] = cId
+                    taxonomyCache.computeIfAbsent(cName) { ConcurrentHashMap.newKeySet() }.add(sName)
+
                     return@transaction ResolvedSkillInfo(
-                        id = existing[SkillsTable.id],
-                        name = existing[SkillsTable.name],
-                        categoryId = existing[SkillsTable.categoryId],
-                        categoryName = existing[SkillCategoriesTable.name]
+                        id = sId,
+                        name = sName,
+                        categoryId = cId,
+                        categoryName = cName
                     )
                 }
 
-                val cat = SkillCategoriesTable.selectAll()
-                    .firstOrNull { it[SkillCategoriesTable.name].equals(categoryName, ignoreCase = true) }
-                    ?: SkillCategoriesTable.selectAll().firstOrNull()
+                // 2. Kỹ năng chưa có trong DB: Kiểm tra xem category đã tồn tại chưa
+                val existingCat = SkillCategoriesTable.selectAll()
+                    .where { SkillCategoriesTable.name.lowerCase() eq categoryName.lowercase() }
+                    .firstOrNull()
 
-                val catId = cat?.get(SkillCategoriesTable.id) ?: 1
-                val catName = cat?.get(SkillCategoriesTable.name) ?: categoryName
+                val (catId, finalCatName) = if (existingCat != null) {
+                    existingCat[SkillCategoriesTable.id] to existingCat[SkillCategoriesTable.name]
+                } else {
+                    // Tạo nhóm kỹ năng mới trong cơ sở dữ liệu
+                    val newCatId = SkillCategoriesTable.insert {
+                        it[name] = categoryName
+                        it[icon] = "category"
+                        it[description] = "Tạo tự động từ trích xuất kỹ năng AI Gemini"
+                    } get SkillCategoriesTable.id
+                    categoryIdCache[categoryName.lowercase()] = newCatId
+                    taxonomyCache.computeIfAbsent(categoryName) { ConcurrentHashMap.newKeySet() }
+                    newCatId to categoryName
+                }
 
-                val newId = SkillsTable.insert {
+                // 3. Tạo kỹ năng mới gắn với categoryId
+                val newSkillId = SkillsTable.insert {
                     it[name] = skillName
                     it[categoryId] = catId
                     it[description] = "Tạo tự động từ trích xuất AI Gemini"
                 } get SkillsTable.id
 
+                // Cập nhật ngay vào RAM cache để các request kế tiếp Gemini tự động có kỹ năng này
+                skillIdCache[skillName.lowercase()] = newSkillId
+                categoryIdCache[finalCatName.lowercase()] = catId
+                taxonomyCache.computeIfAbsent(finalCatName) { ConcurrentHashMap.newKeySet() }.add(skillName)
+
                 ResolvedSkillInfo(
-                    id = newId,
+                    id = newSkillId,
                     name = skillName,
                     categoryId = catId,
-                    categoryName = catName
+                    categoryName = finalCatName
                 )
             }
         } catch (e: Exception) {
@@ -319,7 +445,7 @@ class GeminiSkillExtractionService(
                 reason = item.evidence ?: "Phát hiện bởi Gemini AI",
                 suggestedLevel = (item.proficiency_level ?: 2).coerceIn(1, 5),
                 skillType = item.type ?: "HAVE",
-                experienceYears = item.experience_years ?: 0.0,
+                experienceYears = 0.0,
                 evidence = item.evidence
             )
         }

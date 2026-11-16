@@ -49,13 +49,7 @@ data class ProfileUiState(
     val extractedSkills: List<ExtractedSkillItem> = emptyList(),
     val extractionWarning: String? = null,
     val showDocumentPrivacyDialog: Boolean = false,
-    val isExtractingDocument: Boolean = false,
-    // OCR Image Scanning (TASK-043 Mức 3)
-    val showOcrPrivacyDialog: Boolean = false,
-    val isProcessingOcr: Boolean = false,
-    val showOcrPreviewDialog: Boolean = false,
-    val ocrRecognizedText: String = "",
-    val ocrTextError: String? = null
+    val isExtractingDocument: Boolean = false
 )
 
 data class ExtractedSkillItem(
@@ -99,15 +93,8 @@ sealed class ProfileIntent {
     object ConfirmDocumentPrivacyDialog : ProfileIntent()
     data class UploadDocument(val fileBytes: ByteArray, val fileName: String) : ProfileIntent()
     data class UploadDocumentUri(val contentResolver: ContentResolver, val uri: Uri) : ProfileIntent()
-    // OCR Image Extraction Intents (TASK-043 Mức 3)
+    // Image Extraction Intent
     object RequestOcrScan : ProfileIntent()
-    object DismissOcrPrivacyDialog : ProfileIntent()
-    object ConfirmOcrPrivacyDialog : ProfileIntent()
-    data class ProcessOcrImage(val uri: android.net.Uri) : ProfileIntent()
-    data class OcrTextChanged(val value: String) : ProfileIntent()
-    object DismissOcrPreviewDialog : ProfileIntent()
-    object SubmitOcrText : ProfileIntent()
-    object CancelOcr : ProfileIntent()
 }
 
 
@@ -124,8 +111,7 @@ class ProfileViewModel(
     private val profileRepo: IProfileRepository,
     private val skillRepo: ISkillRepository,
     private val tokenManager: com.skillexchange.app.core.security.TokenManager? = null,
-    private val nlpRepo: com.skillexchange.app.domain.repository.INlpRepository? = null,
-    private val ocrRecognizer: com.skillexchange.app.core.ocr.IOcrRecognizer? = null
+    private val nlpRepo: com.skillexchange.app.domain.repository.INlpRepository? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -133,8 +119,6 @@ class ProfileViewModel(
 
     private val _effect = Channel<ProfileEffect>()
     val effect = _effect.receiveAsFlow()
-
-    private var ocrJob: kotlinx.coroutines.Job? = null
 
     init { onIntent(ProfileIntent.LoadData) }
 
@@ -176,16 +160,6 @@ class ProfileViewModel(
             is ProfileIntent.RequestOcrScan -> {
                 viewModelScope.launch { _effect.send(ProfileEffect.OpenImagePicker) }
             }
-            is ProfileIntent.DismissOcrPrivacyDialog -> _state.update { it.copy(showOcrPrivacyDialog = false) }
-            is ProfileIntent.ConfirmOcrPrivacyDialog -> {
-                _state.update { it.copy(showOcrPrivacyDialog = false) }
-                viewModelScope.launch { _effect.send(ProfileEffect.OpenImagePicker) }
-            }
-            is ProfileIntent.ProcessOcrImage -> processOcrImage(intent.uri)
-            is ProfileIntent.OcrTextChanged -> onOcrTextChanged(intent.value)
-            is ProfileIntent.DismissOcrPreviewDialog -> _state.update { it.copy(showOcrPreviewDialog = false) }
-            is ProfileIntent.SubmitOcrText -> submitOcrText()
-            is ProfileIntent.CancelOcr -> cancelOcr()
         }
     }
 
@@ -706,127 +680,6 @@ class ProfileViewModel(
                 .onFailure { e ->
                     _state.update { it.copy(isExtractingDocument = false) }
                     _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi xử lý tệp"))
-                }
-        }
-    }
-
-    // ─── OCR Handlers (TASK-043 Mức 3) ──────────────────────────────────
-    private fun processOcrImage(uri: android.net.Uri) {
-        val ocr = ocrRecognizer
-        if (ocr == null) {
-            viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Dịch vụ nhận dạng chữ (OCR) chưa sẵn sàng"))
-            }
-            return
-        }
-
-        ocrJob?.cancel()
-        ocrJob = viewModelScope.launch {
-            _state.update { it.copy(isProcessingOcr = true, error = null) }
-            val result = ocr.recognizeText(uri)
-            result
-                .onSuccess { text ->
-                    val trimmed = text.trim()
-                    if (trimmed.isEmpty()) {
-                        _state.update { it.copy(isProcessingOcr = false) }
-                        _effect.send(ProfileEffect.ShowSnackbar("Không tìm thấy văn bản nào trong hình ảnh."))
-                    } else {
-                        _state.update {
-                            it.copy(
-                                isProcessingOcr = false,
-                                ocrRecognizedText = text,
-                                ocrTextError = if (text.length > 10000) "Độ dài văn bản (${text.length} ký tự) vượt quá giới hạn 10.000 ký tự. Vui lòng rút gọn." else null,
-                                showOcrPreviewDialog = true
-                            )
-                        }
-                    }
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(isProcessingOcr = false) }
-                    if (e !is kotlinx.coroutines.CancellationException) {
-                        _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Không thể nhận dạng văn bản từ ảnh"))
-                    }
-                }
-        }
-    }
-
-    private fun onOcrTextChanged(newText: String) {
-        _state.update {
-            it.copy(
-                ocrRecognizedText = newText,
-                ocrTextError = if (newText.length > 10000) "Độ dài văn bản (${newText.length} ký tự) vượt quá giới hạn 10.000 ký tự. Vui lòng rút gọn trước khi gửi." else null
-            )
-        }
-    }
-
-    private fun cancelOcr() {
-        ocrJob?.cancel()
-        _state.update { it.copy(isProcessingOcr = false) }
-    }
-
-    private fun submitOcrText() {
-        val text = _state.value.ocrRecognizedText.trim()
-        if (text.isEmpty()) {
-            viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Văn bản rỗng, không có nội dung để trích xuất."))
-            }
-            return
-        }
-        if (text.length > 10000) {
-            _state.update {
-                it.copy(ocrTextError = "Độ dài văn bản (${text.length} ký tự) vượt quá giới hạn 10.000 ký tự. Vui lòng rút gọn trước khi gửi.")
-            }
-            viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Văn bản vượt quá giới hạn 10.000 ký tự."))
-            }
-            return
-        }
-
-        val nlp = nlpRepo
-        if (nlp == null) {
-            viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Dịch vụ gợi ý kỹ năng chưa sẵn sàng"))
-            }
-            return
-        }
-
-        // Close preview dialog and start extracting via document endpoint (10.000 char capacity)
-        _state.update { it.copy(showOcrPreviewDialog = false, isExtractingDocument = true) }
-        viewModelScope.launch {
-            val fileBytes = text.toByteArray(Charsets.UTF_8)
-            nlp.extractSkillsFromDocumentWithWarning(fileBytes, "ocr_text.txt")
-                .onSuccess { docResult ->
-                    val extracted = docResult.skills
-                    _state.update { it.copy(isExtractingDocument = false) }
-                    if (extracted.isEmpty()) {
-                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong văn bản OCR."))
-                    } else {
-                        val currentHaveSkillIds = _state.value.mySkills
-                            .filter { it.type.name == "HAVE" }
-                            .map { it.skillId }
-                            .toSet()
-
-                        val items = extracted.map { dto ->
-                            val alreadyHas = currentHaveSkillIds.contains(dto.skillId)
-                            ExtractedSkillItem(
-                                skill = dto,
-                                isSelected = !alreadyHas,
-                                level = 2,
-                                isAlreadyAdded = alreadyHas
-                            )
-                        }
-                        _state.update {
-                            it.copy(
-                                extractedSkills = items,
-                                extractionWarning = docResult.warning,
-                                showSkillExtractionSheet = true
-                            )
-                        }
-                    }
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(isExtractingDocument = false) }
-                    _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi trích xuất kỹ năng từ văn bản OCR"))
                 }
         }
     }

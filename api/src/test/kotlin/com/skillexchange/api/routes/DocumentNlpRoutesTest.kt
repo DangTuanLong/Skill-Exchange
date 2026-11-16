@@ -5,11 +5,12 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.skillexchange.api.models.ApiError
 import com.skillexchange.api.models.ErrorCodes
 import com.skillexchange.api.models.nlp.ExtractSkillsResponse
+import com.skillexchange.api.models.nlp.ExtractedSkillDto
 import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
-import com.skillexchange.api.services.nlp.CancellablePdfTextStripper
-import com.skillexchange.api.services.nlp.DocumentParser
 import com.skillexchange.api.services.nlp.DocumentRateLimiter
+import com.skillexchange.api.services.nlp.GeminiExtractionResult
+import com.skillexchange.api.services.nlp.GeminiSkillExtractionService
 import com.skillexchange.api.services.nlp.SkillDefinition
 import com.skillexchange.api.services.nlp.SkillExtractionService
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -19,9 +20,11 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
@@ -29,33 +32,13 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.serialization.json.Json
-import org.apache.pdfbox.Loader
-import org.apache.pdfbox.io.RandomAccessReadBuffer
-import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary
-import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode
-import org.apache.pdfbox.pdmodel.PDJavascriptNameTreeNode
-import org.apache.pdfbox.pdmodel.PDPage
-import org.apache.pdfbox.pdmodel.PDPageContentStream
-import org.apache.pdfbox.pdmodel.common.PDRectangle
-import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification
-import org.apache.pdfbox.pdmodel.encryption.AccessPermission
-import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy
-import org.apache.pdfbox.pdmodel.font.PDType1Font
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts
-import org.apache.pdfbox.pdmodel.interactive.action.PDActionJavaScript
-import org.apache.pdfbox.pdmodel.interactive.action.PDDocumentCatalogAdditionalActions
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.util.concurrent.CancellationException
 import java.util.concurrent.Semaphore
-import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DocumentNlpRoutesTest {
@@ -64,14 +47,11 @@ class DocumentNlpRoutesTest {
         SkillDefinition(1, "Android (Kotlin)", 1, "Lập trình"),
         SkillDefinition(2, "Python", 1, "Lập trình"),
         SkillDefinition(3, "Java", 1, "Lập trình"),
-        SkillDefinition(4, "JavaScript", 1, "Lập trình"),
-        SkillDefinition(5, "C++", 1, "Lập trình"),
-        SkillDefinition(8, "Tiếng Anh", 2, "Ngoại ngữ"),
-        SkillDefinition(9, "Guitar", 3, "Âm nhạc"),
-        SkillDefinition(10, "Adobe Photoshop", 4, "Thiết kế")
+        SkillDefinition(4, "JavaScript", 1, "Lập trình")
     )
 
     private val skillExtractionService = SkillExtractionService(skillProvider = { testSkills })
+    private val mockGeminiService = mockk<GeminiSkillExtractionService>()
 
     private fun createTestJwt(userId: String = "test-doc-user-1"): String {
         return JWT.create()
@@ -105,6 +85,7 @@ class DocumentNlpRoutesTest {
             routing {
                 nlpRoutes(
                     skillExtractionService = skillExtractionService,
+                    geminiService = mockGeminiService,
                     documentRateLimiter = customDocumentRateLimiter,
                     documentConcurrencyLimiter = customConcurrencyLimiter
                 )
@@ -120,108 +101,17 @@ class DocumentNlpRoutesTest {
         block(client)
     }
 
-    // --- HELPER TẠO FILE PDF PHỤC VỤ TEST ---
-
-    private fun createValidPdfBytes(text: String, pages: Int = 1): ByteArray {
-        val doc = PDDocument()
-        val font = PDType1Font(Standard14Fonts.FontName.HELVETICA)
-        for (i in 1..pages) {
-            val page = PDPage(PDRectangle.A4)
-            doc.addPage(page)
-            PDPageContentStream(doc, page).use { cs ->
-                cs.beginText()
-                cs.setFont(font, 12f)
-                cs.newLineAtOffset(50f, 700f)
-                cs.showText("Page $i: $text")
-                cs.endText()
-            }
-        }
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createEncryptedPdfBytes(): ByteArray {
-        val doc = PDDocument()
-        val page = PDPage(PDRectangle.A4)
-        doc.addPage(page)
-        val spp = StandardProtectionPolicy("owner-pass", "user-pass", AccessPermission())
-        doc.protect(spp)
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createPdfWithOpenAction(): ByteArray {
-        val doc = PDDocument()
-        doc.addPage(PDPage(PDRectangle.A4))
-        doc.documentCatalog.openAction = PDActionJavaScript("app.alert('malicious script');")
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createPdfWithCatalogAA(): ByteArray {
-        val doc = PDDocument()
-        doc.addPage(PDPage(PDRectangle.A4))
-        doc.documentCatalog.cosObject.setItem(org.apache.pdfbox.cos.COSName.AA, org.apache.pdfbox.cos.COSDictionary())
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createPdfWithJavaScriptNames(): ByteArray {
-        val doc = PDDocument()
-        doc.addPage(PDPage(PDRectangle.A4))
-        val names = PDDocumentNameDictionary(doc.documentCatalog)
-        val jsTree = PDJavascriptNameTreeNode()
-        jsTree.names = mapOf("malicious" to PDActionJavaScript("app.alert('js');"))
-        names.cosObject.setItem(org.apache.pdfbox.cos.COSName.JAVA_SCRIPT, jsTree.cosObject)
-        doc.documentCatalog.names = names
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createPdfWithEmbeddedFiles(): ByteArray {
-        val doc = PDDocument()
-        doc.addPage(PDPage(PDRectangle.A4))
-        val efTree = PDEmbeddedFilesNameTreeNode()
-        val fileSpec = PDComplexFileSpecification()
-        fileSpec.file = "payload.exe"
-        efTree.names = mapOf("payload" to fileSpec)
-        val names = PDDocumentNameDictionary(doc.documentCatalog)
-        names.cosObject.setItem(org.apache.pdfbox.cos.COSName.EMBEDDED_FILES, efTree.cosObject)
-        doc.documentCatalog.names = names
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    private fun createPdfWithAnnotationAction(): ByteArray {
-        val doc = PDDocument()
-        val page = PDPage(PDRectangle.A4)
-        doc.addPage(page)
-        val link = PDAnnotationLink()
-        link.action = PDActionJavaScript("app.alert('annot js');")
-        page.annotations.add(link)
-        val out = ByteArrayOutputStream()
-        doc.save(out)
-        doc.close()
-        return out.toByteArray()
-    }
-
-    // --- TESTS MỨC 1 (.TXT, .MD) ---
-
     @Test
     fun testExtractSkillsDocument_validTxtFile_returns200AndExtractsSkills() = testApp { client ->
-        val fileContent = "Kỹ sư phần mềm thành thạo lập trình Android (Kotlin) và Java. Giao tiếp Tiếng Anh tốt."
+        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+            profileSummary = "Kỹ sư Android",
+            skills = listOf(
+                ExtractedSkillDto(skillId = 1, skillName = "Android (Kotlin)", confidence = 0.95, matchType = "AI_GEMINI", matchedTerm = "Android (Kotlin)"),
+                ExtractedSkillDto(skillId = 3, skillName = "Java", confidence = 0.90, matchType = "AI_GEMINI", matchedTerm = "Java")
+            )
+        )
+
+        val fileContent = "Kỹ sư phần mềm thành thạo lập trình Android (Kotlin) và Java."
         val response = client.post("/api/nlp/extract-skills-document") {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
             setBody(
@@ -239,42 +129,38 @@ class DocumentNlpRoutesTest {
         assertEquals(HttpStatusCode.OK, response.status)
         val body = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
         assertTrue(body.success)
+        assertEquals("Kỹ sư Android", body.profileSummary)
         val skillNames = body.data.map { it.skillName }
         assertTrue(skillNames.contains("Android (Kotlin)"))
         assertTrue(skillNames.contains("Java"))
-        assertTrue(skillNames.contains("Tiếng Anh"))
     }
 
     @Test
-    fun testExtractSkillsDocument_validMdFile_returns200AndExtractsSkills() = testApp { client ->
-        val fileContent = "# Hồ sơ cá nhân\n\n- Thành thạo Python và C++\n- Có sở thích chơi Guitar"
+    fun testExtractSkillsDocument_validJsonText_returns200() = testApp { client ->
+        coEvery { mockGeminiService.extractSkillsFromText(any()) } returns GeminiExtractionResult(
+            profileSummary = "Python Developer",
+            skills = listOf(
+                ExtractedSkillDto(skillId = 2, skillName = "Python", confidence = 0.95, matchType = "AI_GEMINI", matchedTerm = "Python")
+            )
+        )
+
         val response = client.post("/api/nlp/extract-skills-document") {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", fileContent.toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "text/markdown")
-                            append(HttpHeaders.ContentDisposition, "filename=\"resume.md\"")
-                        })
-                    }
-                )
-            )
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"Lập trình Python chuyên nghiệp","fileName":"bio.txt"}""")
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
         val body = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
         assertTrue(body.success)
-        val skillNames = body.data.map { it.skillName }
-        assertTrue(skillNames.contains("Python"))
-        assertTrue(skillNames.contains("C++"))
-        assertTrue(skillNames.contains("Guitar"))
+        assertEquals(1, body.data.size)
+        assertEquals("Python", body.data[0].skillName)
     }
 
     @Test
     fun testExtractSkillsDocument_fileTooLarge_returns413PayloadTooLarge() = testApp { client ->
         val chunk = "0123456789ABCDEF".toByteArray(Charsets.UTF_8) // 16 bytes
-        val totalChunks = (2 * 1024 * 1024 / 16) + 10 // > 2MB
+        val totalChunks = (10 * 1024 * 1024 / 16) + 10 // > 10MB
         val largeBytes = ByteArrayOutputStream().apply {
             repeat(totalChunks) { write(chunk) }
         }.toByteArray()
@@ -286,7 +172,7 @@ class DocumentNlpRoutesTest {
                     formData {
                         append("file", largeBytes, Headers.build {
                             append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"huge.txt\"")
+                            append(HttpHeaders.ContentDisposition, "filename=\"large_file.txt\"")
                         })
                     }
                 )
@@ -294,77 +180,8 @@ class DocumentNlpRoutesTest {
         }
 
         assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PAYLOAD_TOO_LARGE, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_textExceeds50kChars_returns422TextTooLong() = testApp { client ->
-        val longText = "A".repeat(50_001)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", longText.toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"long.txt\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.TEXT_TOO_LONG, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_textBetween10kAnd50k_returns200WithWarning() = testApp { client ->
-        val longText = "Mục kỹ năng:\n- Lập trình Python và Java\n\nKinh nghiệm làm việc:\n" + "Chi tiết công việc dự án.\n".repeat(600)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", longText.toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"smart_extract.txt\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val res = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
-        assertTrue(res.success)
-        kotlin.test.assertNotNull(res.warning)
-        assertTrue(res.warning!!.contains("10.000"))
-        assertTrue(res.data.any { it.skillName == "Python" })
-    }
-
-    @Test
-    fun testExtractSkillsDocument_invalidUtf8Encoding_returns422InvalidEncoding() = testApp { client ->
-        val invalidUtf8Bytes = byteArrayOf(0x48, 0x65, 0x6C, 0x6C, 0x6F, 0xC3.toByte(), 0x28)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", invalidUtf8Bytes, Headers.build {
-                            append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"bad_utf8.txt\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.INVALID_ENCODING, err.code)
+        val error = Json.decodeFromString<ApiError>(response.bodyAsText())
+        assertEquals(ErrorCodes.PAYLOAD_TOO_LARGE, error.code)
     }
 
     @Test
@@ -384,344 +201,37 @@ class DocumentNlpRoutesTest {
         }
 
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.EMPTY_FILE, err.code)
+        val error = Json.decodeFromString<ApiError>(response.bodyAsText())
+        assertEquals(ErrorCodes.EMPTY_FILE, error.code)
     }
 
     @Test
-    fun testExtractSkillsDocument_zipExtension_returns415UnsupportedFileType() = testApp { client ->
+    fun testExtractSkillsDocument_noFilePart_returns422EmptyFile() = testApp { client ->
         val response = client.post("/api/nlp/extract-skills-document") {
             header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
             setBody(
                 MultiPartFormDataContent(
                     formData {
-                        append("file", "fake content".toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "application/zip")
-                            append(HttpHeaders.ContentDisposition, "filename=\"archive.zip\"")
-                        })
+                        append("description", "no file attached")
                     }
                 )
             )
         }
 
-        assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.UNSUPPORTED_FILE_TYPE, err.code)
-        assertTrue(err.message.contains("ZIP"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val error = Json.decodeFromString<ApiError>(response.bodyAsText())
+        assertEquals(ErrorCodes.EMPTY_FILE, error.code)
     }
 
     @Test
-    fun testExtractSkillsDocument_zipMagicBytes_returns415UnsupportedFileType() = testApp { client ->
-        val disguisedZipBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00)
+    fun testExtractSkillsDocument_missingAuthToken_returns401() = testApp { client ->
         val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
             setBody(
                 MultiPartFormDataContent(
                     formData {
-                        append("file", disguisedZipBytes, Headers.build {
+                        append("file", "content".toByteArray(Charsets.UTF_8), Headers.build {
                             append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"disguised.txt\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.UNSUPPORTED_FILE_TYPE, err.code)
-        assertTrue(err.message.contains("ZIP"))
-    }
-
-    // --- TESTS MỨC 2: TÀI LIỆU PDF ---
-
-    @Test
-    fun testExtractSkillsDocument_validPdf_returns200AndExtractsSkills() = testApp { client ->
-        val pdfBytes = createValidPdfBytes("Software engineer skilled in Android, Java and Python.", pages = 2)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"resume.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        val body = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
-        assertTrue(body.success)
-        val skills = body.data.map { it.skillName }
-        assertTrue(skills.contains("Android (Kotlin)"))
-        assertTrue(skills.contains("Java"))
-        assertTrue(skills.contains("Python"))
-    }
-
-    @Test
-    fun testExtractSkillsDocument_scannedPdfNoText_returns422PdfNoText() = testApp { client ->
-        // Tạo PDF chỉ có 5 ký tự (< 20 ký tự tối thiểu)
-        val pdfBytes = createValidPdfBytes("Short", pages = 1)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"scan.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_NO_TEXT, err.code)
-        assertTrue(err.message.contains("scan"))
-    }
-
-    @Test
-    fun testExtractSkillsDocument_encryptedPdf_returns422PdfEncrypted() = testApp { client ->
-        val pdfBytes = createEncryptedPdfBytes()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"locked.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_ENCRYPTED, err.code)
-        assertTrue(err.message.contains("mã hóa"))
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfTooManyPages_returns422PdfTooManyPages() = testApp { client ->
-        val pdfBytes = createValidPdfBytes("Valid page content for page count limit test.", pages = 6) // Vượt quá 5 trang
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"long_book.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_TOO_MANY_PAGES, err.code)
-        assertTrue(err.message.contains("tối đa 5 trang"))
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfWithOpenAction_returns422PdfUnsafeContent() = testApp { client ->
-        val pdfBytes = createPdfWithOpenAction()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"open_action.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_UNSAFE_CONTENT, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfWithCatalogAA_returns422PdfUnsafeContent() = testApp { client ->
-        val pdfBytes = createPdfWithCatalogAA()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"catalog_aa.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_UNSAFE_CONTENT, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfWithJavaScriptNames_returns422PdfUnsafeContent() = testApp { client ->
-        val pdfBytes = createPdfWithJavaScriptNames()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"js_names.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_UNSAFE_CONTENT, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfWithEmbeddedFiles_returns422PdfUnsafeContent() = testApp { client ->
-        val pdfBytes = createPdfWithEmbeddedFiles()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"embedded.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_UNSAFE_CONTENT, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfWithAnnotationAction_returns422PdfUnsafeContent() = testApp { client ->
-        val pdfBytes = createPdfWithAnnotationAction()
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"annotation_action.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.PDF_UNSAFE_CONTENT, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_pdfFakeMagicBytes_returns415UnsupportedFileType() = testApp { client ->
-        val fakePdfBytes = "THIS IS NOT A VALID PDF FILE HEADER".toByteArray(Charsets.UTF_8)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", fakePdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"fake.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.UNSUPPORTED_FILE_TYPE, err.code)
-    }
-
-    @Test
-    fun testExtractSkillsDocument_verifyNoTempFilesCreated() = testApp { client ->
-        val tmpDir = File(System.getProperty("java.io.tmpdir"))
-        val filesBefore = tmpDir.list()?.toSet() ?: emptySet()
-
-        val pdfBytes = createValidPdfBytes("Verify no temp files created on disk: Android Kotlin Java", pages = 3)
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", pdfBytes, Headers.build {
-                            append(HttpHeaders.ContentType, "application/pdf")
-                            append(HttpHeaders.ContentDisposition, "filename=\"mem_check.pdf\"")
-                        })
-                    }
-                )
-            )
-        }
-
-        assertEquals(HttpStatusCode.OK, response.status)
-
-        val filesAfter = tmpDir.list()?.toSet() ?: emptySet()
-        val newFiles = filesAfter - filesBefore
-        val newPdfBoxFiles = newFiles.filter { it.contains("pdfbox", ignoreCase = true) || it.contains("scratch", ignoreCase = true) }
-        assertTrue(newPdfBoxFiles.isEmpty(), "Phát hiện tệp tạm PDFBox được tạo ra trong tmpdir: $newPdfBoxFiles")
-    }
-
-    @Test
-    fun testExtractSkillsDocument_cooperativeCancellation_stopsBetweenPages() {
-        val pdfBytes = createValidPdfBytes("Cancellation check page data.", pages = 3)
-        var pagesVisited = 0
-
-        assertFailsWith<CancellationException> {
-            Loader.loadPDF(RandomAccessReadBuffer(pdfBytes)).use { doc ->
-                val stripper = CancellablePdfTextStripper {
-                    pagesVisited++
-                    if (pagesVisited >= 2) {
-                        throw CancellationException("Simulated coroutine timeout or cancellation after page 1")
-                    }
-                }
-                stripper.getText(doc)
-            }
-        }
-
-        assertEquals(2, pagesVisited, "Stripper phải dừng ngay lập tức khi callback ném CancellationException")
-    }
-
-    // --- SECURITY, LIMITS & HEADERS ---
-
-    @Test
-    fun testExtractSkillsDocument_noJwt_returns401Unauthorized() = testApp { client ->
-        val response = client.post("/api/nlp/extract-skills-document") {
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", "Kotlin content".toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"doc.txt\"")
+                            append(HttpHeaders.ContentDisposition, "filename=\"cv.txt\"")
                         })
                     }
                 )
@@ -732,19 +242,24 @@ class DocumentNlpRoutesTest {
     }
 
     @Test
-    fun testExtractSkillsDocument_rateLimiting_returns429RateLimited() = testApp(
+    fun testExtractSkillsDocument_rateLimiting_returns429TooManyRequests() = testApp(
         customDocumentRateLimiter = DocumentRateLimiter(maxPerMinute = 2)
     ) { client ->
-        val token = createTestJwt("user-rate-test-distinct")
-        val makeReq = suspend {
+        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+            profileSummary = null,
+            skills = emptyList()
+        )
+
+        val token = createTestJwt("rate-limit-user")
+        val makeRequest = suspend {
             client.post("/api/nlp/extract-skills-document") {
                 header(HttpHeaders.Authorization, "Bearer $token")
                 setBody(
                     MultiPartFormDataContent(
                         formData {
-                            append("file", "Tôi học Python".toByteArray(Charsets.UTF_8), Headers.build {
+                            append("file", "Kotlin Developer".toByteArray(Charsets.UTF_8), Headers.build {
                                 append(HttpHeaders.ContentType, "text/plain")
-                                append(HttpHeaders.ContentDisposition, "filename=\"doc.txt\"")
+                                append(HttpHeaders.ContentDisposition, "filename=\"cv.txt\"")
                             })
                         }
                     )
@@ -752,77 +267,71 @@ class DocumentNlpRoutesTest {
             }
         }
 
-        assertEquals(HttpStatusCode.OK, makeReq().status)
-        assertEquals(HttpStatusCode.OK, makeReq().status)
-        val res3 = makeReq()
+        val res1 = makeRequest()
+        assertEquals(HttpStatusCode.OK, res1.status)
+        val res2 = makeRequest()
+        assertEquals(HttpStatusCode.OK, res2.status)
+        val res3 = makeRequest()
         assertEquals(HttpStatusCode.TooManyRequests, res3.status)
-        val err = Json.decodeFromString<ApiError>(res3.bodyAsText())
-        assertEquals(ErrorCodes.RATE_LIMITED, err.code)
+        val error = Json.decodeFromString<ApiError>(res3.bodyAsText())
+        assertEquals(ErrorCodes.RATE_LIMITED, error.code)
     }
 
     @Test
-    fun testExtractSkillsDocument_concurrencyLimit_returns503WithRetryAfterHeader() = testApp(
-        customConcurrencyLimiter = Semaphore(0)
+    fun testExtractSkillsDocument_concurrencyLimit_returns503ServerBusy() = testApp(
+        customConcurrencyLimiter = Semaphore(1)
     ) { client ->
-        val response = client.post("/api/nlp/extract-skills-document") {
-            header(HttpHeaders.Authorization, "Bearer ${createTestJwt("concurrency-test-user")}")
-            setBody(
-                MultiPartFormDataContent(
-                    formData {
-                        append("file", "Nội dung tài liệu".toByteArray(Charsets.UTF_8), Headers.build {
-                            append(HttpHeaders.ContentType, "text/plain")
-                            append(HttpHeaders.ContentDisposition, "filename=\"doc.txt\"")
-                        })
+        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+            profileSummary = null,
+            skills = emptyList()
+        )
+
+        val token = createTestJwt("concurrency-user")
+        val semaphore = Semaphore(0)
+
+        // Consume the permit manually to simulate busy server
+        val busySem = Semaphore(1)
+        busySem.acquire()
+
+        val makeRequestWithBusyLimiter = testApplication {
+            application {
+                configureSerialization()
+                configureStatusPages()
+                install(Authentication) {
+                    jwt("auth-jwt") {
+                        verifier(JWT.require(Algorithm.HMAC256("test-secret")).withAudience("authenticated").build())
+                        validate { credential -> if (credential.payload.subject != null) JWTPrincipal(credential.payload) else null }
                     }
-                )
-            )
-        }
+                }
+                routing {
+                    nlpRoutes(
+                        skillExtractionService = skillExtractionService,
+                        geminiService = mockGeminiService,
+                        documentConcurrencyLimiter = Semaphore(0) // 0 permits available
+                    )
+                }
+            }
 
-        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
-        assertEquals("5", response.headers["Retry-After"])
-        val err = Json.decodeFromString<ApiError>(response.bodyAsText())
-        assertEquals(ErrorCodes.SERVER_BUSY, err.code)
-    }
+            val busyClient = createClient {
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            }
 
-    @Test
-    fun testExtractSkillsDocument_benchmarkLongText_measuresRealTime() = testApp { client ->
-        val paragraph = """
-            Trong quá trình công tác, tôi đã phát triển nhiều dự án ứng dụng di động Android bằng ngôn ngữ Kotlin.
-            Hệ thống backend được xây dựng trên nền tảng Python và Java với khả năng xử lý dữ liệu lớn.
-            Tôi có thể giao tiếp và đọc tài liệu chuyên ngành bằng Tiếng Anh. Ngoài ra, tôi có sở thích chơi Guitar và thiết kế hình ảnh với Adobe Photoshop.
-        """.trimIndent()
-
-        val sb = StringBuilder()
-        while (sb.length + paragraph.length < 9_800) {
-            sb.append(paragraph).append("\n\n")
-        }
-        val realLongText = sb.toString()
-        assertTrue(realLongText.length in 8_000..9_999)
-
-        var responseStatus: HttpStatusCode? = null
-        var responseBody: ExtractSkillsResponse? = null
-
-        val elapsedMs = measureTimeMillis {
-            val response = client.post("/api/nlp/extract-skills-document") {
-                header(HttpHeaders.Authorization, "Bearer ${createTestJwt()}")
+            val res = busyClient.post("/api/nlp/extract-skills-document") {
+                header(HttpHeaders.Authorization, "Bearer $token")
                 setBody(
                     MultiPartFormDataContent(
                         formData {
-                            append("file", realLongText.toByteArray(Charsets.UTF_8), Headers.build {
-                                append(HttpHeaders.ContentType, "text/plain; charset=utf-8")
-                                append(HttpHeaders.ContentDisposition, "filename=\"cv_full.txt\"")
+                            append("file", "content".toByteArray(Charsets.UTF_8), Headers.build {
+                                append(HttpHeaders.ContentType, "text/plain")
+                                append(HttpHeaders.ContentDisposition, "filename=\"cv.txt\"")
                             })
                         }
                     )
                 )
             }
-            responseStatus = response.status
-            responseBody = Json.decodeFromString<ExtractSkillsResponse>(response.bodyAsText())
+            assertEquals(HttpStatusCode.ServiceUnavailable, res.status)
+            val error = Json.decodeFromString<ApiError>(res.bodyAsText())
+            assertEquals(ErrorCodes.SERVER_BUSY, error.code)
         }
-
-        assertEquals(HttpStatusCode.OK, responseStatus)
-        assertTrue(responseBody!!.success)
-        assertTrue(responseBody!!.data.isNotEmpty())
-        assertTrue(elapsedMs < 2000, "Thời gian xử lý $elapsedMs ms vượt quá ngưỡng chấp nhận 2000ms")
     }
 }

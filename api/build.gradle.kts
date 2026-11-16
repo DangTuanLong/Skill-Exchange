@@ -99,9 +99,6 @@ dependencies {
     // Google Auth (FCM HTTP v1)
     implementation(libs.google.auth.oauth2.http)
 
-    // PDFBox for PDF text extraction (TASK-043 Mức 2)
-    implementation(libs.pdfbox)
-
     // Testing
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.2.10")

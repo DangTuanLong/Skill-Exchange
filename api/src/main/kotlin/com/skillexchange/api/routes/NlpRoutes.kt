@@ -6,8 +6,6 @@ import com.skillexchange.api.models.nlp.ExtractSkillsDocumentRequest
 import com.skillexchange.api.models.nlp.ExtractSkillsRequest
 import com.skillexchange.api.models.nlp.ExtractSkillsResponse
 import com.skillexchange.api.plugins.getUserId
-import com.skillexchange.api.services.nlp.DocumentParseException
-import com.skillexchange.api.services.nlp.DocumentParser
 import com.skillexchange.api.services.nlp.DocumentRateLimiter
 import com.skillexchange.api.services.nlp.GeminiExtractionResult
 import com.skillexchange.api.services.nlp.GeminiSkillExtractionService
@@ -37,6 +35,12 @@ import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Semaphore
+
+class DocumentParseException(
+    val statusCode: HttpStatusCode,
+    val errorCode: String,
+    override val message: String
+) : Exception(message)
 
 fun Route.nlpRoutes(
     skillExtractionService: SkillExtractionService,
@@ -222,29 +226,17 @@ fun Route.nlpRoutes(
                                     try {
                                         geminiService.extractSkillsFromText(req.text)
                                     } catch (e: Exception) {
-                                        val parsedDoc = DocumentParser.parseDocumentWithWarning(
-                                            ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
-                                            req.fileName,
-                                            checkCancelled = { coroutineCtx.ensureActive() }
-                                        )
-                                        val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
                                         GeminiExtractionResult(
                                             profileSummary = null,
-                                            skills = fallbackSkills,
-                                            warning = parsedDoc.warning
+                                            skills = emptyList(),
+                                            warning = "Không thể phân tích văn bản qua AI: ${e.message ?: "Lỗi xử lý"}"
                                         )
                                     }
                                 } else {
-                                    val parsedDoc = DocumentParser.parseDocumentWithWarning(
-                                        ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
-                                        req.fileName,
-                                        checkCancelled = { coroutineCtx.ensureActive() }
-                                    )
-                                    val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
                                     GeminiExtractionResult(
                                         profileSummary = null,
-                                        skills = fallbackSkills,
-                                        warning = parsedDoc.warning
+                                        skills = emptyList(),
+                                        warning = "Dịch vụ AI chưa được kích hoạt."
                                     )
                                 }
                             } else {
@@ -305,33 +297,17 @@ fun Route.nlpRoutes(
                                     try {
                                         geminiService.extractSkillsFromMultimodal(bytes, mimeType, fileName)
                                     } catch (geminiEx: Exception) {
-                                        val parsedDoc = try {
-                                            DocumentParser.parseDocumentWithWarning(
-                                                ByteArrayInputStream(bytes),
-                                                fileName,
-                                                checkCancelled = { coroutineCtx.ensureActive() }
-                                            )
-                                        } catch (_: Exception) {
-                                            throw geminiEx
-                                        }
-                                        val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
                                         GeminiExtractionResult(
                                             profileSummary = null,
-                                            skills = fallbackSkills,
-                                            warning = parsedDoc.warning
+                                            skills = emptyList(),
+                                            warning = "Không thể phân tích tệp qua AI: ${geminiEx.message ?: "Lỗi xử lý"}"
                                         )
                                     }
                                 } else {
-                                    val parsedDoc = DocumentParser.parseDocumentWithWarning(
-                                        ByteArrayInputStream(bytes),
-                                        fileName,
-                                        checkCancelled = { coroutineCtx.ensureActive() }
-                                    )
-                                    val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
                                     GeminiExtractionResult(
                                         profileSummary = null,
-                                        skills = fallbackSkills,
-                                        warning = parsedDoc.warning
+                                        skills = emptyList(),
+                                        warning = "Dịch vụ AI chưa được kích hoạt."
                                     )
                                 }
                             }

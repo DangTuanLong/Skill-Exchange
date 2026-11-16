@@ -67,7 +67,12 @@ fun SkillSelectionScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.onIntent(ProfileIntent.ProcessOcrImage(uri))
+            viewModel.onIntent(
+                ProfileIntent.UploadDocumentUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = uri
+                )
+            )
         }
     }
 
@@ -266,24 +271,23 @@ fun SkillSelectionScreen(
 
                     OutlinedButton(
                         onClick = {
-                            if (state.isProcessingOcr) {
-                                viewModel.onIntent(ProfileIntent.CancelOcr)
-                            } else {
+                            if (!state.isExtractingDocument) {
                                 viewModel.onIntent(ProfileIntent.RequestOcrScan)
                             }
                         },
+                        enabled = !state.isExtractingDocument,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        if (state.isProcessingOcr) {
+                        if (state.isExtractingDocument) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
                                 strokeWidth = 2.dp,
                                 color = Brand500
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Hủy quét", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                            Text("Đang quét...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
                         } else {
                             Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))

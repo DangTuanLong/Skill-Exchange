@@ -129,9 +129,6 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
 
-    // ML Kit
-    implementation(libs.mlkit.text.recognition)
-
     // LiveKit WebRTC SFU (DEC-026, TASK-075)
     implementation(libs.livekit.android)
 
