@@ -112,7 +112,7 @@ class GeminiSkillExtractionService(
                     }
                 }
                 isTaxonomyInitialized = true
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Nếu DB tạm thời chưa sẵn sàng, sẽ thử lại ở lượt sau
             }
         }
@@ -419,7 +419,7 @@ class GeminiSkillExtractionService(
                     categoryName = finalCatName
                 )
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             ResolvedSkillInfo(
                 id = abs(skillName.hashCode()).coerceAtLeast(1),
                 name = skillName,
