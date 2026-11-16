@@ -9,6 +9,8 @@ import com.skillexchange.api.plugins.getUserId
 import com.skillexchange.api.services.nlp.DocumentParseException
 import com.skillexchange.api.services.nlp.DocumentParser
 import com.skillexchange.api.services.nlp.DocumentRateLimiter
+import com.skillexchange.api.services.nlp.GeminiExtractionResult
+import com.skillexchange.api.services.nlp.GeminiSkillExtractionService
 import com.skillexchange.api.services.nlp.NlpRateLimiter
 import com.skillexchange.api.services.nlp.SkillExtractionService
 import io.ktor.http.ContentType
@@ -33,13 +35,30 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.Semaphore
 
 fun Route.nlpRoutes(
     skillExtractionService: SkillExtractionService,
     rateLimiter: NlpRateLimiter = NlpRateLimiter(),
     documentRateLimiter: DocumentRateLimiter = DocumentRateLimiter(),
-    documentConcurrencyLimiter: Semaphore = Semaphore(3)
+    documentConcurrencyLimiter: Semaphore = Semaphore(5)
+) {
+    nlpRoutes(
+        skillExtractionService = skillExtractionService,
+        geminiService = null,
+        rateLimiter = rateLimiter,
+        documentRateLimiter = documentRateLimiter,
+        documentConcurrencyLimiter = documentConcurrencyLimiter
+    )
+}
+
+fun Route.nlpRoutes(
+    skillExtractionService: SkillExtractionService,
+    geminiService: GeminiSkillExtractionService?,
+    rateLimiter: NlpRateLimiter = NlpRateLimiter(),
+    documentRateLimiter: DocumentRateLimiter = DocumentRateLimiter(),
+    documentConcurrencyLimiter: Semaphore = Semaphore(5)
 ) {
     route("/api/nlp") {
         authenticate("auth-jwt") {
@@ -106,8 +125,37 @@ fun Route.nlpRoutes(
                     )
                 }
 
-                val extracted = skillExtractionService.extractSkills(req.text)
-                call.respond(HttpStatusCode.OK, ExtractSkillsResponse(success = true, data = extracted))
+                val extractionResult = if (geminiService != null) {
+                    try {
+                        withTimeout(15000L) {
+                            geminiService.extractSkillsFromText(req.text)
+                        }
+                    } catch (e: Exception) {
+                        val fallbackSkills = skillExtractionService.extractSkills(req.text)
+                        GeminiExtractionResult(
+                            profileSummary = null,
+                            skills = fallbackSkills,
+                            warning = "Đang xử lý ở chế độ ngoại tuyến."
+                        )
+                    }
+                } else {
+                    val fallbackSkills = skillExtractionService.extractSkills(req.text)
+                    GeminiExtractionResult(
+                        profileSummary = null,
+                        skills = fallbackSkills,
+                        warning = null
+                    )
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ExtractSkillsResponse(
+                        success = true,
+                        data = extractionResult.skills,
+                        profileSummary = extractionResult.profileSummary,
+                        warning = extractionResult.warning
+                    )
+                )
             }
 
             post("/extract-skills-document") {
@@ -124,7 +172,7 @@ fun Route.nlpRoutes(
                     )
                 }
 
-                // 1. Kiểm tra rate limit: 10 requests/phút/user
+                // 1. Kiểm tra rate limit: 15 requests/phút/user
                 if (!documentRateLimiter.tryAcquire(userId)) {
                     return@post call.respond(
                         HttpStatusCode.TooManyRequests,
@@ -136,7 +184,7 @@ fun Route.nlpRoutes(
                     )
                 }
 
-                // 2. Kiểm tra giới hạn số request xử lý đồng thời (Concurrency limiter: tối đa 3)
+                // 2. Kiểm tra giới hạn số request xử lý đồng thời (Concurrency limiter: tối đa 5)
                 if (!documentConcurrencyLimiter.tryAcquire()) {
                     call.response.header("Retry-After", "5")
                     return@post call.respond(
@@ -156,8 +204,8 @@ fun Route.nlpRoutes(
                         false
                     }
 
-                    val parsedDoc = withContext(Dispatchers.IO) {
-                        withTimeout(5000L) {
+                    val extractionResult = withContext(Dispatchers.IO) {
+                        withTimeout(25000L) {
                             val coroutineCtx = currentCoroutineContext()
                             if (isJson) {
                                 val req = try {
@@ -169,15 +217,43 @@ fun Route.nlpRoutes(
                                         "Dữ liệu JSON không hợp lệ"
                                     )
                                 }
-                                DocumentParser.parseDocumentWithWarning(
-                                    ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
-                                    req.fileName,
-                                    checkCancelled = { coroutineCtx.ensureActive() }
-                                )
+
+                                if (geminiService != null) {
+                                    try {
+                                        geminiService.extractSkillsFromText(req.text)
+                                    } catch (e: Exception) {
+                                        val parsedDoc = DocumentParser.parseDocumentWithWarning(
+                                            ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
+                                            req.fileName,
+                                            checkCancelled = { coroutineCtx.ensureActive() }
+                                        )
+                                        val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
+                                        GeminiExtractionResult(
+                                            profileSummary = null,
+                                            skills = fallbackSkills,
+                                            warning = parsedDoc.warning
+                                        )
+                                    }
+                                } else {
+                                    val parsedDoc = DocumentParser.parseDocumentWithWarning(
+                                        ByteArrayInputStream(req.text.toByteArray(Charsets.UTF_8)),
+                                        req.fileName,
+                                        checkCancelled = { coroutineCtx.ensureActive() }
+                                    )
+                                    val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
+                                    GeminiExtractionResult(
+                                        profileSummary = null,
+                                        skills = fallbackSkills,
+                                        warning = parsedDoc.warning
+                                    )
+                                }
                             } else {
-                                // Multipart form-data
-                                var extracted: com.skillexchange.api.services.nlp.ParsedDocument? = null
+                                // Multipart form-data (Tài liệu PDF/TXT hoặc hình ảnh chứng chỉ/CV)
+                                var fileBytes: ByteArray? = null
+                                var fileName = "document.txt"
+                                var mimeType = "application/octet-stream"
                                 var foundFile = false
+
                                 val multipart = try {
                                     call.receiveMultipart()
                                 } catch (e: Exception) {
@@ -191,39 +267,84 @@ fun Route.nlpRoutes(
                                 multipart.forEachPart { part ->
                                     if (part is PartData.FileItem && !foundFile) {
                                         foundFile = true
-                                        val fileName = part.originalFileName ?: "document.txt"
+                                        fileName = part.originalFileName ?: "document.txt"
+                                        mimeType = part.contentType?.toString() ?: "application/octet-stream"
                                         part.streamProvider().use { stream ->
-                                            extracted = DocumentParser.parseDocumentWithWarning(
-                                                stream,
-                                                fileName,
-                                                checkCancelled = { coroutineCtx.ensureActive() }
-                                            )
+                                            val buffer = ByteArrayOutputStream()
+                                            val temp = ByteArray(8192)
+                                            var read: Int
+                                            var total = 0
+                                            val maxAllowed = 10 * 1024 * 1024 // 10MB
+                                            while (stream.read(temp).also { read = it } != -1) {
+                                                total += read
+                                                if (total > maxAllowed) {
+                                                    throw DocumentParseException(
+                                                        HttpStatusCode.PayloadTooLarge,
+                                                        ErrorCodes.PAYLOAD_TOO_LARGE,
+                                                        "Kích thước tệp vượt quá giới hạn 10MB."
+                                                    )
+                                                }
+                                                buffer.write(temp, 0, read)
+                                            }
+                                            fileBytes = buffer.toByteArray()
                                         }
                                     }
                                     part.dispose()
                                 }
 
-                                if (!foundFile || extracted == null) {
+                                if (!foundFile || fileBytes == null || fileBytes!!.isEmpty()) {
                                     throw DocumentParseException(
                                         HttpStatusCode.UnprocessableEntity,
                                         ErrorCodes.EMPTY_FILE,
-                                        "Vui lòng đính kèm tệp tài liệu (.txt, .md hoặc .pdf) trong yêu cầu."
+                                        "Vui lòng đính kèm tệp tài liệu hoặc hình ảnh trong yêu cầu."
                                     )
                                 }
 
-                                extracted!!
+                                val bytes = fileBytes!!
+                                if (geminiService != null) {
+                                    try {
+                                        geminiService.extractSkillsFromMultimodal(bytes, mimeType, fileName)
+                                    } catch (geminiEx: Exception) {
+                                        val parsedDoc = try {
+                                            DocumentParser.parseDocumentWithWarning(
+                                                ByteArrayInputStream(bytes),
+                                                fileName,
+                                                checkCancelled = { coroutineCtx.ensureActive() }
+                                            )
+                                        } catch (_: Exception) {
+                                            throw geminiEx
+                                        }
+                                        val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
+                                        GeminiExtractionResult(
+                                            profileSummary = null,
+                                            skills = fallbackSkills,
+                                            warning = parsedDoc.warning
+                                        )
+                                    }
+                                } else {
+                                    val parsedDoc = DocumentParser.parseDocumentWithWarning(
+                                        ByteArrayInputStream(bytes),
+                                        fileName,
+                                        checkCancelled = { coroutineCtx.ensureActive() }
+                                    )
+                                    val fallbackSkills = skillExtractionService.extractSkills(parsedDoc.text)
+                                    GeminiExtractionResult(
+                                        profileSummary = null,
+                                        skills = fallbackSkills,
+                                        warning = parsedDoc.warning
+                                    )
+                                }
                             }
                         }
                     }
 
-                    // 3. Phân tích trích xuất kỹ năng bằng dịch vụ in-process (DEC-020)
-                    val skills = skillExtractionService.extractSkills(parsedDoc.text)
                     call.respond(
                         HttpStatusCode.OK,
                         ExtractSkillsResponse(
                             success = true,
-                            data = skills,
-                            warning = parsedDoc.warning
+                            data = extractionResult.skills,
+                            warning = extractionResult.warning,
+                            profileSummary = extractionResult.profileSummary
                         )
                     )
                 } catch (e: TimeoutCancellationException) {
@@ -232,7 +353,7 @@ fun Route.nlpRoutes(
                         ApiError(
                             status = 504,
                             code = ErrorCodes.QUERY_TIMEOUT,
-                            message = "Xử lý tài liệu quá thời gian quy định (timeout 5s). Vui lòng thử lại với tệp nhỏ hơn."
+                            message = "Xử lý tài liệu quá thời gian quy định (timeout 25s). Vui lòng thử lại với tệp nhỏ hơn."
                         )
                     )
                 } catch (e: DocumentParseException) {
@@ -250,7 +371,7 @@ fun Route.nlpRoutes(
                         ApiError(
                             status = 500,
                             code = ErrorCodes.INTERNAL,
-                            message = "Đã xảy ra lỗi khi xử lý tài liệu"
+                            message = e.message ?: "Đã xảy ra lỗi khi xử lý tài liệu"
                         )
                     )
                 } finally {

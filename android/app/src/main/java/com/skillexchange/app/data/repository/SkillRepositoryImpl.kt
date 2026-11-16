@@ -75,11 +75,13 @@ class SkillRepositoryImpl(
             skillName = data.skillName ?: "",
             categoryName = data.categoryName ?: "",
             type = if (data.type == "HAVE") SkillType.HAVE else SkillType.WANT,
-            proficiencyLevel = data.proficiencyLevel
+            proficiencyLevel = data.proficiencyLevel,
+            note = data.note
         )
     }
 
     override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = runCatching {
+        if (userSkillId.isBlank()) return@runCatching true
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
         val res = remoteDataSource.removeUserSkill(token, userSkillId)
         if (!res.success) {

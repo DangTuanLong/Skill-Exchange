@@ -1,4 +1,4 @@
-﻿package com.skillexchange.api.services
+package com.skillexchange.api.services
 
 import com.skillexchange.api.models.db.ProfilesTable
 import com.skillexchange.api.models.db.SkillCategoriesTable
@@ -77,7 +77,7 @@ class SkillService {
                 (UserSkillsTable.type eq req.type)
             }.firstOrNull()
 
-        if (existing != null) {
+        val userSkillId = if (existing != null) {
             UserSkillsTable.update({
                 (UserSkillsTable.userId eq userId) and
                 (UserSkillsTable.skillId eq req.skillId) and
@@ -86,15 +86,17 @@ class SkillService {
                 it[proficiencyLevel] = req.proficiencyLevel
                 it[note] = req.note
             }
+            existing[UserSkillsTable.id].toString()
         } else {
-            UserSkillsTable.insert {
+            val insertedId = (UserSkillsTable.insert {
                 it[UserSkillsTable.userId]         = userId
                 it[skillId]                        = req.skillId
                 it[type]                           = req.type
                 it[proficiencyLevel]               = req.proficiencyLevel
                 it[note]                           = req.note
                 it[createdAt]                      = LocalDateTime.now()
-            }
+            } get UserSkillsTable.id)
+            insertedId.toString()
         }
 
         val skill = SkillsTable.selectAll().where { SkillsTable.id eq req.skillId }.first()
@@ -102,6 +104,7 @@ class SkillService {
             .where { SkillCategoriesTable.id eq skill[SkillsTable.categoryId] }.first()
 
         UserSkillDto(
+            id = userSkillId,
             skillId = req.skillId,
             skillName = skill[SkillsTable.name],
             categoryName = cat[SkillCategoriesTable.name],
@@ -112,9 +115,28 @@ class SkillService {
     }
 
     fun removeUserSkill(userId: String, userSkillId: String): Boolean = transaction {
-        val deleted = UserSkillsTable.deleteWhere {
-            (UserSkillsTable.userId eq userId) and
-            (UserSkillsTable.id eq java.util.UUID.fromString(userSkillId))
+        if (userSkillId.isBlank()) return@transaction false
+        val uuid = try {
+            java.util.UUID.fromString(userSkillId)
+        } catch (_: Exception) {
+            null
+        }
+
+        val deleted = if (uuid != null) {
+            UserSkillsTable.deleteWhere {
+                (UserSkillsTable.userId eq userId) and
+                (UserSkillsTable.id eq uuid)
+            }
+        } else {
+            val intSkillId = userSkillId.toIntOrNull()
+            if (intSkillId != null) {
+                UserSkillsTable.deleteWhere {
+                    (UserSkillsTable.userId eq userId) and
+                    (UserSkillsTable.skillId eq intSkillId)
+                }
+            } else {
+                0
+            }
         }
         deleted > 0
     }

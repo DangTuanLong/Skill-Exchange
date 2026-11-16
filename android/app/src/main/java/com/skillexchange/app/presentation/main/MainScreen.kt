@@ -34,7 +34,9 @@ import com.skillexchange.app.navigation.Screen
 import com.skillexchange.app.presentation.home.HomeScreen
 import com.skillexchange.app.presentation.notification.NotificationScreen
 import com.skillexchange.app.presentation.notification.NotificationViewModel
+import com.skillexchange.app.presentation.profile.myprofile.MyProfileIntent
 import com.skillexchange.app.presentation.profile.myprofile.MyProfileScreen
+import com.skillexchange.app.presentation.profile.myprofile.MyProfileViewModel
 import org.koin.androidx.compose.koinViewModel
 
 sealed class BottomNavItem(
@@ -76,7 +78,8 @@ sealed class BottomNavItem(
 fun MainScreen(
     rootNavController: NavHostController,
     bottomNavController: NavHostController = rememberNavController(),
-    notificationViewModel: NotificationViewModel = koinViewModel()
+    notificationViewModel: NotificationViewModel = koinViewModel(),
+    myProfileViewModel: MyProfileViewModel = koinViewModel()
 ) {
     val items = listOf(
         BottomNavItem.Home,
@@ -88,6 +91,19 @@ fun MainScreen(
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val notifState by notificationViewModel.state.collectAsStateWithLifecycle()
+
+    val rootLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(rootLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                myProfileViewModel.onIntent(MyProfileIntent.Refresh)
+            }
+        }
+        rootLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            rootLifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -245,7 +261,8 @@ fun MainScreen(
                         },
                         onNavigateToSchedule = {
                             rootNavController.navigate(Screen.MySchedule.route)
-                        }
+                        },
+                        viewModel = myProfileViewModel
                     )
                 }
             }

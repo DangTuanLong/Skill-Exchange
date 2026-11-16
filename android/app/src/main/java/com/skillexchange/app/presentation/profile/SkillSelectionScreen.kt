@@ -186,7 +186,7 @@ fun SkillSelectionScreen(
                         .background(Color(0xFFE0F2FE))
                         .padding(4.dp)
                 ) {
-                    listOf("Kỹ năng tôi có", "Kỹ năng muốn học").forEachIndexed { index, label ->
+                    listOf("Kỹ năng có", "Kỹ năng muốn học").forEachIndexed { index, label ->
                         val selected = state.selectedTab == index
                         Box(
                             modifier = Modifier
@@ -287,7 +287,7 @@ fun SkillSelectionScreen(
                         } else {
                             Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                            Text("Quét ảnh", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
                         }
                     }
 

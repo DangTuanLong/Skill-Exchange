@@ -47,6 +47,9 @@ class NlpRemoteDataSource(private val httpClient: HttpClient) {
             return when {
                 lower.endsWith(".pdf") -> "application/pdf"
                 lower.endsWith(".md") -> "text/markdown"
+                lower.endsWith(".png") -> "image/png"
+                lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+                lower.endsWith(".webp") -> "image/webp"
                 else -> "text/plain"
             }
         }

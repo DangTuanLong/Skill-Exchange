@@ -67,8 +67,10 @@ class MyProfileViewModelTest {
     private var skillsResult: Result<List<UserSkill>> = Result.success(fakeSkills)
     private var reputationResult: Result<Reputation> = Result.success(fakeReputation)
     private var clearLocalProfileCalled = false
+    private val profileFlowFlow = kotlinx.coroutines.flow.MutableStateFlow<Profile?>(null)
 
     private val mockProfileRepo = object : IProfileRepository {
+        override val myProfileFlow: kotlinx.coroutines.flow.StateFlow<Profile?> get() = profileFlowFlow
         override suspend fun getMyProfile(): Result<Profile> = profileResult
         override suspend fun getUserProfile(userId: String): Result<Profile> = error("Not used")
         override suspend fun updateProfile(
@@ -198,5 +200,19 @@ class MyProfileViewModelTest {
         assertFalse(tokenManager.isLoggedIn())
         assertTrue(effectReceived is MyProfileEffect.NavigateToLogin)
         job.cancel()
+    }
+
+    @Test
+    fun `myProfileFlow emission updates profile in state reactively`() = runTest {
+        val viewModel = MyProfileViewModel(mockProfileRepo, mockSkillRepo, mockRatingRepo, tokenManager)
+        advanceUntilIdle()
+
+        assertEquals(fakeProfile.avatarUrl, viewModel.state.value.profile?.avatarUrl)
+
+        val updatedProfile = fakeProfile.copy(avatarUrl = "https://example.com/new_pink_robot.png")
+        profileFlowFlow.value = updatedProfile
+        advanceUntilIdle()
+
+        assertEquals("https://example.com/new_pink_robot.png", viewModel.state.value.profile?.avatarUrl)
     }
 }

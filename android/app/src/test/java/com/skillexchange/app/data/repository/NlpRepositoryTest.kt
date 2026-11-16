@@ -133,7 +133,8 @@ class NlpRepositoryTest {
                     "matchedTerm": "Kotlin"
                 }
             ],
-            "warning": "Tài liệu dài hơn 10.000 ký tự"
+            "warning": "Tài liệu dài hơn 10.000 ký tự",
+            "profileSummary": "Lập trình viên đam mê công nghệ"
         }
         """.trimIndent()
         val client = createMockClient(HttpStatusCode.OK, responseWithWarningJson)
@@ -143,10 +144,13 @@ class NlpRepositoryTest {
         assertEquals("application/pdf", NlpRemoteDataSource.inferMimeType("cv_2026.PDF"))
         assertEquals("text/markdown", NlpRemoteDataSource.inferMimeType("notes.md"))
         assertEquals("text/plain", NlpRemoteDataSource.inferMimeType("bio.txt"))
+        assertEquals("image/png", NlpRemoteDataSource.inferMimeType("cert.png"))
+        assertEquals("image/jpeg", NlpRemoteDataSource.inferMimeType("photo.jpg"))
 
         val result = repo.extractSkillsFromDocumentWithWarning("%PDF-1.4".toByteArray(), "cv_2026.pdf")
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrNull()?.skills?.size)
         assertEquals("Tài liệu dài hơn 10.000 ký tự", result.getOrNull()?.warning)
+        assertEquals("Lập trình viên đam mê công nghệ", result.getOrNull()?.profileSummary)
     }
 }

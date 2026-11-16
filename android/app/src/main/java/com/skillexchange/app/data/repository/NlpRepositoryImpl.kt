@@ -48,7 +48,8 @@ class NlpRepositoryImpl(
             }
             DocumentExtractionResult(
                 skills = response.data,
-                warning = response.warning
+                warning = response.warning,
+                profileSummary = response.profileSummary
             )
         } catch (e: ResponseException) {
             throw RuntimeException(parseErrorMessage(e, "Lỗi tải tài liệu"))

@@ -135,7 +135,12 @@ fun ProfileSetupScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.onIntent(ProfileIntent.ProcessOcrImage(uri))
+            viewModel.onIntent(
+                ProfileIntent.UploadDocumentUri(
+                    contentResolver = context.applicationContext.contentResolver,
+                    uri = uri
+                )
+            )
         }
     }
 
@@ -488,133 +493,6 @@ fun ProfileSetupScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (state.isProcessingOcr) {
-                                    viewModel.onIntent(ProfileIntent.CancelOcr)
-                                } else {
-                                    viewModel.onIntent(ProfileIntent.RequestOcrScan)
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Brand500),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (state.isProcessingOcr) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Brand500
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Đang quét (Hủy)", fontSize = 13.sp, color = Brand500)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.PhotoCamera,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = Brand500
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Quét ảnh OCR",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Brand500
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.onIntent(ProfileIntent.RequestDocumentUpload)
-                            },
-                            enabled = !state.isExtractingDocument,
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (!state.isExtractingDocument) Brand500 else Color(0xFFCBD5E1)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (state.isExtractingDocument) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Brand500
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Đang tải...", fontSize = 13.sp, color = Brand500)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.UploadFile,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = Brand500
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Tải tài liệu",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Brand500
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.onIntent(ProfileIntent.RequestSkillExtraction)
-                            },
-                            enabled = !state.isExtractingSkills && state.bio.isNotBlank(),
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (!state.isExtractingSkills && state.bio.isNotBlank()) Brand500 else Color(0xFFCBD5E1)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (state.isExtractingSkills) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Brand500
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Đang phân tích...", fontSize = 13.sp, color = Brand500)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Gợi ý từ Bio",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (state.bio.isNotBlank()) Brand500 else Color(0xFF94A3B8)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     AuthTextField(
                         value = state.city,
                         onValueChange = { viewModel.onIntent(ProfileIntent.CityChanged(it)) },
@@ -812,25 +690,18 @@ fun ProfileSetupScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── KỸ NĂNG CỦA TÔI ──────────────────────────────────────────────
+            // ── KỸ NĂNG ──────────────────────────────────────────────────────
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Title
-                Column {
-                    Text(
-                        text = "Kỹ năng của tôi",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimaryLight
-                    )
-                    Text(
-                        text = "Chọn kỹ năng bạn có hoặc muốn học",
-                        fontSize = 13.sp,
-                        color = TextSecondaryLight
-                    )
-                }
+                Text(
+                    text = "Kỹ năng",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimaryLight
+                )
 
                 // HAVE / WANT Tab Selector
                 Row(
@@ -840,7 +711,7 @@ fun ProfileSetupScreen(
                         .background(Color(0xFFE0F2FE))
                         .padding(4.dp)
                 ) {
-                    listOf("Kỹ năng tôi có", "Kỹ năng muốn học").forEachIndexed { index, label ->
+                    listOf("Kỹ năng có", "Kỹ năng muốn học").forEachIndexed { index, label ->
                         val selected = state.selectedTab == index
                         Box(
                             modifier = Modifier
@@ -933,28 +804,27 @@ fun ProfileSetupScreen(
                     OutlinedButton(
                         onClick = {
                             focusManager.clearFocus()
-                            if (state.isProcessingOcr) {
-                                viewModel.onIntent(ProfileIntent.CancelOcr)
-                            } else {
+                            if (!state.isExtractingDocument) {
                                 viewModel.onIntent(ProfileIntent.RequestOcrScan)
                             }
                         },
+                        enabled = !state.isExtractingDocument,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        if (state.isProcessingOcr) {
+                        if (state.isExtractingDocument) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
                                 strokeWidth = 2.dp,
                                 color = Brand500
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Hủy quét", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                            Text("Đang quét...", fontSize = 11.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
                         } else {
                             Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Brand500, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Quét OCR", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
+                            Text("Quét ảnh", fontSize = 12.sp, color = Brand500, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -1352,91 +1222,7 @@ internal fun ProfileExtractionDialogsAndSheet(
 
 
 
-    if (state.showOcrPreviewDialog) {
-        AlertDialog(
-            onDismissRequest = { onIntent(ProfileIntent.DismissOcrPreviewDialog) },
-            title = {
-                Column {
-                    Text(
-                        text = "Văn bản nhận dạng (OCR)",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = TextPrimaryLight
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Kiểm tra, xóa số điện thoại/email hoặc chỉnh sửa trước khi gửi",
-                        fontSize = 12.sp,
-                        color = TextSecondaryLight
-                    )
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 350.dp)
-                ) {
-                    OutlinedTextField(
-                        value = state.ocrRecognizedText,
-                        onValueChange = { onIntent(ProfileIntent.OcrTextChanged(it)) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false),
-                        minLines = 6,
-                        maxLines = 12,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Brand500,
-                            unfocusedBorderColor = Color(0xFFCBD5E1)
-                        ),
-                        placeholder = { Text("Văn bản trích xuất từ ảnh...") }
-                    )
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (state.ocrTextError != null) {
-                            Text(
-                                text = state.ocrTextError ?: "",
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                        Text(
-                            text = "${state.ocrRecognizedText.length} / 10.000",
-                            fontSize = 12.sp,
-                            color = if (state.ocrRecognizedText.length > 10000) MaterialTheme.colorScheme.error else Color(0xFF94A3B8)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { onIntent(ProfileIntent.SubmitOcrText) },
-                    enabled = state.ocrRecognizedText.isNotBlank() && state.ocrTextError == null,
-                    colors = ButtonDefaults.buttonColors(containerColor = Brand500),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Trích xuất kỹ năng", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { onIntent(ProfileIntent.DismissOcrPreviewDialog) }
-                ) {
-                    Text("Hủy", color = Color(0xFF64748B))
-                }
-            }
-        )
-    }
 }
 
 @Composable

@@ -7,6 +7,7 @@ import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
 import com.skillexchange.api.services.SkillService
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -194,5 +195,50 @@ class SkillRoutesTest {
         }
 
         assertEquals(HttpStatusCode.Created, response.status)
+    }
+
+    @Test
+    fun `DELETE user-skill with valid id succeeds with 200 OK`() = testApplication {
+        val testToken = createTestJwt()
+        every { mockSkillService.removeUserSkill("user-test-123", "us-123") } returns true
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.delete("/api/skills/user/us-123") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("Đã xóa"))
+    }
+
+    @Test
+    fun `DELETE user-skill with non-existent id returns 404 Not Found`() = testApplication {
+        val testToken = createTestJwt()
+        every { mockSkillService.removeUserSkill("user-test-123", "non-existent") } returns false
+
+        application {
+            setupSkillTestModule()
+        }
+
+        val testClient = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val response = testClient.delete("/api/skills/user/non-existent") {
+            header(HttpHeaders.Authorization, "Bearer $testToken")
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 }

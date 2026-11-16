@@ -4,7 +4,8 @@ import com.skillexchange.app.data.remote.nlp.ExtractedSkillDto
 
 data class DocumentExtractionResult(
     val skills: List<ExtractedSkillDto>,
-    val warning: String? = null
+    val warning: String? = null,
+    val profileSummary: String? = null
 )
 
 interface INlpRepository {
@@ -14,6 +15,6 @@ interface INlpRepository {
         fileBytes: ByteArray,
         fileName: String
     ): Result<DocumentExtractionResult> = extractSkillsFromDocument(fileBytes, fileName).map {
-        DocumentExtractionResult(skills = it, warning = null)
+        DocumentExtractionResult(skills = it, warning = null, profileSummary = null)
     }
 }

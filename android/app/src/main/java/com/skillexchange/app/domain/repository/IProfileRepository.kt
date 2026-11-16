@@ -3,8 +3,11 @@ package com.skillexchange.app.domain.repository
 import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.model.SkillCategory
 import com.skillexchange.app.domain.model.UserSkill
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 interface IProfileRepository {
+    val myProfileFlow: StateFlow<Profile?> get() = MutableStateFlow(null)
     suspend fun getMyProfile(): Result<Profile>
     suspend fun getUserProfile(userId: String): Result<Profile>
     suspend fun updateProfile(

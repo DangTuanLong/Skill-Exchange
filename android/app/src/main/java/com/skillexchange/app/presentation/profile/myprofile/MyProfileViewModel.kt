@@ -34,6 +34,13 @@ class MyProfileViewModel(
 
     init {
         loadData()
+        viewModelScope.launch {
+            profileRepository.myProfileFlow.collect { updatedProfile ->
+                if (updatedProfile != null) {
+                    _state.update { it.copy(profile = updatedProfile) }
+                }
+            }
+        }
     }
 
     fun onIntent(intent: MyProfileIntent) {

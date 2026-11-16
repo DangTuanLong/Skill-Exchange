@@ -250,11 +250,13 @@ class ProfileViewModel(
 
     private fun uploadDocumentFromUri(contentResolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
-            val maxBytes = 2 * 1024 * 1024
+            val maxBytes = 10 * 1024 * 1024
             var fileName = "document.txt"
             var declaredSize: Long? = null
+            var mimeTypeFromResolver: String? = null
             withContext(Dispatchers.IO) {
                 try {
+                    mimeTypeFromResolver = contentResolver.getType(uri)
                     contentResolver.query(
                         uri,
                         arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -276,17 +278,34 @@ class ProfileViewModel(
                 } catch (_: Exception) {}
             }
 
+            // Nếu file picker trả về tên không có đuôi mở rộng, bổ sung dựa trên MIME type
+            if (!fileName.contains(".") && mimeTypeFromResolver != null) {
+                when {
+                    mimeTypeFromResolver!!.contains("jpeg") || mimeTypeFromResolver!!.contains("jpg") -> fileName = "$fileName.jpg"
+                    mimeTypeFromResolver!!.contains("png") -> fileName = "$fileName.png"
+                    mimeTypeFromResolver!!.contains("webp") -> fileName = "$fileName.webp"
+                    mimeTypeFromResolver!!.contains("pdf") -> fileName = "$fileName.pdf"
+                }
+            }
+
             val lowerName = fileName.lowercase()
+            val isImage = mimeTypeFromResolver?.startsWith("image/") == true ||
+                    lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")
+            val isSupported = isImage || lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".pdf")
+
             if (lowerName.endsWith(".zip")) {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP."))
                 return@launch
             }
-            if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md") && !lowerName.endsWith(".pdf")) {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+            if (!isSupported) {
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tài liệu (.pdf, .txt, .md) hoặc hình ảnh (.jpg, .png)."))
                 return@launch
             }
-            if (declaredSize != null && declaredSize!! > maxBytes) {
-                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn 2MB."))
+
+            val maxAllowedBytes = if (isImage) 10 * 1024 * 1024 else 2 * 1024 * 1024
+            if (declaredSize != null && declaredSize!! > maxAllowedBytes) {
+                val limitMb = if (maxAllowedBytes > 2 * 1024 * 1024) "10MB" else "2MB"
+                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn $limitMb."))
                 return@launch
             }
 
@@ -441,6 +460,13 @@ class ProfileViewModel(
 
     private fun removeSkill(userSkillId: String) {
         viewModelScope.launch {
+            if (userSkillId.isBlank()) {
+                // Fallback for legacy state with missing userSkillId: remove unpersisted entry locally
+                val updatedSkills = _state.value.mySkills.filterNot { it.id.isBlank() }
+                _state.update { it.copy(mySkills = updatedSkills) }
+                checkAndUpdateProfileCompletion()
+                return@launch
+            }
             skillRepo.removeUserSkill(userSkillId)
                 .onSuccess {
                     val updatedSkills = _state.value.mySkills.filter { sk -> sk.id != userSkillId }
@@ -598,25 +624,33 @@ class ProfileViewModel(
         val lowerName = fileName.lowercase()
         if (lowerName.endsWith(".zip")) {
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP; chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Ứng dụng không hỗ trợ tệp nén ZIP."))
             }
             return
         }
-        if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md") && !lowerName.endsWith(".pdf")) {
+        val isSupported = lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".pdf") ||
+                lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")
+        if (!isSupported) {
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ tệp văn bản .txt, .md và tài liệu .pdf."))
+                _effect.send(ProfileEffect.ShowSnackbar("Định dạng tệp không được hỗ trợ. Vui lòng tải tài liệu (.pdf, .txt, .md) hoặc hình ảnh (.jpg, .png)."))
             }
             return
         }
-        if (fileBytes.size > 2 * 1024 * 1024) {
+        val maxAllowedBytes = if (lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")) {
+            10 * 1024 * 1024
+        } else {
+            2 * 1024 * 1024
+        }
+        if (fileBytes.size > maxAllowedBytes) {
+            val limitMb = if (maxAllowedBytes > 2 * 1024 * 1024) "10MB" else "2MB"
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn 2MB."))
+                _effect.send(ProfileEffect.ShowSnackbar("Dung lượng tệp vượt quá giới hạn $limitMb."))
             }
             return
         }
         if (fileBytes.isEmpty()) {
             viewModelScope.launch {
-                _effect.send(ProfileEffect.ShowSnackbar("Tệp không có nội dung văn bản."))
+                _effect.send(ProfileEffect.ShowSnackbar("Tệp không có nội dung."))
             }
             return
         }
@@ -636,7 +670,7 @@ class ProfileViewModel(
                     val extracted = docResult.skills
                     _state.update { it.copy(isExtractingDocument = false) }
                     if (extracted.isEmpty()) {
-                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong tài liệu."))
+                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong tệp."))
                     } else {
                         val currentHaveSkillIds = _state.value.mySkills
                             .filter { it.type.name == "HAVE" }
@@ -648,12 +682,20 @@ class ProfileViewModel(
                             ExtractedSkillItem(
                                 skill = dto,
                                 isSelected = !alreadyHas,
-                                level = 2, // mặc định mức thấp 2/5
+                                level = dto.suggestedLevel.coerceIn(1, 5),
                                 isAlreadyAdded = alreadyHas
                             )
                         }
+
+                        val newBio = if (_state.value.bio.isBlank() && !docResult.profileSummary.isNullOrBlank()) {
+                            docResult.profileSummary
+                        } else {
+                            _state.value.bio
+                        }
+
                         _state.update {
                             it.copy(
+                                bio = newBio,
                                 extractedSkills = items,
                                 extractionWarning = docResult.warning,
                                 showSkillExtractionSheet = true
@@ -663,7 +705,7 @@ class ProfileViewModel(
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isExtractingDocument = false) }
-                    _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi xử lý tài liệu"))
+                    _effect.send(ProfileEffect.ShowSnackbar(e.message ?: "Lỗi xử lý tệp"))
                 }
         }
     }

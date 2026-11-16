@@ -6,12 +6,18 @@ import com.skillexchange.app.data.remote.profile.ProfileRemoteDataSource
 import com.skillexchange.app.data.remote.profile.UpdateProfileDto
 import com.skillexchange.app.domain.model.Profile
 import com.skillexchange.app.domain.repository.IProfileRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class ProfileRepositoryImpl(
     private val remoteDataSource: ProfileRemoteDataSource,
     private val localDataSource: ProfileLocalDataSource,
     private val tokenManager: TokenManager
 ) : IProfileRepository {
+
+    private val _myProfileFlow = MutableStateFlow<Profile?>(null)
+    override val myProfileFlow: StateFlow<Profile?> = _myProfileFlow.asStateFlow()
 
     override suspend fun getMyProfile(): Result<Profile> = runCatching {
         val token = tokenManager.getAccessToken() ?: error("Chưa đăng nhập")
@@ -30,9 +36,12 @@ class ProfileRepositoryImpl(
                 }
             )
             localDataSource.saveProfile(profile)
+            _myProfileFlow.value = profile
             profile
         } catch (e: Exception) {
-            localDataSource.getProfile() ?: throw e
+            val cached = localDataSource.getProfile() ?: throw e
+            _myProfileFlow.value = cached
+            cached
         }
     }
 
@@ -77,6 +86,7 @@ class ProfileRepositoryImpl(
             }
         )
         localDataSource.saveProfile(profile)
+        _myProfileFlow.value = profile
         profile
     }
 
@@ -91,13 +101,18 @@ class ProfileRepositoryImpl(
         runCatching {
             val current = localDataSource.getProfile()
             if (current != null) {
-                localDataSource.saveProfile(current.copy(avatarUrl = url))
+                val updated = current.copy(avatarUrl = url)
+                localDataSource.saveProfile(updated)
+                _myProfileFlow.value = updated
+            } else {
+                _myProfileFlow.value = _myProfileFlow.value?.copy(avatarUrl = url)
             }
         }
         url
     }
 
     override suspend fun clearLocalProfile() {
+        _myProfileFlow.value = null
         runCatching {
             localDataSource.clearProfile()
         }
