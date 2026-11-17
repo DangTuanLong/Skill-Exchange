@@ -6,9 +6,9 @@ import com.skillexchange.api.models.nlp.ExtractSkillsDocumentRequest
 import com.skillexchange.api.models.nlp.ExtractSkillsRequest
 import com.skillexchange.api.models.nlp.ExtractSkillsResponse
 import com.skillexchange.api.plugins.getUserId
+import com.skillexchange.api.services.nlp.AIExtractionResult
+import com.skillexchange.api.services.nlp.AISkillExtractionService
 import com.skillexchange.api.services.nlp.DocumentRateLimiter
-import com.skillexchange.api.services.nlp.GeminiExtractionResult
-import com.skillexchange.api.services.nlp.GeminiSkillExtractionService
 import com.skillexchange.api.services.nlp.NlpRateLimiter
 import com.skillexchange.api.services.nlp.SkillExtractionService
 import io.ktor.http.ContentType
@@ -50,7 +50,7 @@ fun Route.nlpRoutes(
 ) {
     nlpRoutes(
         skillExtractionService = skillExtractionService,
-        geminiService = null,
+        aiService = null,
         rateLimiter = rateLimiter,
         documentRateLimiter = documentRateLimiter,
         documentConcurrencyLimiter = documentConcurrencyLimiter
@@ -59,7 +59,7 @@ fun Route.nlpRoutes(
 
 fun Route.nlpRoutes(
     skillExtractionService: SkillExtractionService,
-    geminiService: GeminiSkillExtractionService?,
+    aiService: AISkillExtractionService?,
     rateLimiter: NlpRateLimiter = NlpRateLimiter(),
     documentRateLimiter: DocumentRateLimiter = DocumentRateLimiter(),
     documentConcurrencyLimiter: Semaphore = Semaphore(5)
@@ -129,14 +129,14 @@ fun Route.nlpRoutes(
                     )
                 }
 
-                val extractionResult = if (geminiService != null) {
+                val extractionResult = if (aiService != null) {
                     try {
-                        withTimeout(15000L) {
-                            geminiService.extractSkillsFromText(req.text)
+                        withTimeout(20000L) {
+                            aiService.extractSkillsFromText(req.text)
                         }
                     } catch (e: Exception) {
                         val fallbackSkills = skillExtractionService.extractSkills(req.text)
-                        GeminiExtractionResult(
+                        AIExtractionResult(
                             profileSummary = null,
                             skills = fallbackSkills,
                             warning = "Đang xử lý ở chế độ ngoại tuyến."
@@ -144,7 +144,7 @@ fun Route.nlpRoutes(
                     }
                 } else {
                     val fallbackSkills = skillExtractionService.extractSkills(req.text)
-                    GeminiExtractionResult(
+                    AIExtractionResult(
                         profileSummary = null,
                         skills = fallbackSkills,
                         warning = null
@@ -209,7 +209,7 @@ fun Route.nlpRoutes(
                     }
 
                     val extractionResult = withContext(Dispatchers.IO) {
-                        withTimeout(25000L) {
+                        withTimeout(90000L) {
                             val coroutineCtx = currentCoroutineContext()
                             if (isJson) {
                                 val req = try {
@@ -222,21 +222,21 @@ fun Route.nlpRoutes(
                                     )
                                 }
 
-                                if (geminiService != null) {
+                                if (aiService != null) {
                                     try {
-                                        geminiService.extractSkillsFromText(req.text)
+                                        aiService.extractSkillsFromText(req.text)
                                     } catch (e: Exception) {
-                                        GeminiExtractionResult(
-                                            profileSummary = null,
-                                            skills = emptyList(),
-                                            warning = "Không thể phân tích văn bản qua AI: ${e.message ?: "Lỗi xử lý"}"
+                                        throw DocumentParseException(
+                                            HttpStatusCode.UnprocessableEntity,
+                                            ErrorCodes.VALIDATION_FAILED,
+                                            "Không thể phân tích văn bản qua AI: ${e.message ?: "Lỗi xử lý"}"
                                         )
                                     }
                                 } else {
-                                    GeminiExtractionResult(
-                                        profileSummary = null,
-                                        skills = emptyList(),
-                                        warning = "Dịch vụ AI chưa được kích hoạt."
+                                    throw DocumentParseException(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        ErrorCodes.SERVER_BUSY,
+                                        "Dịch vụ AI chưa được kích hoạt."
                                     )
                                 }
                             } else {
@@ -293,21 +293,21 @@ fun Route.nlpRoutes(
                                 }
 
                                 val bytes = fileBytes!!
-                                if (geminiService != null) {
+                                if (aiService != null) {
                                     try {
-                                        geminiService.extractSkillsFromMultimodal(bytes, mimeType, fileName)
-                                    } catch (geminiEx: Exception) {
-                                        GeminiExtractionResult(
-                                            profileSummary = null,
-                                            skills = emptyList(),
-                                            warning = "Không thể phân tích tệp qua AI: ${geminiEx.message ?: "Lỗi xử lý"}"
+                                        aiService.extractSkillsFromMultimodal(bytes, mimeType, fileName)
+                                    } catch (aiEx: Exception) {
+                                        throw DocumentParseException(
+                                            HttpStatusCode.UnprocessableEntity,
+                                            ErrorCodes.VALIDATION_FAILED,
+                                            "Không thể phân tích tệp qua AI: ${aiEx.message ?: "Lỗi xử lý"}"
                                         )
                                     }
                                 } else {
-                                    GeminiExtractionResult(
-                                        profileSummary = null,
-                                        skills = emptyList(),
-                                        warning = "Dịch vụ AI chưa được kích hoạt."
+                                    throw DocumentParseException(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        ErrorCodes.SERVER_BUSY,
+                                        "Dịch vụ AI chưa được kích hoạt."
                                     )
                                 }
                             }
@@ -329,7 +329,7 @@ fun Route.nlpRoutes(
                         ApiError(
                             status = 504,
                             code = ErrorCodes.QUERY_TIMEOUT,
-                            message = "Xử lý tài liệu quá thời gian quy định (timeout 25s). Vui lòng thử lại với tệp nhỏ hơn."
+                            message = "Xử lý tài liệu quá thời gian quy định (timeout 90s). Vui lòng thử lại với tệp nhỏ hơn."
                         )
                     )
                 } catch (e: DocumentParseException) {

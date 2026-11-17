@@ -33,7 +33,7 @@ data class ExtractedSkillDto(
 @Serializable
 data class ExtractSkillsResponse(
     val success: Boolean = true,
-    val data: List<ExtractedSkillDto>,
+    val data: List<ExtractedSkillDto> = emptyList(),
     val warning: String? = null,
     val profileSummary: String? = null
 )

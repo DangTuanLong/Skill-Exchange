@@ -644,7 +644,8 @@ class ProfileViewModel(
                     val extracted = docResult.skills
                     _state.update { it.copy(isExtractingDocument = false) }
                     if (extracted.isEmpty()) {
-                        _effect.send(ProfileEffect.ShowSnackbar("Không phát hiện kỹ năng nào trong tệp."))
+                        val message = docResult.warning ?: "Không phát hiện kỹ năng nào trong tệp."
+                        _effect.send(ProfileEffect.ShowSnackbar(message))
                     } else {
                         val currentHaveSkillIds = _state.value.mySkills
                             .filter { it.type.name == "HAVE" }

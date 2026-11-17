@@ -30,6 +30,11 @@ val appModule = module {
     single { DeviceService() }
     single {
         HttpClient(CIO) {
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 60_000L
+                connectTimeoutMillis = 15_000L
+                socketTimeoutMillis = 60_000L
+            }
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
@@ -72,7 +77,7 @@ val appModule = module {
     single { com.skillexchange.api.services.notification.ReminderRateLimiter() }
     single { com.skillexchange.api.services.rating.RatingService() }
     single { com.skillexchange.api.services.nlp.SkillExtractionService() }
-    single { com.skillexchange.api.services.nlp.GeminiSkillExtractionService(httpClient = get()) }
+    single { com.skillexchange.api.services.nlp.AISkillExtractionService(httpClient = get()) }
     single { com.skillexchange.api.services.nlp.NlpRateLimiter() }
     single { com.skillexchange.api.services.nlp.DocumentRateLimiter() }
     single { com.skillexchange.api.services.graph.SkillGraphService() }

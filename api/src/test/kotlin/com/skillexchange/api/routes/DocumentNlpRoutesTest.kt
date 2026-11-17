@@ -9,8 +9,8 @@ import com.skillexchange.api.models.nlp.ExtractedSkillDto
 import com.skillexchange.api.plugins.configureSerialization
 import com.skillexchange.api.plugins.configureStatusPages
 import com.skillexchange.api.services.nlp.DocumentRateLimiter
-import com.skillexchange.api.services.nlp.GeminiExtractionResult
-import com.skillexchange.api.services.nlp.GeminiSkillExtractionService
+import com.skillexchange.api.services.nlp.AIExtractionResult
+import com.skillexchange.api.services.nlp.AISkillExtractionService
 import com.skillexchange.api.services.nlp.SkillDefinition
 import com.skillexchange.api.services.nlp.SkillExtractionService
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -51,7 +51,7 @@ class DocumentNlpRoutesTest {
     )
 
     private val skillExtractionService = SkillExtractionService(skillProvider = { testSkills })
-    private val mockGeminiService = mockk<GeminiSkillExtractionService>()
+    private val mockAIService = mockk<AISkillExtractionService>()
 
     private fun createTestJwt(userId: String = "test-doc-user-1"): String {
         return JWT.create()
@@ -85,7 +85,7 @@ class DocumentNlpRoutesTest {
             routing {
                 nlpRoutes(
                     skillExtractionService = skillExtractionService,
-                    geminiService = mockGeminiService,
+                    aiService = mockAIService,
                     documentRateLimiter = customDocumentRateLimiter,
                     documentConcurrencyLimiter = customConcurrencyLimiter
                 )
@@ -103,11 +103,11 @@ class DocumentNlpRoutesTest {
 
     @Test
     fun testExtractSkillsDocument_validTxtFile_returns200AndExtractsSkills() = testApp { client ->
-        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+        coEvery { mockAIService.extractSkillsFromMultimodal(any(), any(), any()) } returns AIExtractionResult(
             profileSummary = "Kỹ sư Android",
             skills = listOf(
-                ExtractedSkillDto(skillId = 1, skillName = "Android (Kotlin)", confidence = 0.95, matchType = "AI_GEMINI", matchedTerm = "Android (Kotlin)"),
-                ExtractedSkillDto(skillId = 3, skillName = "Java", confidence = 0.90, matchType = "AI_GEMINI", matchedTerm = "Java")
+                ExtractedSkillDto(skillId = 1, skillName = "Android (Kotlin)", confidence = 0.95, matchType = "AI_EXTRACTION", matchedTerm = "Android (Kotlin)"),
+                ExtractedSkillDto(skillId = 3, skillName = "Java", confidence = 0.90, matchType = "AI_EXTRACTION", matchedTerm = "Java")
             )
         )
 
@@ -137,10 +137,10 @@ class DocumentNlpRoutesTest {
 
     @Test
     fun testExtractSkillsDocument_validJsonText_returns200() = testApp { client ->
-        coEvery { mockGeminiService.extractSkillsFromText(any()) } returns GeminiExtractionResult(
+        coEvery { mockAIService.extractSkillsFromText(any()) } returns AIExtractionResult(
             profileSummary = "Python Developer",
             skills = listOf(
-                ExtractedSkillDto(skillId = 2, skillName = "Python", confidence = 0.95, matchType = "AI_GEMINI", matchedTerm = "Python")
+                ExtractedSkillDto(skillId = 2, skillName = "Python", confidence = 0.95, matchType = "AI_EXTRACTION", matchedTerm = "Python")
             )
         )
 
@@ -245,7 +245,7 @@ class DocumentNlpRoutesTest {
     fun testExtractSkillsDocument_rateLimiting_returns429TooManyRequests() = testApp(
         customDocumentRateLimiter = DocumentRateLimiter(maxPerMinute = 2)
     ) { client ->
-        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+        coEvery { mockAIService.extractSkillsFromMultimodal(any(), any(), any()) } returns AIExtractionResult(
             profileSummary = null,
             skills = emptyList()
         )
@@ -281,7 +281,7 @@ class DocumentNlpRoutesTest {
     fun testExtractSkillsDocument_concurrencyLimit_returns503ServerBusy() = testApp(
         customConcurrencyLimiter = Semaphore(1)
     ) { client ->
-        coEvery { mockGeminiService.extractSkillsFromMultimodal(any(), any(), any()) } returns GeminiExtractionResult(
+        coEvery { mockAIService.extractSkillsFromMultimodal(any(), any(), any()) } returns AIExtractionResult(
             profileSummary = null,
             skills = emptyList()
         )
@@ -306,7 +306,7 @@ class DocumentNlpRoutesTest {
                 routing {
                     nlpRoutes(
                         skillExtractionService = skillExtractionService,
-                        geminiService = mockGeminiService,
+                        aiService = mockAIService,
                         documentConcurrencyLimiter = Semaphore(0) // 0 permits available
                     )
                 }
