@@ -85,8 +85,13 @@ class AISkillExtractionService(
     private val fallbackModel: String
         get() = "gemini-3.8-flash"
 
-    private val apiKey: String
-        get() = EnvLoader.get("GEMINI_API_KEY", "")
+    // Hỗ trợ tối đa 3 API key (1 chính + 2 dự phòng) đọc từ .env.example
+    private val apiKeys: List<String>
+        get() = listOf(
+            EnvLoader.get("GEMINI_API_KEY", ""),
+            EnvLoader.get("GEMINI_API_KEY_1", ""),
+            EnvLoader.get("GEMINI_API_KEY_2", "")
+        ).map { it.trim() }.filter { it.isNotBlank() }
 
     // ─── IN-MEMORY TAXONOMY CACHE ─────────────────────────────────────────────
     // Lưu trữ nhóm kỹ năng -> danh sách tên kỹ năng, cùng bộ nhớ ánh xạ ID để phản hồi siêu tốc
@@ -156,7 +161,7 @@ class AISkillExtractionService(
                - Nếu kỹ năng trong tài liệu/ảnh tương đương hoặc là biến thể của kỹ năng đã có trong danh mục trên (ví dụ: 'ReactJS', 'React Native' -> 'React'; 'Python 3', 'Python Programming' -> 'Python'), hãy CHUẨN HÓA về đúng tên kỹ năng và nhóm có sẵn trong danh mục.
             2. PHÁT HIỆN KỸ NĂNG MỚI:
                - Nếu người dùng có kỹ năng chưa xuất hiện trong danh mục trên:
-                 + Đặt tên kỹ năng rõ ràng, chuẩn hóa (Title Case, ngắn gọn, ví dụ: 'Vận hành máy CNC', 'Thiết kế Vi mạch', 'Nuôi cấy mô', 'Sơ cứu & cấp cứu', 'Dịch vụ khách hàng').
+                 + Đặt tên kỹ năng rõ ràng, chuẩn hóa (Title Case, ngắn gọn, ví dụ: 'Thiết kế vi mạch', 'Sơ cứu', 'Dịch vụ khách hàng').
                  + Xem xét kỹ năng đó có thuộc về nhóm kỹ năng nào đã có sẵn ở trên không. Nếu có, hãy dùng đúng tên nhóm đó.
                  + Nếu không thuộc bất kỳ nhóm nào đã có, hãy đề xuất một tên nhóm kỹ năng mới ngắn gọn, phù hợp (ví dụ: 'Cơ khí & Chế tạo', 'Hàng không & Vận tải', 'Y tế & Cấp cứu').
             3. Xác định rõ loại kỹ năng: 'HAVE' (kỹ năng ứng viên đã có, đã làm, có chứng chỉ) hoặc 'WANT' (kỹ năng ứng viên ghi rõ muốn học, tìm kiếm, trao đổi).
@@ -256,7 +261,8 @@ class AISkillExtractionService(
             return "application/pdf"
         }
         if (fileBytes.size >= 12 && fileBytes[0] == 0x52.toByte() && fileBytes[1] == 0x49.toByte() && fileBytes[2] == 0x46.toByte() && fileBytes[3] == 0x46.toByte() &&
-            fileBytes[8] == 0x57.toByte() && fileBytes[9] == 0x45.toByte() && fileBytes[10] == 0x42.toByte() && fileBytes[11] == 0x50.toByte()) {
+            fileBytes[8] == 0x57.toByte() && fileBytes[9] == 0x45.toByte() && fileBytes[10] == 0x42.toByte() && fileBytes[11] == 0x50.toByte()
+        ) {
             return "image/webp"
         }
 
@@ -345,28 +351,43 @@ class AISkillExtractionService(
     }
 
     private suspend fun callGeminiApiWithFallback(requestBody: JsonObject): String {
-        val key = apiKey
-        if (key.isBlank()) {
+        val keys = apiKeys
+        if (keys.isEmpty()) {
             throw IllegalStateException("Chưa cấu hình GEMINI_API_KEY trong file .env hoặc biến môi trường.")
         }
 
-        // 1. Thử gọi model chính
-        val primaryRes = callGeminiEndpoint(primaryModel, key, requestBody)
-        if (primaryRes.isSuccess) {
-            return primaryRes.getOrThrow()
-        }
+        val models = listOf(primaryModel, fallbackModel).distinct()
+        var lastException: Throwable? = null
 
-        // 2. Nếu model chính lỗi và khác fallback, thử fallback sang gemini-3.8-flash
-        val primaryError = primaryRes.exceptionOrNull()
-        logger.warn("AI Model $primaryModel thất bại: ${primaryError?.message}. Thử fallback sang $fallbackModel")
-        if (!primaryModel.equals(fallbackModel, ignoreCase = true)) {
-            val fallbackRes = callGeminiEndpoint(fallbackModel, key, requestBody)
-            if (fallbackRes.isSuccess) {
-                return fallbackRes.getOrThrow()
+        for ((keyIndex, key) in keys.withIndex()) {
+            val keyLabel = if (keyIndex == 0) "chính (GEMINI_API_KEY)" else "dự phòng $keyIndex (GEMINI_API_KEY_$keyIndex)"
+            for (model in models) {
+                logger.info("Thử trích xuất kỹ năng với AI model [$model] qua key $keyLabel...")
+                val res = callGeminiEndpoint(model, key, requestBody)
+                if (res.isSuccess) {
+                    return res.getOrThrow()
+                }
+
+                val error = res.exceptionOrNull()
+                lastException = error
+                val errMsg = error?.message ?: "Lỗi không xác định"
+                logger.warn("AI model [$model] với key $keyLabel thất bại: $errMsg")
+
+                // Nếu lỗi liên quan đến cạn hạn mức, quota, rate limit hoặc timeout:
+                // lập tức chuyển sang API Key tiếp theo
+                val isQuotaOrTimeout = errMsg.contains("429") ||
+                        errMsg.contains("quota", ignoreCase = true) ||
+                        errMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+                        errMsg.contains("timeout", ignoreCase = true)
+
+                if (isQuotaOrTimeout) {
+                    logger.warn("Key $keyLabel gặp sự cố hạn mức hoặc timeout. Chuyển sang key dự phòng tiếp theo...")
+                    break
+                }
             }
         }
 
-        throw primaryError ?: RuntimeException("Gọi AI Service thất bại")
+        throw lastException ?: RuntimeException("Tất cả các API key (${keys.size} key) và model dự phòng đều thất bại.")
     }
 
     private fun cleanJsonText(raw: String): String {
@@ -444,7 +465,7 @@ class AISkillExtractionService(
                     // Tạo nhóm kỹ năng mới trong cơ sở dữ liệu
                     val newCatId = SkillCategoriesTable.insert {
                         it[name] = categoryName
-                        it[icon] = "category"
+                        it[icon] = ""
                         it[description] = "Tạo tự động từ trích xuất kỹ năng AI"
                     } get SkillCategoriesTable.id
                     categoryIdCache[categoryName.lowercase()] = newCatId

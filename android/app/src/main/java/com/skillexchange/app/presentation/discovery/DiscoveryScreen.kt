@@ -204,7 +204,7 @@ fun DiscoveryScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.onIntent(DiscoveryIntent.ToggleCategory(cat.id)) },
-                                label = { Text(formatCategoryLabel(cat.icon, cat.name)) },
+                                label = { Text(cat.name) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Brand500,
                                     selectedLabelColor = Color.White
@@ -394,7 +394,7 @@ fun DiscoveryScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.onIntent(DiscoveryIntent.ToggleCategory(cat.id)) },
-                                    label = { Text(formatCategoryLabel(cat.icon, cat.name)) },
+                                    label = { Text(cat.name) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Brand500,
                                         selectedLabelColor = Color.White

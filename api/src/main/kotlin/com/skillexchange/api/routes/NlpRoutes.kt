@@ -209,7 +209,7 @@ fun Route.nlpRoutes(
                     }
 
                     val extractionResult = withContext(Dispatchers.IO) {
-                        withTimeout(90000L) {
+                        withTimeout(150000L) {
                             val coroutineCtx = currentCoroutineContext()
                             if (isJson) {
                                 val req = try {
@@ -329,7 +329,7 @@ fun Route.nlpRoutes(
                         ApiError(
                             status = 504,
                             code = ErrorCodes.QUERY_TIMEOUT,
-                            message = "Xử lý tài liệu quá thời gian quy định (timeout 90s). Vui lòng thử lại với tệp nhỏ hơn."
+                            message = "Xử lý tài liệu quá thời gian quy định (timeout 150s). Vui lòng thử lại với tệp nhỏ hơn."
                         )
                     )
                 } catch (e: DocumentParseException) {

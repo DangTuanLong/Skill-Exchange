@@ -16,8 +16,8 @@ object Constants {
 
     // ─── Timeouts (milliseconds) ────────────────────────────────────
     const val CONNECT_TIMEOUT_MS = 15_000L
-    const val REQUEST_TIMEOUT_MS = 90_000L
-    const val SOCKET_TIMEOUT_MS  = 90_000L
+    const val REQUEST_TIMEOUT_MS = 150_000L
+    const val SOCKET_TIMEOUT_MS  = 150_000L
 
     // ─── Auth Tokens ────────────────────────────────────────────────
     const val PREF_ACCESS_TOKEN          = "access_token"

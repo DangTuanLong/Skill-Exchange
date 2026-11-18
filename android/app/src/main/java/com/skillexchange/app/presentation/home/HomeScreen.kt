@@ -340,18 +340,10 @@ fun HomeScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
                                 label = { Text(cat.name, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Brand500,
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
+                                    selectedLabelColor = Color.White
                                 )
                             )
                         }
@@ -629,18 +621,10 @@ fun HomeScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.onIntent(HomeIntent.ToggleCategory(cat.id)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
                                     label = { Text(cat.name, fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Brand500,
-                                        selectedLabelColor = Color.White,
-                                        selectedLeadingIconColor = Color.White
+                                        selectedLabelColor = Color.White
                                     )
                                 )
                             }

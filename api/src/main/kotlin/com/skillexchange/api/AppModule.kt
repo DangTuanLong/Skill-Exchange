@@ -31,9 +31,9 @@ val appModule = module {
     single {
         HttpClient(CIO) {
             install(io.ktor.client.plugins.HttpTimeout) {
-                requestTimeoutMillis = 60_000L
+                requestTimeoutMillis = 150_000L
                 connectTimeoutMillis = 15_000L
-                socketTimeoutMillis = 60_000L
+                socketTimeoutMillis = 150_000L
             }
             install(ContentNegotiation) {
                 json(Json {

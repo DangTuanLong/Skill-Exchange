@@ -871,7 +871,7 @@ fun ProfileSetupScreen(
                             val isSelected = (state.selectedCategoryId ?: state.categories.firstOrNull()?.id) == cat.id
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.Center,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(if (isSelected) Brand500 else Color.White)
@@ -879,16 +879,11 @@ fun ProfileSetupScreen(
                                     .clickable { viewModel.onIntent(ProfileIntent.SelectCategory(cat.id)) }
                                     .padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
-                                Icon(
-                                    imageVector = CategoryIconHelper.getCategoryIcon(cat.icon, cat.name),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (isSelected) Color.White else Brand500
-                                )
                                 Text(
                                     text = cat.name,
                                     color = if (isSelected) Color.White else TextPrimaryLight,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             }
                         }
