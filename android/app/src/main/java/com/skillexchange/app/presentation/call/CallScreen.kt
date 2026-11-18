@@ -68,12 +68,20 @@ fun CallScreen(
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var showAudioDeviceSheet by remember { mutableStateOf(false) }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        viewModel.onIntent(CallIntent.RecordAudioPermissionResult(isGranted))
-        if (!isGranted) {
+    val multiplePermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionsMap ->
+        val recordAudioGranted = permissionsMap[Manifest.permission.RECORD_AUDIO]
+            ?: (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED)
+        viewModel.onIntent(CallIntent.RecordAudioPermissionResult(recordAudioGranted))
+        if (!recordAudioGranted) {
             showPermissionRationaleDialog = true
+        }
+
+        if (state.isVideo) {
+            val cameraGranted = permissionsMap[Manifest.permission.CAMERA]
+                ?: (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PermissionChecker.PERMISSION_GRANTED)
+            viewModel.onIntent(CallIntent.CameraPermissionResult(cameraGranted))
         }
     }
 
@@ -90,28 +98,31 @@ fun CallScreen(
     }
 
     LaunchedEffect(Unit) {
+        val permissionsToRequest = mutableListOf<String>()
         val hasRecordAudio = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.RECORD_AUDIO
         ) == PermissionChecker.PERMISSION_GRANTED
         if (!hasRecordAudio) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
         } else {
             viewModel.onIntent(CallIntent.RecordAudioPermissionResult(true))
         }
-    }
 
-    LaunchedEffect(state.isVideo) {
         if (state.isVideo) {
             val hasCamera = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.CAMERA
             ) == PermissionChecker.PERMISSION_GRANTED
             if (!hasCamera) {
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                permissionsToRequest.add(Manifest.permission.CAMERA)
             } else {
                 viewModel.onIntent(CallIntent.CameraPermissionResult(true))
             }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            multiplePermissionsLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 

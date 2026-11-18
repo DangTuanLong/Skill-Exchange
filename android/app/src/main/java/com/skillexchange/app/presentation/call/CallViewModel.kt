@@ -61,6 +61,18 @@ class CallViewModel(
 
     private var durationJob: Job? = null
     private var ringingTimeoutJob: Job? = null
+    private var isNavigatingBack = false
+
+    private fun navigateBackOnce(delayMillis: Long = 0L) {
+        if (isNavigatingBack) return
+        isNavigatingBack = true
+        viewModelScope.launch {
+            if (delayMillis > 0) {
+                delay(delayMillis)
+            }
+            _effect.send(CallSideEffect.NavigateBack)
+        }
+    }
 
     init {
         observeEngine()
@@ -98,8 +110,15 @@ class CallViewModel(
                     CallEngineStatus.DISCONNECTED -> {
                         callTonePlayer.stop()
                         ringingTimeoutJob?.cancel()
+                        durationJob?.cancel()
                         if (_state.value.uiStatus == CallUiStatus.CONNECTED) {
-                            _state.update { it.copy(uiStatus = CallUiStatus.ENDED) }
+                            _state.update {
+                                it.copy(
+                                    uiStatus = CallUiStatus.ENDED,
+                                    errorMessage = it.errorMessage ?: "Cuộc gọi đã kết thúc."
+                                )
+                            }
+                            navigateBackOnce(1500L)
                         }
                     }
                     CallEngineStatus.ERROR -> {
@@ -135,7 +154,7 @@ class CallViewModel(
                         startDurationTimer()
                     }
                 } else {
-                    // Nếu cuộc gọi đang CONNECTED mà đối tác rời phòng -> kết thúc
+                    // Nếu cuộc gọi đang CONNECTED mà đối tác rời phòng -> tự động kết thúc và thoát
                     if (_state.value.uiStatus == CallUiStatus.CONNECTED) {
                         durationJob?.cancel()
                         callTonePlayer.stop()
@@ -145,6 +164,14 @@ class CallViewModel(
                                 errorMessage = "Đối tác đã rời cuộc gọi."
                             )
                         }
+                        val currentSessionId = _state.value.sessionId
+                        callEngine.disconnect()
+                        if (!currentSessionId.isNullOrBlank()) {
+                            viewModelScope.launch {
+                                runCatching { callRepository.endCall(currentSessionId) }
+                            }
+                        }
+                        navigateBackOnce(1500L)
                     }
                 }
             }
@@ -552,7 +579,6 @@ class CallViewModel(
         callTonePlayer.stop()
         ringingTimeoutJob?.cancel()
         durationJob?.cancel()
-        callEngine.disconnect()
 
         val currentSessionId = _state.value.sessionId
         _state.update {
@@ -561,13 +587,14 @@ class CallViewModel(
                 isActionLoading = true
             )
         }
+        callEngine.disconnect()
 
         viewModelScope.launch {
             if (!currentSessionId.isNullOrBlank()) {
                 callRepository.endCall(currentSessionId)
             }
             _state.update { it.copy(isActionLoading = false) }
-            _effect.send(CallSideEffect.NavigateBack)
+            navigateBackOnce(0L)
         }
     }
 

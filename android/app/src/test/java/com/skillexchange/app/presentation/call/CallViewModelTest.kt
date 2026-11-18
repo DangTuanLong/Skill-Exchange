@@ -722,4 +722,33 @@ class CallViewModelTest {
         viewModel.onIntent(CallIntent.EndCall)
         testScheduler.runCurrent()
     }
+
+    @Test
+    fun testRemoteParticipantLeaves_EndsCallAndAutoNavigatesBack() = runTest(testDispatcher) {
+        val fakeEngine = FakeCallEngine(autoConnect = true)
+        val viewModel = createViewModel(fakeEngine = fakeEngine)
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.CONNECTED, viewModel.state.value.uiStatus)
+
+        var sideEffect: CallSideEffect? = null
+        val job = launch {
+            sideEffect = viewModel.effect.first()
+        }
+
+        // Đối tác cúp máy rời phòng
+        fakeEngine.simulateRemoteParticipant(false)
+        testScheduler.runCurrent()
+
+        assertEquals(CallUiStatus.ENDED, viewModel.state.value.uiStatus)
+        assertEquals("Đối tác đã rời cuộc gọi.", viewModel.state.value.errorMessage)
+        assertEquals(CallEngineStatus.DISCONNECTED, fakeEngine.status.value)
+
+        // Sau 1500ms delay, tự động phát hiệu ứng NavigateBack
+        testScheduler.advanceTimeBy(1500L)
+        testScheduler.runCurrent()
+
+        assertEquals(CallSideEffect.NavigateBack, sideEffect)
+        job.cancel()
+    }
 }
