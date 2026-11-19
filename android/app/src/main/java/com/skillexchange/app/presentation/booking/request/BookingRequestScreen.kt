@@ -171,117 +171,54 @@ fun BookingRequestScreen(
                         city = state.receiverProfile?.city
                     )
 
-                    // 2. Chọn cặp kỹ năng trao đổi (DEC-028, TASK-083)
-                    if (state.pairs.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    "Cặp kỹ năng trao đổi",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    "Chọn cặp kỹ năng (Bạn dạy ↔ Bạn học):",
-                                    fontSize = 13.sp,
-                                    color = TextSecondaryLight,
-                                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                                )
-                                state.pairs.forEach { pair ->
-                                    val selected = pair.skillOfferedId == state.selectedSkillOfferedId &&
-                                            pair.skillWantedId == state.selectedSkillWantedId
-                                    PairSelectableRow(
-                                        pair = pair,
-                                        selected = selected,
-                                        onClick = {
-                                            if (!pair.isActive) {
-                                                viewModel.onIntent(
-                                                    BookingRequestIntent.SelectPair(
-                                                        pair.skillOfferedId,
-                                                        pair.skillWantedId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            }
-                        }
-                    } else {
-                        // Fallback theo danh sách teach/learn riêng lẻ nếu không có data cặp
-                        // Kỹ năng bạn dạy (User's HAVE)
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    "Kỹ năng bạn sẽ dạy",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    "Chọn từ danh sách kỹ năng bạn có mà đối phương muốn học:",
-                                    fontSize = 13.sp,
-                                    color = TextSecondaryLight,
-                                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                                )
-                                state.validTeachSkills.forEach { skill ->
-                                    val selected = skill.skillId == state.selectedSkillOfferedId
-                                    SkillSelectableRow(
-                                        skillName = skill.skillName,
-                                        proficiencyLevel = skill.proficiencyLevel,
-                                        selected = selected,
-                                        onClick = {
-                                            viewModel.onIntent(BookingRequestIntent.SelectSkillOffered(skill.skillId))
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            }
-                        }
+                    // 2. Cặp kỹ năng trao đổi (Hiển thị cặp kỹ năng đã chọn từ trang trước)
+                    val selectedPair = state.pairs.find {
+                        it.skillOfferedId == state.selectedSkillOfferedId && it.skillWantedId == state.selectedSkillWantedId
+                    }
+                    val teachSkillName = selectedPair?.skillOfferedName
+                        ?: state.validTeachSkills.find { it.skillId == state.selectedSkillOfferedId }?.skillName
+                        ?: "Kỹ năng bạn dạy"
+                    val learnSkillName = selectedPair?.skillWantedName
+                        ?: state.validLearnSkills.find { it.skillId == state.selectedSkillWantedId }?.skillName
+                        ?: "Kỹ năng bạn học"
 
-                        // Kỹ năng bạn học (Receiver's HAVE)
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    "Kỹ năng bạn muốn học",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = TextPrimaryLight
-                                )
-                                Text(
-                                    "Chọn từ danh sách kỹ năng đối phương có mà bạn muốn học:",
-                                    fontSize = 13.sp,
-                                    color = TextSecondaryLight,
-                                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                                )
-                                state.validLearnSkills.forEach { skill ->
-                                    val selected = skill.skillId == state.selectedSkillWantedId
-                                    SkillSelectableRow(
-                                        skillName = skill.skillName,
-                                        proficiencyLevel = skill.proficiencyLevel,
-                                        selected = selected,
-                                        onClick = {
-                                            viewModel.onIntent(BookingRequestIntent.SelectSkillWanted(skill.skillId))
-                                        }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Cặp kỹ năng trao đổi",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = TextPrimaryLight
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, Brand500, RoundedCornerShape(12.dp))
+                                    .background(Brand500.copy(alpha = 0.08f))
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Dạy: $teachSkillName ↔ Học: $learnSkillName",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = TextPrimaryLight
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Đã chọn",
+                                    tint = Brand500,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }

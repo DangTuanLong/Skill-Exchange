@@ -28,12 +28,21 @@ sealed class Screen(val route: String) {
     }
 
     // Booking
-    data object BookingRequest : Screen("booking_request/{receiverId}") {
-        fun createRoute(receiverId: String) = "booking_request/$receiverId"
+    data object BookingRequest :
+        Screen("booking_request/{receiverId}?skillOfferedId={skillOfferedId}&skillWantedId={skillWantedId}") {
+        fun createRoute(receiverId: String, skillOfferedId: Int? = null, skillWantedId: Int? = null): String {
+            val base = "booking_request/$receiverId"
+            val params = mutableListOf<String>()
+            if (skillOfferedId != null && skillOfferedId > 0) params.add("skillOfferedId=$skillOfferedId")
+            if (skillWantedId != null && skillWantedId > 0) params.add("skillWantedId=$skillWantedId")
+            return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
+        }
     }
+
     data object BookingDetail : Screen("booking_detail/{exchangeId}") {
         fun createRoute(exchangeId: String) = "booking_detail/$exchangeId"
     }
+
     data object BookingList : Screen("booking_list")
     data object MySchedule : Screen("my_schedule")
 

@@ -28,6 +28,7 @@ import com.skillexchange.app.domain.model.rating.Rating
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,12 +57,30 @@ private val PROFILE_DETAIL_DAY_LABELS = mapOf(
 fun ProfileDetailScreen(
     userId: String,
     onNavigateBack: () -> Unit = {},
-    onNavigateToBooking: (String) -> Unit = {},
+    onNavigateToBooking: (receiverId: String, skillOfferedId: Int?, skillWantedId: Int?) -> Unit = { _, _, _ -> },
     onNavigateToSkillSelection: () -> Unit = {},
     viewModel: ProfileDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var isFirstResume by rememberSaveable { mutableStateOf(true) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                if (isFirstResume) {
+                    isFirstResume = false
+                } else if (userId.isNotBlank()) {
+                    viewModel.loadUserProfile(userId)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(userId) {
         if (!viewModel.hasInitialTargetUser) {
@@ -72,8 +91,13 @@ fun ProfileDetailScreen(
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
-                is ProfileDetailEffect.NavigateToBooking -> onNavigateToBooking(effect.receiverId)
-                is ProfileDetailEffect.ShowSnackbar     -> snackbarHostState.showSnackbar(effect.message)
+                is ProfileDetailEffect.NavigateToBooking -> onNavigateToBooking(
+                    effect.receiverId,
+                    effect.skillOfferedId,
+                    effect.skillWantedId
+                )
+
+                is ProfileDetailEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
             }
         }
     }
@@ -150,7 +174,15 @@ fun ProfileDetailScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Brush.horizontalGradient(listOf(GradientStart, Brand500, GradientMid))),
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    GradientStart,
+                                                    Brand500,
+                                                    GradientMid
+                                                )
+                                            )
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -202,7 +234,13 @@ fun ProfileDetailScreen(
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.onIntent(ProfileDetailIntent.AddSuggestedSkillAndMatch(suggested)) },
+                                        onClick = {
+                                            viewModel.onIntent(
+                                                ProfileDetailIntent.AddSuggestedSkillAndMatch(
+                                                    suggested
+                                                )
+                                            )
+                                        },
                                         enabled = !state.isAddingSkill,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -493,7 +531,9 @@ fun ProfileDetailScreen(
                                             text = "Đang trao đổi",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.semantics { contentDescription = "Trạng thái: Đang trao đổi" }
+                                            modifier = Modifier.semantics {
+                                                contentDescription = "Trạng thái: Đang trao đổi"
+                                            }
                                         )
                                     }
                                 }
@@ -519,7 +559,9 @@ fun ProfileDetailScreen(
                                             text = "Đã trao đổi $count lần",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.semantics { contentDescription = "Trạng thái: Đã trao đổi $count lần" }
+                                            modifier = Modifier.semantics {
+                                                contentDescription = "Trạng thái: Đã trao đổi $count lần"
+                                            }
                                         )
                                     }
                                 }
@@ -555,9 +597,19 @@ fun ProfileDetailScreen(
                         }
                     }
 
-                    // Skills HAVE Section
-                    val haveSkills = remember(state.skills) {
-                        state.skills.filter { it.type == SkillType.HAVE }
+                    // Skills HAVE Section (Chỉ hiển thị các kỹ năng có thể học nếu có kỹ năng đủ điều kiện trao đổi)
+                    val haveSkills = remember(state.skills, state.pairs, state.eligibleLearnSkillIds, state.isOwnProfile) {
+                        val allHave = state.skills.filter { it.type == SkillType.HAVE }
+                        val relevantIds = if (state.pairs.isNotEmpty()) {
+                            state.pairs.map { it.skillWantedId }.toSet()
+                        } else {
+                            state.eligibleLearnSkillIds
+                        }
+                        if (!state.isOwnProfile && relevantIds.isNotEmpty()) {
+                            allHave.filter { relevantIds.contains(it.skillId) }
+                        } else {
+                            allHave
+                        }
                     }
                     if (haveSkills.isNotEmpty()) {
                         Card(
@@ -577,15 +629,34 @@ fun ProfileDetailScreen(
                                     color = Brand600
                                 )
                                 haveSkills.forEach { skill ->
-                                    SkillDetailRow(skill)
+                                    val isEligible = state.eligibleLearnSkillIds.contains(skill.skillId)
+                                    val isSelected = isEligible && state.selectedSkillWantedId == skill.skillId
+                                    SkillDetailRow(
+                                        skill = skill,
+                                        isEligible = isEligible,
+                                        isSelected = isSelected,
+                                        onClick = if (isEligible) {
+                                            { viewModel.onIntent(ProfileDetailIntent.SelectLearnSkill(skill.skillId)) }
+                                        } else null
+                                    )
                                 }
                             }
                         }
                     }
 
-                    // Skills WANT Section
-                    val wantSkills = remember(state.skills) {
-                        state.skills.filter { it.type == SkillType.WANT }
+                    // Skills WANT Section (Chỉ hiển thị các kỹ năng có thể dạy nếu có kỹ năng đủ điều kiện trao đổi)
+                    val wantSkills = remember(state.skills, state.pairs, state.eligibleTeachSkillIds, state.isOwnProfile) {
+                        val allWant = state.skills.filter { it.type == SkillType.WANT }
+                        val relevantIds = if (state.pairs.isNotEmpty()) {
+                            state.pairs.map { it.skillOfferedId }.toSet()
+                        } else {
+                            state.eligibleTeachSkillIds
+                        }
+                        if (!state.isOwnProfile && relevantIds.isNotEmpty()) {
+                            allWant.filter { relevantIds.contains(it.skillId) }
+                        } else {
+                            allWant
+                        }
                     }
                     if (wantSkills.isNotEmpty()) {
                         Card(
@@ -605,7 +676,16 @@ fun ProfileDetailScreen(
                                     color = Color(0xFF16A34A)
                                 )
                                 wantSkills.forEach { skill ->
-                                    SkillDetailRow(skill)
+                                    val isEligible = state.eligibleTeachSkillIds.contains(skill.skillId)
+                                    val isSelected = isEligible && state.selectedSkillOfferedId == skill.skillId
+                                    SkillDetailRow(
+                                        skill = skill,
+                                        isEligible = isEligible,
+                                        isSelected = isSelected,
+                                        onClick = if (isEligible) {
+                                            { viewModel.onIntent(ProfileDetailIntent.SelectTeachSkill(skill.skillId)) }
+                                        } else null
+                                    )
                                 }
                             }
                         }
@@ -879,20 +959,44 @@ private fun formatReviewDate(raw: String): String {
 }
 
 @Composable
-private fun SkillDetailRow(skill: UserSkill) {
+private fun SkillDetailRow(
+    skill: UserSkill,
+    isEligible: Boolean = false,
+    isSelected: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val borderColor = when {
+        isSelected -> Brand500
+        isEligible -> Brand500.copy(alpha = 0.35f)
+        else -> Color.Transparent
+    }
+    val backgroundColor = when {
+        isSelected -> if (skill.type == SkillType.HAVE) Color(0xFFEFF6FF) else Color(0xFFF0FDF4)
+        isEligible -> Color.White
+        else -> if (skill.type == SkillType.HAVE) Color(0xFFEFF6FF) else Color(0xFFF0FDF4)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (skill.type == SkillType.HAVE) Color(0xFFEFF6FF) else Color(0xFFF0FDF4))
-            .padding(12.dp),
+            .clip(RoundedCornerShape(12.dp))
+            .border(
+                width = if (isSelected) 2.dp else if (isEligible) 1.dp else 0.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .background(backgroundColor)
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = skill.skillName,
-                fontWeight = FontWeight.Bold,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                 fontSize = 14.sp,
                 color = TextPrimaryLight
             )
@@ -904,16 +1008,44 @@ private fun SkillDetailRow(skill: UserSkill) {
                 )
             }
         }
-        if (skill.type == SkillType.HAVE) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                repeat(5) { index ->
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (index < skill.proficiencyLevel) Brand500 else Color(0xFFCBD5E1))
-                    )
-                    if (index < 4) Spacer(modifier = Modifier.width(3.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (skill.type == SkillType.HAVE) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    repeat(5) { index ->
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(if (index < skill.proficiencyLevel) Brand500 else Color(0xFFCBD5E1))
+                        )
+                        if (index < 4) Spacer(modifier = Modifier.width(3.dp))
+                    }
+                }
+            }
+
+            if (isEligible) {
+                Spacer(modifier = Modifier.width(10.dp))
+                // Dấu chấm tròn / Radio indicator xác nhận đã chọn hoặc chờ chọn
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .border(
+                            width = if (isSelected) 2.dp else 1.5.dp,
+                            color = if (isSelected) Brand500 else Color(0xFF94A3B8),
+                            shape = CircleShape
+                        )
+                        .background(if (isSelected) Brand500 else Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                        )
+                    }
                 }
             }
         }

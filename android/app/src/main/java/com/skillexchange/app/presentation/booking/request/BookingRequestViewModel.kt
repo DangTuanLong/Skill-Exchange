@@ -31,6 +31,8 @@ class BookingRequestViewModel(
 ) : ViewModel() {
 
     val receiverId: String = savedStateHandle["receiverId"] ?: ""
+    private val initialSkillOfferedId: Int? = savedStateHandle.get<Int>("skillOfferedId")?.takeIf { it > 0 }
+    private val initialSkillWantedId: Int? = savedStateHandle.get<Int>("skillWantedId")?.takeIf { it > 0 }
 
     private val _state = MutableStateFlow(BookingRequestState())
     val state = _state.asStateFlow()
@@ -55,10 +57,17 @@ class BookingRequestViewModel(
                     )
                 }
             }
+
             is BookingRequestIntent.SelectSkillOffered -> _state.update { it.copy(selectedSkillOfferedId = intent.skillId) }
             is BookingRequestIntent.SelectSkillWanted -> _state.update { it.copy(selectedSkillWantedId = intent.skillId) }
             is BookingRequestIntent.SetScheduledDate -> _state.update { it.copy(scheduledDateEpochMs = intent.epochMs) }
-            is BookingRequestIntent.SetScheduledTime -> _state.update { it.copy(scheduledHour = intent.hour, scheduledMinute = intent.minute) }
+            is BookingRequestIntent.SetScheduledTime -> _state.update {
+                it.copy(
+                    scheduledHour = intent.hour,
+                    scheduledMinute = intent.minute
+                )
+            }
+
             is BookingRequestIntent.SetDuration -> _state.update { it.copy(durationMinutes = intent.minutes) }
             is BookingRequestIntent.SetMeetingMode -> _state.update { it.copy(meetingMode = intent.mode) }
             is BookingRequestIntent.SetMessage -> _state.update { it.copy(message = intent.message) }
@@ -148,6 +157,20 @@ class BookingRequestViewModel(
                 }.thenByDescending { it.completedCount }
             )
 
+            val preselectedPair = if (initialSkillOfferedId != null && initialSkillWantedId != null) {
+                availablePairs.find { it.skillOfferedId == initialSkillOfferedId && it.skillWantedId == initialSkillWantedId }
+            } else null
+
+            val chosenOfferedId = preselectedPair?.skillOfferedId
+                ?: (if (initialSkillOfferedId != null && validTeach.any { it.skillId == initialSkillOfferedId }) initialSkillOfferedId else null)
+                ?: bestPair?.skillOfferedId
+                ?: validTeach.firstOrNull()?.skillId
+
+            val chosenWantedId = preselectedPair?.skillWantedId
+                ?: (if (initialSkillWantedId != null && validLearn.any { it.skillId == initialSkillWantedId }) initialSkillWantedId else null)
+                ?: bestPair?.skillWantedId
+                ?: validLearn.firstOrNull()?.skillId
+
             _state.update {
                 it.copy(
                     isLoading = false,
@@ -156,8 +179,8 @@ class BookingRequestViewModel(
                     validLearnSkills = validLearn,
                     pairs = finalPairs,
                     recentlyRejected = recentlyRejected,
-                    selectedSkillOfferedId = bestPair?.skillOfferedId ?: validTeach.firstOrNull()?.skillId,
-                    selectedSkillWantedId = bestPair?.skillWantedId ?: validLearn.firstOrNull()?.skillId,
+                    selectedSkillOfferedId = chosenOfferedId,
+                    selectedSkillWantedId = chosenWantedId,
                     error = if (profile == null) "Không thể tải thông tin người dùng" else null
                 )
             }
@@ -211,16 +234,19 @@ class BookingRequestViewModel(
                     _effect.send(BookingRequestEffect.NavigateToDetail(exchange.id, receiverId))
                 }
                 .onFailure { e ->
-                    val isConflict = (e is ApiException && (e.code == ApiException.CODE_PAIR_ALREADY_ACTIVE || e.code == ApiException.CODE_PENDING_LIMIT_REACHED)) ||
-                                     e.message?.contains("PAIR_ALREADY_ACTIVE") == true ||
-                                     e.message?.contains("PENDING_LIMIT_REACHED") == true
+                    val isConflict =
+                        (e is ApiException && (e.code == ApiException.CODE_PAIR_ALREADY_ACTIVE || e.code == ApiException.CODE_PENDING_LIMIT_REACHED)) ||
+                                e.message?.contains("PAIR_ALREADY_ACTIVE") == true ||
+                                e.message?.contains("PENDING_LIMIT_REACHED") == true
 
                     val errorMsg = if (e is ApiException) {
                         when (e.code) {
                             ApiException.CODE_PAIR_ALREADY_ACTIVE ->
                                 "Cặp kỹ năng này đang có yêu cầu trao đổi hoạt động."
+
                             ApiException.CODE_PENDING_LIMIT_REACHED ->
                                 "Bạn đang có 3 yêu cầu chờ phản hồi với người này."
+
                             else -> e.message
                         }
                     } else if (e.message?.contains("PAIR_ALREADY_ACTIVE") == true) {

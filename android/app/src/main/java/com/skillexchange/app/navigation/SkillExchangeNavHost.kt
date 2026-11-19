@@ -115,286 +115,303 @@ fun SkillExchangeNavHost(
             startDestination = startDestination
         ) {
 
-        // ── Onboarding ───────────────────────────────────────────────
-        composable(Screen.Onboarding.route) {
-            OnboardingScreen(
-                onFinish = {
-                    tokenManager.saveOnboardingSeen(true)
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+            // ── Onboarding ───────────────────────────────────────────────
+            composable(Screen.Onboarding.route) {
+                OnboardingScreen(
+                    onFinish = {
+                        tokenManager.saveOnboardingSeen(true)
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        }
                     }
-                }
-            )
-        }
+                )
+            }
 
-        // ── Auth ─────────────────────────────────────────────────────
-        composable(Screen.Login.route) {
-            LoginScreen(
-                onNavigateToRegister = { navController.navigate(Screen.Register.route) },
-                onNavigateToHome = {
+            // ── Auth ─────────────────────────────────────────────────────
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    onNavigateToRegister = { navController.navigate(Screen.Register.route) },
+                    onNavigateToHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToProfileSetup = {
+                        navController.navigate(Screen.ProfileSetup.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.Register.route) {
+                RegisterScreen(
+                    onNavigateToOtp = { email ->
+                        navController.navigate(Screen.OtpVerification.createRoute(email))
+                    },
+                    onNavigateToLogin = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.OtpVerification.route,
+                arguments = listOf(navArgument("email") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val email = backStackEntry.arguments?.getString("email") ?: ""
+                OtpVerificationScreen(
+                    email = email,
+                    onNavigateToHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToProfileSetup = {
+                        navController.navigate(Screen.ProfileSetup.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            // ── Main Shell with Bottom Navigation Bar ─────────────────────
+            composable(Screen.Home.route) {
+                MainScreen(rootNavController = navController)
+            }
+
+            // ── Standalone Full Screen Pages ──────────────────────────────
+            composable(Screen.ProfileSetup.route) {
+                ProfileSetupScreen(
+                    onNavigateToSkillSelection = {
+                        navController.navigate(Screen.SkillSelection.route)
+                    },
+                    onNavigateToHome = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                            }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.SkillSelection.route) {
+                SkillSelectionScreen(
+                    onNavigateToHome = {
+                        if (!navController.popBackStack(Screen.Home.route, false)) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.SkillSelection.route) { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateToProfileSetup = {
+                        if (!navController.popBackStack(Screen.ProfileSetup.route, false)) {
+                            navController.navigate(Screen.ProfileSetup.route)
+                        }
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.ProfileDetail.route,
+                arguments = listOf(navArgument("userId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                ProfileDetailScreen(
+                    userId = userId,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToBooking = { receiverId, skillOfferedId, skillWantedId ->
+                        navController.navigate(
+                            Screen.BookingRequest.createRoute(
+                                receiverId,
+                                skillOfferedId,
+                                skillWantedId
+                            )
+                        )
+                    },
+                    onNavigateToSkillSelection = {
+                        navController.navigate(Screen.SkillSelection.route)
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.BookingRequest.route,
+                arguments = listOf(
+                    navArgument("receiverId") { type = NavType.StringType },
+                    navArgument("skillOfferedId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    },
+                    navArgument("skillWantedId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    }
+                )
+            ) {
+                com.skillexchange.app.presentation.booking.request.BookingRequestScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToDetail = { exchangeId, receiverId ->
+                        navController.navigate(Screen.BookingDetail.createRoute(exchangeId)) {
+                            popUpTo(Screen.BookingRequest.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToSkillSelection = {
+                        navController.navigate(Screen.SkillSelection.route)
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.BookingDetail.route,
+                arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
+            ) {
+                com.skillexchange.app.presentation.booking.detail.BookingDetailScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToRating = { exchangeId ->
+                        navController.navigate(Screen.Rating.createRoute(exchangeId))
+                    },
+                    onNavigateToChat = { chatId ->
+                        navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                    },
+                    onNavigateToCall = { exchangeId, isVideo ->
+                        navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
+                    },
+                    onNavigateToBookingRequest = { partnerId ->
+                        navController.navigate(Screen.BookingRequest.createRoute(partnerId))
+                    }
+                )
+            }
+
+            // ── Chat (TASK-030 & TASK-060) ──────────────────────────────
+            composable(Screen.ChatList.route) {
+                com.skillexchange.app.presentation.chat.list.ChatListScreen(
+                    onNavigateBack = {
+                        if (!navController.popBackStack(Screen.Home.route, false)) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.ChatList.route) { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateToChat = { chatId ->
+                        navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.ChatDetail.route,
+                arguments = listOf(navArgument("chatId") { type = NavType.StringType })
+            ) {
+                com.skillexchange.app.presentation.chat.detail.ChatDetailScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToBookingDetail = { exchangeId ->
+                        navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                    },
+                    onNavigateToCall = { exchangeId, isVideo ->
+                        navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
+                    }
+                )
+            }
+
+            // ── In-app Calling (DEC-026, TASK-074, TASK-075) ─────────────
+            composable(
+                route = Screen.Call.route,
+                arguments = listOf(
+                    navArgument("exchangeId") { type = NavType.StringType },
+                    navArgument("isVideo") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                    navArgument("sessionId") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("isIncoming") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) {
+                com.skillexchange.app.presentation.call.CallScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.MySchedule.route) {
+                com.skillexchange.app.presentation.schedule.ScheduleScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToDetail = { exchangeId ->
+                        navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
+                    },
+                    onNavigateToChat = { chatId ->
+                        navController.navigate(Screen.ChatDetail.createRoute(chatId))
+                    }
+                )
+            }
+
+            // ── Compatibility alias: Discovery -> Home (DEC-022) ──────────
+            composable(Screen.Discovery.route) {
+                LaunchedEffect(Unit) {
                     navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                        popUpTo(Screen.Discovery.route) { inclusive = true }
                     }
-                },
-                onNavigateToProfileSetup = {
-                    navController.navigate(Screen.ProfileSetup.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            )
-        }
-
-        composable(Screen.Register.route) {
-            RegisterScreen(
-                onNavigateToOtp = { email ->
-                    navController.navigate(Screen.OtpVerification.createRoute(email))
-                },
-                onNavigateToLogin = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Screen.OtpVerification.route,
-            arguments = listOf(navArgument("email") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val email = backStackEntry.arguments?.getString("email") ?: ""
-            OtpVerificationScreen(
-                email = email,
-                onNavigateToHome = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                },
-                onNavigateToProfileSetup = {
-                    navController.navigate(Screen.ProfileSetup.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                },
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
-        // ── Main Shell with Bottom Navigation Bar ─────────────────────
-        composable(Screen.Home.route) {
-            MainScreen(rootNavController = navController)
-        }
-
-        // ── Standalone Full Screen Pages ──────────────────────────────
-        composable(Screen.ProfileSetup.route) {
-            ProfileSetupScreen(
-                onNavigateToSkillSelection = {
-                    navController.navigate(Screen.SkillSelection.route)
-                },
-                onNavigateToHome = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
-                        }
-                    }
-                },
-                onNavigateBack = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
-                        }
-                    }
-                }
-            )
-        }
-
-        composable(Screen.SkillSelection.route) {
-            SkillSelectionScreen(
-                onNavigateToHome = {
-                    if (!navController.popBackStack(Screen.Home.route, false)) {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.SkillSelection.route) { inclusive = true }
-                        }
-                    }
-                },
-                onNavigateToProfileSetup = {
-                    if (!navController.popBackStack(Screen.ProfileSetup.route, false)) {
-                        navController.navigate(Screen.ProfileSetup.route)
-                    }
-                }
-            )
-        }
-
-        composable(
-            route = Screen.ProfileDetail.route,
-            arguments = listOf(navArgument("userId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId") ?: ""
-            ProfileDetailScreen(
-                userId = userId,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToBooking = { receiverId ->
-                    navController.navigate(Screen.BookingRequest.createRoute(receiverId))
-                },
-                onNavigateToSkillSelection = {
-                    navController.navigate(Screen.SkillSelection.route)
-                }
-            )
-        }
-
-        composable(
-            route = Screen.BookingRequest.route,
-            arguments = listOf(navArgument("receiverId") { type = NavType.StringType })
-        ) {
-            com.skillexchange.app.presentation.booking.request.BookingRequestScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { exchangeId, receiverId ->
-                    navController.navigate(Screen.BookingDetail.createRoute(exchangeId)) {
-                        popUpTo(Screen.BookingRequest.createRoute(receiverId)) { inclusive = true }
-                    }
-                },
-                onNavigateToSkillSelection = {
-                    navController.navigate(Screen.SkillSelection.route)
-                }
-            )
-        }
-
-        composable(
-            route = Screen.BookingDetail.route,
-            arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
-        ) {
-            com.skillexchange.app.presentation.booking.detail.BookingDetailScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToRating = { exchangeId ->
-                    navController.navigate(Screen.Rating.createRoute(exchangeId))
-                },
-                onNavigateToChat = { chatId ->
-                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
-                },
-                onNavigateToCall = { exchangeId, isVideo ->
-                    navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
-                },
-                onNavigateToBookingRequest = { partnerId ->
-                    navController.navigate(Screen.BookingRequest.createRoute(partnerId))
-                }
-            )
-        }
-
-        // ── Chat (TASK-030 & TASK-060) ──────────────────────────────
-        composable(Screen.ChatList.route) {
-            com.skillexchange.app.presentation.chat.list.ChatListScreen(
-                onNavigateBack = {
-                    if (!navController.popBackStack(Screen.Home.route, false)) {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.ChatList.route) { inclusive = true }
-                        }
-                    }
-                },
-                onNavigateToChat = { chatId ->
-                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
-                }
-            )
-        }
-
-        composable(
-            route = Screen.ChatDetail.route,
-            arguments = listOf(navArgument("chatId") { type = NavType.StringType })
-        ) {
-            com.skillexchange.app.presentation.chat.detail.ChatDetailScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToBookingDetail = { exchangeId ->
-                    navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
-                },
-                onNavigateToCall = { exchangeId, isVideo ->
-                    navController.navigate(Screen.Call.createRoute(exchangeId, isVideo))
-                }
-            )
-        }
-
-        // ── In-app Calling (DEC-026, TASK-074, TASK-075) ─────────────
-        composable(
-            route = Screen.Call.route,
-            arguments = listOf(
-                navArgument("exchangeId") { type = NavType.StringType },
-                navArgument("isVideo") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                },
-                navArgument("sessionId") {
-                    type = NavType.StringType
-                    defaultValue = ""
-                },
-                navArgument("isIncoming") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                }
-            )
-        ) {
-            com.skillexchange.app.presentation.call.CallScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.MySchedule.route) {
-            com.skillexchange.app.presentation.schedule.ScheduleScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { exchangeId ->
-                    navController.navigate(Screen.BookingDetail.createRoute(exchangeId))
-                },
-                onNavigateToChat = { chatId ->
-                    navController.navigate(Screen.ChatDetail.createRoute(chatId))
-                }
-            )
-        }
-
-        // ── Compatibility alias: Discovery -> Home (DEC-022) ──────────
-        composable(Screen.Discovery.route) {
-            LaunchedEffect(Unit) {
-                navController.navigate(Screen.Home.route) {
-                    popUpTo(Screen.Discovery.route) { inclusive = true }
                 }
             }
-        }
 
-        composable(Screen.Rating.route,
-            arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val exchangeId = backStackEntry.arguments?.getString("exchangeId") ?: ""
-            com.skillexchange.app.presentation.rating.RatingScreen(
-                exchangeId = exchangeId,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
+            composable(
+                Screen.Rating.route,
+                arguments = listOf(navArgument("exchangeId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val exchangeId = backStackEntry.arguments?.getString("exchangeId") ?: ""
+                com.skillexchange.app.presentation.rating.RatingScreen(
+                    exchangeId = exchangeId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
 
-        composable(Screen.Notifications.route) {
-            com.skillexchange.app.presentation.notification.NotificationScreen(
-                onNavigateBack = { navController.popBackStack() },
-                showBackButton = true,
-                onNavigateToEntity = { type, entityId ->
-                    when (type) {
-                        "NEW_MESSAGE" -> navController.navigate(Screen.ChatDetail.createRoute(entityId))
-                        "RATING_REMINDER" -> navController.navigate(Screen.Rating.createRoute(entityId))
-                        else -> navController.navigate(Screen.BookingDetail.createRoute(entityId))
+            composable(Screen.Notifications.route) {
+                com.skillexchange.app.presentation.notification.NotificationScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    showBackButton = true,
+                    onNavigateToEntity = { type, entityId ->
+                        when (type) {
+                            "NEW_MESSAGE" -> navController.navigate(Screen.ChatDetail.createRoute(entityId))
+                            "RATING_REMINDER" -> navController.navigate(Screen.Rating.createRoute(entityId))
+                            else -> navController.navigate(Screen.BookingDetail.createRoute(entityId))
+                        }
                     }
-                }
-            )
-        }
+                )
+            }
 
-        composable(Screen.Dashboard.route) {
-            com.skillexchange.app.presentation.dashboard.DashboardScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToProfile = { userId ->
-                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
-                }
-            )
-        }
+            composable(Screen.Dashboard.route) {
+                com.skillexchange.app.presentation.dashboard.DashboardScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToProfile = { userId ->
+                        navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                    }
+                )
+            }
 
-        composable(Screen.SkillGraph.route) {
-            com.skillexchange.app.presentation.graph.SkillGraphScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToProfile = { userId ->
-                    navController.navigate(Screen.ProfileDetail.createRoute(userId))
-                },
-                onNavigateToBooking = { receiverId ->
-                    navController.navigate(Screen.BookingRequest.createRoute(receiverId))
-                }
-            )
+            composable(Screen.SkillGraph.route) {
+                com.skillexchange.app.presentation.graph.SkillGraphScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToProfile = { userId ->
+                        navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                    },
+                    onNavigateToBooking = { receiverId ->
+                        navController.navigate(Screen.BookingRequest.createRoute(receiverId))
+                    }
+                )
+            }
         }
-    }
 
         SnackbarHost(
             hostState = snackbarHostState,

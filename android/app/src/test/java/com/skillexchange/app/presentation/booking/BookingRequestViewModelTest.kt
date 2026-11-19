@@ -289,6 +289,45 @@ class BookingRequestViewModelTest {
     }
 
     @Test
+    fun `loadData prioritizes initialSkillOfferedId and initialSkillWantedId from SavedStateHandle`() = runTest {
+        mySkillsList = listOf(
+            UserSkill(id = "1", skillId = 1, skillName = "Python", type = SkillType.HAVE, proficiencyLevel = 4),
+            UserSkill(id = "2", skillId = 10, skillName = "Kotlin", type = SkillType.HAVE, proficiencyLevel = 5),
+            UserSkill(id = "3", skillId = 2, skillName = "Guitar", type = SkillType.WANT, proficiencyLevel = 2),
+            UserSkill(id = "4", skillId = 3, skillName = "Piano", type = SkillType.WANT, proficiencyLevel = 2)
+        )
+        receiverSkillsList = listOf(
+            UserSkill(id = "5", skillId = 1, skillName = "Python", type = SkillType.WANT, proficiencyLevel = 4),
+            UserSkill(id = "6", skillId = 10, skillName = "Kotlin", type = SkillType.WANT, proficiencyLevel = 1),
+            UserSkill(id = "7", skillId = 2, skillName = "Guitar", type = SkillType.HAVE, proficiencyLevel = 3),
+            UserSkill(id = "8", skillId = 3, skillName = "Piano", type = SkillType.HAVE, proficiencyLevel = 4)
+        )
+        mockValidPairsResult = Result.success(
+            ValidPairsResult(
+                pairs = listOf(
+                    ValidSkillPair(1, "Python", 2, "Guitar", isActive = false, completedCount = 0),
+                    ValidSkillPair(10, "Kotlin", 3, "Piano", isActive = false, completedCount = 0)
+                ),
+                recentlyRejected = false
+            )
+        )
+        // Explicitly pass (10, 3) via SavedStateHandle, overriding the default bestPair (1, 2)
+        val savedStateHandle = SavedStateHandle(
+            mapOf(
+                "receiverId" to "user_b",
+                "skillOfferedId" to 10,
+                "skillWantedId" to 3
+            )
+        )
+        val viewModel = BookingRequestViewModel(savedStateHandle, mockProfileRepo, mockSkillRepo, mockExchangeRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(10, state.selectedSkillOfferedId)
+        assertEquals(3, state.selectedSkillWantedId)
+    }
+
+    @Test
     fun `loadData sets recentlyRejected flag for soft warning banner`() = runTest {
         mockValidPairsResult = Result.success(
             ValidPairsResult(

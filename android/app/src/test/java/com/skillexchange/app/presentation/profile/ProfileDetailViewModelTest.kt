@@ -36,7 +36,8 @@ class ProfileDetailViewModelTest {
             availability: List<com.skillexchange.app.domain.model.AvailabilityWindow>?
         ): Result<Profile> = error("Not used")
 
-        override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> = error("Not used")
+        override suspend fun uploadAvatar(fileBytes: ByteArray, fileName: String, mimeType: String): Result<String> =
+            error("Not used")
     }
 
     private val mockSkillRepository = object : ISkillRepository {
@@ -46,15 +47,43 @@ class ProfileDetailViewModelTest {
             return if (userId == "me" || userId == "my_user_id") {
                 Result.success(
                     listOf(
-                        UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4),
-                        UserSkill(id = "my2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.WANT, proficiencyLevel = 2)
+                        UserSkill(
+                            id = "my1",
+                            skillId = 1,
+                            skillName = "Python",
+                            categoryName = "Lập trình",
+                            type = SkillType.HAVE,
+                            proficiencyLevel = 4
+                        ),
+                        UserSkill(
+                            id = "my2",
+                            skillId = 2,
+                            skillName = "Tiếng Anh",
+                            categoryName = "Ngoại ngữ",
+                            type = SkillType.WANT,
+                            proficiencyLevel = 2
+                        )
                     )
                 )
             } else {
                 Result.success(
                     listOf(
-                        UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
-                        UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 4)
+                        UserSkill(
+                            id = "other1",
+                            skillId = 1,
+                            skillName = "Python",
+                            categoryName = "Lập trình",
+                            type = SkillType.WANT,
+                            proficiencyLevel = 3
+                        ),
+                        UserSkill(
+                            id = "other2",
+                            skillId = 2,
+                            skillName = "Tiếng Anh",
+                            categoryName = "Ngoại ngữ",
+                            type = SkillType.HAVE,
+                            proficiencyLevel = 4
+                        )
                     )
                 )
             }
@@ -68,34 +97,78 @@ class ProfileDetailViewModelTest {
     }
 
     private val mockRatingRepo = object : com.skillexchange.app.domain.repository.IRatingRepository {
-        override suspend fun createRating(exchangeId: String, score: Int, comment: String?): Result<com.skillexchange.app.domain.model.rating.Rating> = error("Not used")
-        override suspend fun getUserRatings(userId: String): Result<List<com.skillexchange.app.domain.model.rating.Rating>> = Result.success(
-            listOf(
-                com.skillexchange.app.domain.model.rating.Rating(
-                    id = "rat_1",
-                    exchangeId = "ex_1",
-                    reviewerId = "rev_1",
-                    reviewerName = "Reviewer One",
-                    reviewerAvatarUrl = null,
-                    revieweeId = userId,
-                    score = 5,
-                    comment = "Rất tốt!",
-                    createdAt = "2026-10-06T10:00:00Z"
+        override suspend fun createRating(
+            exchangeId: String,
+            score: Int,
+            comment: String?
+        ): Result<com.skillexchange.app.domain.model.rating.Rating> = error("Not used")
+
+        override suspend fun getUserRatings(userId: String): Result<List<com.skillexchange.app.domain.model.rating.Rating>> =
+            Result.success(
+                listOf(
+                    com.skillexchange.app.domain.model.rating.Rating(
+                        id = "rat_1",
+                        exchangeId = "ex_1",
+                        reviewerId = "rev_1",
+                        reviewerName = "Reviewer One",
+                        reviewerAvatarUrl = null,
+                        revieweeId = userId,
+                        score = 5,
+                        comment = "Rất tốt!",
+                        createdAt = "2026-10-06T10:00:00Z"
+                    )
                 )
             )
-        )
-        override suspend fun getUserReputation(userId: String): Result<com.skillexchange.app.domain.model.rating.Reputation> = Result.success(
-            com.skillexchange.app.domain.model.rating.Reputation(
-                score = 4.8,
-                badge = "Xuất sắc",
-                totalExchanges = 16,
-                completionRate = 1.0,
-                ratingCount = 10,
-                avgRating = 4.9
+
+        override suspend fun getUserReputation(userId: String): Result<com.skillexchange.app.domain.model.rating.Reputation> =
+            Result.success(
+                com.skillexchange.app.domain.model.rating.Reputation(
+                    score = 4.8,
+                    badge = "Xuất sắc",
+                    totalExchanges = 16,
+                    completionRate = 1.0,
+                    ratingCount = 10,
+                    avgRating = 4.9
+                )
             )
-        )
+
         override suspend fun getMyExchangeRating(exchangeId: String): Result<com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus> =
-            Result.success(com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus(hasRated = false, rating = null))
+            Result.success(
+                com.skillexchange.app.domain.model.rating.UserExchangeRatingStatus(
+                    hasRated = false,
+                    rating = null
+                )
+            )
+    }
+
+    private val defaultMockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+        override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+            error("Not used")
+
+        override suspend fun getIncomingRequests() = error("Not used")
+        override suspend fun getOutgoingRequests() = error("Not used")
+        override suspend fun getExchangeRequest(id: String) = error("Not used")
+        override suspend fun acceptRequest(id: String) = error("Not used")
+        override suspend fun rejectRequest(id: String) = error("Not used")
+        override suspend fun cancelRequest(id: String, reason: String?) = error("Not used")
+        override suspend fun completeRequest(id: String) = error("Not used")
+        override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+            return Result.success(
+                com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                    pairs = listOf(
+                        com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                            1,
+                            "Python",
+                            2,
+                            "Tiếng Anh",
+                            isActive = false,
+                            completedCount = 0
+                        )
+                    ),
+                    recentlyRejected = false
+                )
+            )
+        }
     }
 
     @Before
@@ -111,7 +184,14 @@ class ProfileDetailViewModelTest {
     @Test
     fun `initialization with userId loads target user profile and skills and checks valid pairs`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
 
         advanceUntilIdle()
 
@@ -131,7 +211,14 @@ class ProfileDetailViewModelTest {
     @Test
     fun `own profile disables exchange and sets own profile reason`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "my_user_id"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
 
         advanceUntilIdle()
 
@@ -144,7 +231,14 @@ class ProfileDetailViewModelTest {
     @Test
     fun `RequestExchange intent sends NavigateToBooking effect`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
 
         advanceUntilIdle()
 
@@ -165,12 +259,33 @@ class ProfileDetailViewModelTest {
     fun `one-way match potential detects suggestedSkills when user teaches what other needs`() = runTest {
         // My skills: HAVE Python Lv4, but NO Tiếng Anh in WANT
         val mySkills = mutableListOf(
-            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+            UserSkill(
+                id = "my1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.HAVE,
+                proficiencyLevel = 4
+            )
         )
         // Target skills: WANT Python Lv3 (I can teach), HAVE Tiếng Anh Lv3 (target can teach)
         val targetSkills = mutableListOf(
-            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
-            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+            UserSkill(
+                id = "other1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.WANT,
+                proficiencyLevel = 3
+            ),
+            UserSkill(
+                id = "other2",
+                skillId = 2,
+                skillName = "Tiếng Anh",
+                categoryName = "Ngoại ngữ",
+                type = SkillType.HAVE,
+                proficiencyLevel = 3
+            )
         )
 
         val customSkillRepo = object : ISkillRepository {
@@ -179,12 +294,26 @@ class ProfileDetailViewModelTest {
                 return if (userId == "me" || userId == "my_user_id") Result.success(mySkills)
                 else Result.success(targetSkills)
             }
-            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> = error("Not used")
+
+            override suspend fun addUserSkill(
+                skillId: Int,
+                type: String,
+                proficiencyLevel: Int,
+                note: String?
+            ): Result<UserSkill> = error("Not used")
+
             override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            customSkillRepo,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -197,11 +326,32 @@ class ProfileDetailViewModelTest {
     @Test
     fun `AddSuggestedSkillAndMatch intent adds skill and updates state to valid pair`() = runTest {
         val mySkills = mutableListOf(
-            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+            UserSkill(
+                id = "my1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.HAVE,
+                proficiencyLevel = 4
+            )
         )
         val targetSkills = mutableListOf(
-            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
-            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+            UserSkill(
+                id = "other1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.WANT,
+                proficiencyLevel = 3
+            ),
+            UserSkill(
+                id = "other2",
+                skillId = 2,
+                skillName = "Tiếng Anh",
+                categoryName = "Ngoại ngữ",
+                type = SkillType.HAVE,
+                proficiencyLevel = 3
+            )
         )
 
         val customSkillRepo = object : ISkillRepository {
@@ -210,7 +360,13 @@ class ProfileDetailViewModelTest {
                 return if (userId == "me" || userId == "my_user_id") Result.success(mySkills.toList())
                 else Result.success(targetSkills.toList())
             }
-            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> {
+
+            override suspend fun addUserSkill(
+                skillId: Int,
+                type: String,
+                proficiencyLevel: Int,
+                note: String?
+            ): Result<UserSkill> {
                 val newSkill = UserSkill(
                     id = "my_new_want",
                     skillId = skillId,
@@ -222,11 +378,19 @@ class ProfileDetailViewModelTest {
                 mySkills.add(newSkill)
                 return Result.success(newSkill)
             }
+
             override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            customSkillRepo,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.hasValidPair)
@@ -256,11 +420,32 @@ class ProfileDetailViewModelTest {
     @Test
     fun `AddSuggestedSkillAndMatch failure sends error snackbar and resets isAddingSkill`() = runTest {
         val mySkills = mutableListOf(
-            UserSkill(id = "my1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.HAVE, proficiencyLevel = 4)
+            UserSkill(
+                id = "my1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.HAVE,
+                proficiencyLevel = 4
+            )
         )
         val targetSkills = mutableListOf(
-            UserSkill(id = "other1", skillId = 1, skillName = "Python", categoryName = "Lập trình", type = SkillType.WANT, proficiencyLevel = 3),
-            UserSkill(id = "other2", skillId = 2, skillName = "Tiếng Anh", categoryName = "Ngoại ngữ", type = SkillType.HAVE, proficiencyLevel = 3)
+            UserSkill(
+                id = "other1",
+                skillId = 1,
+                skillName = "Python",
+                categoryName = "Lập trình",
+                type = SkillType.WANT,
+                proficiencyLevel = 3
+            ),
+            UserSkill(
+                id = "other2",
+                skillId = 2,
+                skillName = "Tiếng Anh",
+                categoryName = "Ngoại ngữ",
+                type = SkillType.HAVE,
+                proficiencyLevel = 3
+            )
         )
 
         val customSkillRepo = object : ISkillRepository {
@@ -269,14 +454,28 @@ class ProfileDetailViewModelTest {
                 return if (userId == "me" || userId == "my_user_id") Result.success(mySkills.toList())
                 else Result.success(targetSkills.toList())
             }
-            override suspend fun addUserSkill(skillId: Int, type: String, proficiencyLevel: Int, note: String?): Result<UserSkill> {
+
+            override suspend fun addUserSkill(
+                skillId: Int,
+                type: String,
+                proficiencyLevel: Int,
+                note: String?
+            ): Result<UserSkill> {
                 return Result.failure(Exception("Lỗi mạng"))
             }
+
             override suspend fun removeUserSkill(userSkillId: String): Result<Boolean> = Result.success(true)
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, customSkillRepo, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            customSkillRepo,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
         advanceUntilIdle()
 
         val skillToSuggest = viewModel.state.value.suggestedSkill!!
@@ -300,7 +499,14 @@ class ProfileDetailViewModelTest {
     @Test
     fun `OpenAllReviews and DismissAllReviews toggle bottom sheet state`() = runTest {
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            defaultMockExchange
+        )
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.showAllReviewsBottomSheet)
@@ -315,7 +521,9 @@ class ProfileDetailViewModelTest {
     @Test
     fun `profileDetail with all active pairs disables CTA with reason and shows ACTIVE chip`() = runTest {
         val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
-            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+                error("")
+
             override suspend fun getIncomingRequests() = error("")
             override suspend fun getOutgoingRequests() = error("")
             override suspend fun getExchangeRequest(id: String) = error("")
@@ -327,7 +535,14 @@ class ProfileDetailViewModelTest {
                 return Result.success(
                     com.skillexchange.app.domain.model.exchange.ValidPairsResult(
                         pairs = listOf(
-                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = true, completedCount = 0)
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                                1,
+                                "Python",
+                                2,
+                                "Tiếng Anh",
+                                isActive = true,
+                                completedCount = 0
+                            )
                         ),
                         recentlyRejected = false,
                         relationshipStatus = "ACTIVE",
@@ -338,7 +553,14 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            mockExchange
+        )
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -351,7 +573,9 @@ class ProfileDetailViewModelTest {
     @Test
     fun `profileDetail with completed exchange shows COMPLETED chip and count`() = runTest {
         val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
-            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+                error("")
+
             override suspend fun getIncomingRequests() = error("")
             override suspend fun getOutgoingRequests() = error("")
             override suspend fun getExchangeRequest(id: String) = error("")
@@ -363,7 +587,14 @@ class ProfileDetailViewModelTest {
                 return Result.success(
                     com.skillexchange.app.domain.model.exchange.ValidPairsResult(
                         pairs = listOf(
-                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = false, completedCount = 3)
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                                1,
+                                "Python",
+                                2,
+                                "Tiếng Anh",
+                                isActive = false,
+                                completedCount = 3
+                            )
                         ),
                         recentlyRejected = false,
                         relationshipStatus = "COMPLETED",
@@ -374,7 +605,14 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            mockExchange
+        )
         advanceUntilIdle()
 
         val state = viewModel.state.value
@@ -387,7 +625,9 @@ class ProfileDetailViewModelTest {
     @Test
     fun `profileDetail with recentlyRejected sets soft warning banner flag`() = runTest {
         val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
-            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) = error("")
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+                error("")
+
             override suspend fun getIncomingRequests() = error("")
             override suspend fun getOutgoingRequests() = error("")
             override suspend fun getExchangeRequest(id: String) = error("")
@@ -399,7 +639,14 @@ class ProfileDetailViewModelTest {
                 return Result.success(
                     com.skillexchange.app.domain.model.exchange.ValidPairsResult(
                         pairs = listOf(
-                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(1, "Python", 2, "Tiếng Anh", isActive = false, completedCount = 0)
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                                1,
+                                "Python",
+                                2,
+                                "Tiếng Anh",
+                                isActive = false,
+                                completedCount = 0
+                            )
                         ),
                         recentlyRejected = true
                     )
@@ -408,10 +655,142 @@ class ProfileDetailViewModelTest {
         }
 
         val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
-        val viewModel = ProfileDetailViewModel(savedStateHandle, mockProfileRepository, mockSkillRepository, tokenManager, mockRatingRepo, mockExchange)
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            mockExchange
+        )
         advanceUntilIdle()
 
         val state = viewModel.state.value
         assertTrue(state.recentlyRejected)
+    }
+
+    @Test
+    fun `SelectLearnSkill and SelectTeachSkill update selected skill IDs and pass to NavigateToBooking`() = runTest {
+        val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+                error("")
+
+            override suspend fun getIncomingRequests() = error("")
+            override suspend fun getOutgoingRequests() = error("")
+            override suspend fun getExchangeRequest(id: String) = error("")
+            override suspend fun acceptRequest(id: String) = error("")
+            override suspend fun rejectRequest(id: String) = error("")
+            override suspend fun cancelRequest(id: String, reason: String?) = error("")
+            override suspend fun completeRequest(id: String) = error("")
+            override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                        pairs = listOf(
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                                1,
+                                "Python",
+                                2,
+                                "Tiếng Anh",
+                                isActive = false,
+                                completedCount = 0
+                            )
+                        ),
+                        recentlyRejected = false
+                    )
+                )
+            }
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            mockExchange
+        )
+        advanceUntilIdle()
+
+        // Check eligible skills
+        val initialState = viewModel.state.value
+        assertTrue(initialState.eligibleLearnSkillIds.contains(2))
+        assertTrue(initialState.eligibleTeachSkillIds.contains(1))
+        assertEquals(1, initialState.selectedSkillOfferedId)
+        assertEquals(2, initialState.selectedSkillWantedId)
+
+        // Select different skills
+        viewModel.onIntent(ProfileDetailIntent.SelectLearnSkill(99))
+        viewModel.onIntent(ProfileDetailIntent.SelectTeachSkill(88))
+        assertEquals(99, viewModel.state.value.selectedSkillWantedId)
+        assertEquals(88, viewModel.state.value.selectedSkillOfferedId)
+
+        // Request exchange should forward selected skills
+        var effectReceived: ProfileDetailEffect? = null
+        val job = launch {
+            effectReceived = viewModel.effect.first()
+        }
+
+        viewModel.onIntent(ProfileDetailIntent.RequestExchange)
+        advanceUntilIdle()
+
+        assertTrue(effectReceived is ProfileDetailEffect.NavigateToBooking)
+        val navEffect = effectReceived as ProfileDetailEffect.NavigateToBooking
+        assertEquals("target_user_123", navEffect.receiverId)
+        assertEquals(88, navEffect.skillOfferedId)
+        assertEquals(99, navEffect.skillWantedId)
+        job.cancel()
+    }
+
+    @Test
+    fun `when all valid pairs are active, hasValidPair is false and selection is cleared`() = runTest {
+        val mockExchange = object : com.skillexchange.app.domain.repository.IExchangeRepository {
+            override suspend fun createExchangeRequest(dto: com.skillexchange.app.data.remote.exchange.CreateExchangeRequestDto) =
+                error("")
+
+            override suspend fun getIncomingRequests() = error("")
+            override suspend fun getOutgoingRequests() = error("")
+            override suspend fun getExchangeRequest(id: String) = error("")
+            override suspend fun acceptRequest(id: String) = error("")
+            override suspend fun rejectRequest(id: String) = error("")
+            override suspend fun cancelRequest(id: String, reason: String?) = error("")
+            override suspend fun completeRequest(id: String) = error("")
+            override suspend fun getValidPairs(receiverId: String): Result<com.skillexchange.app.domain.model.exchange.ValidPairsResult> {
+                return Result.success(
+                    com.skillexchange.app.domain.model.exchange.ValidPairsResult(
+                        pairs = listOf(
+                            com.skillexchange.app.domain.model.exchange.ValidSkillPair(
+                                1,
+                                "Python",
+                                2,
+                                "Tiếng Anh",
+                                isActive = true,
+                                completedCount = 0
+                            )
+                        ),
+                        recentlyRejected = false
+                    )
+                )
+            }
+        }
+
+        val savedStateHandle = SavedStateHandle(mapOf("userId" to "target_user_123"))
+        val viewModel = ProfileDetailViewModel(
+            savedStateHandle,
+            mockProfileRepository,
+            mockSkillRepository,
+            tokenManager,
+            mockRatingRepo,
+            mockExchange
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertFalse(state.hasValidPair)
+        assertNull(state.selectedSkillOfferedId)
+        assertNull(state.selectedSkillWantedId)
+        assertTrue(state.eligibleLearnSkillIds.isEmpty())
+        assertTrue(state.eligibleTeachSkillIds.isEmpty())
+        assertEquals("Tất cả cặp kỹ năng phù hợp đang có yêu cầu trao đổi đang xử lý.", state.noValidPairReason)
     }
 }

@@ -33,6 +33,11 @@ data class ProfileDetailUiState(
     val relationshipStatus: String? = null, // "ACTIVE", "COMPLETED", null (DEC-028, TASK-083)
     val completedExchangeCount: Int = 0,
     val recentlyRejected: Boolean = false,
+    val selectedSkillOfferedId: Int? = null,
+    val selectedSkillWantedId: Int? = null,
+    val eligibleLearnSkillIds: Set<Int> = emptySet(),
+    val eligibleTeachSkillIds: Set<Int> = emptySet(),
+    val pairs: List<com.skillexchange.app.domain.model.exchange.ValidSkillPair> = emptyList(),
     val error: String? = null
 ) {
     val suggestedSkill: UserSkill?
@@ -43,12 +48,19 @@ sealed class ProfileDetailIntent {
     data class LoadUserProfile(val userId: String) : ProfileDetailIntent()
     object RequestExchange : ProfileDetailIntent()
     data class AddSuggestedSkillAndMatch(val skill: UserSkill) : ProfileDetailIntent()
+    data class SelectLearnSkill(val skillId: Int) : ProfileDetailIntent()
+    data class SelectTeachSkill(val skillId: Int) : ProfileDetailIntent()
     object OpenAllReviews : ProfileDetailIntent()
     object DismissAllReviews : ProfileDetailIntent()
 }
 
 sealed class ProfileDetailEffect {
-    data class NavigateToBooking(val receiverId: String) : ProfileDetailEffect()
+    data class NavigateToBooking(
+        val receiverId: String,
+        val skillOfferedId: Int? = null,
+        val skillWantedId: Int? = null
+    ) : ProfileDetailEffect()
+
     data class ShowSnackbar(val message: String) : ProfileDetailEffect()
 }
 
@@ -58,7 +70,7 @@ class ProfileDetailViewModel(
     private val skillRepository: ISkillRepository,
     private val tokenManager: TokenManager,
     private val ratingRepository: com.skillexchange.app.domain.repository.IRatingRepository,
-    private val exchangeRepository: com.skillexchange.app.domain.repository.IExchangeRepository? = null
+    private val exchangeRepository: com.skillexchange.app.domain.repository.IExchangeRepository
 ) : ViewModel() {
 
     private val targetUserId: String? = savedStateHandle["userId"]
@@ -77,13 +89,23 @@ class ProfileDetailViewModel(
     fun onIntent(intent: ProfileDetailIntent) {
         when (intent) {
             is ProfileDetailIntent.LoadUserProfile -> loadUserProfile(intent.userId)
+            is ProfileDetailIntent.SelectLearnSkill -> _state.update { it.copy(selectedSkillWantedId = intent.skillId) }
+            is ProfileDetailIntent.SelectTeachSkill -> _state.update { it.copy(selectedSkillOfferedId = intent.skillId) }
             is ProfileDetailIntent.RequestExchange -> {
                 targetUserId?.let { userId ->
+                    val currentState = _state.value
                     viewModelScope.launch {
-                        _effect.send(ProfileDetailEffect.NavigateToBooking(userId))
+                        _effect.send(
+                            ProfileDetailEffect.NavigateToBooking(
+                                receiverId = userId,
+                                skillOfferedId = currentState.selectedSkillOfferedId,
+                                skillWantedId = currentState.selectedSkillWantedId
+                            )
+                        )
                     }
                 }
             }
+
             is ProfileDetailIntent.AddSuggestedSkillAndMatch -> addSuggestedSkill(intent.skill)
             ProfileDetailIntent.OpenAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = true) }
             ProfileDetailIntent.DismissAllReviews -> _state.update { it.copy(showAllReviewsBottomSheet = false) }
@@ -123,7 +145,7 @@ class ProfileDetailViewModel(
                 val validPairsDeferred = async {
                     if (!isOwn) exchangeRepository?.getValidPairs(userId)?.getOrNull() else null
                 }
-                 sextuple(
+                sextuple(
                     profileDeferred.await(),
                     targetSkillsDeferred.await(),
                     mySkillsDeferred.await(),
@@ -144,14 +166,20 @@ class ProfileDetailViewModel(
             val targetHaves = targetSkills.filter { it.type == SkillType.HAVE }
             val targetWants = targetSkills.filter { it.type == SkillType.WANT }
 
-            val validTeach = myHaves.any { have ->
-                val want = targetWants.find { it.skillId == have.skillId }
-                want != null && have.proficiencyLevel >= want.proficiencyLevel
-            }
-            val validLearn = targetHaves.any { have ->
+            // Kỹ năng target HAVE mà viewer WANT và target đủ level (Viewer học từ Target)
+            val baseEligibleLearnIds = targetHaves.filter { have ->
                 val want = myWants.find { it.skillId == have.skillId }
                 want != null && have.proficiencyLevel >= want.proficiencyLevel
-            }
+            }.map { it.skillId }.toSet()
+
+            // Kỹ năng target WANT mà viewer HAVE và viewer đủ level (Viewer dạy cho Target)
+            val baseEligibleTeachIds = targetWants.filter { want ->
+                val have = myHaves.find { it.skillId == want.skillId }
+                have != null && have.proficiencyLevel >= want.proficiencyLevel
+            }.map { it.skillId }.toSet()
+
+            val validTeach = baseEligibleTeachIds.isNotEmpty()
+            val validLearn = baseEligibleLearnIds.isNotEmpty()
 
             // Tiềm năng 1 chiều: Mình dạy được cho đối phương, nhưng đối phương dạy kỹ năng mình chưa có trong WANT
             val suggestedSkills = if (!isOwn && validTeach && !validLearn) {
@@ -177,10 +205,32 @@ class ProfileDetailViewModel(
                 else -> !isOwn && validTeach && validLearn
             }
 
+            // Kỹ năng đủ điều kiện: Chỉ tính các kỹ năng thuộc các cặp KHẢ DỤNG (chưa có yêu cầu đang mở)
+            val eligibleLearnIds = if (!hasValidPair) {
+                emptySet()
+            } else if (validPairsRes != null && validPairs.isNotEmpty()) {
+                availablePairs.map { it.skillWantedId }.toSet()
+            } else {
+                baseEligibleLearnIds
+            }
+
+            val eligibleTeachIds = if (!hasValidPair) {
+                emptySet()
+            } else if (validPairsRes != null && validPairs.isNotEmpty()) {
+                availablePairs.map { it.skillOfferedId }.toSet()
+            } else {
+                baseEligibleTeachIds
+            }
+
+            val bestPair = availablePairs.firstOrNull()
+            val defaultOfferedId = if (hasValidPair) (bestPair?.skillOfferedId ?: eligibleTeachIds.firstOrNull()) else null
+            val defaultWantedId = if (hasValidPair) (bestPair?.skillWantedId ?: eligibleLearnIds.firstOrNull()) else null
+
             val reason = when {
                 isOwn -> "Đây là hồ sơ cá nhân của bạn"
                 validTeach && validLearn && validPairsRes != null && validPairs.isNotEmpty() && availablePairs.isEmpty() ->
                     "Tất cả cặp kỹ năng phù hợp đang có yêu cầu trao đổi đang xử lý."
+
                 !hasValidPair && suggestedSkills.isNotEmpty() -> null
                 !hasValidPair -> "Chưa có cặp kỹ năng phù hợp hai chiều để trao đổi"
                 else -> null
@@ -188,8 +238,8 @@ class ProfileDetailViewModel(
 
             val effectiveRelStatus = relStatus
                 ?: if (validPairs.any { it.isActive }) "ACTIVE"
-                   else if (completedCount > 0 || validPairs.any { it.completedCount > 0 }) "COMPLETED"
-                   else null
+                else if (completedCount > 0 || validPairs.any { it.completedCount > 0 }) "COMPLETED"
+                else null
 
             val effectiveCompletedCount = maxOf(
                 completedCount,
@@ -210,6 +260,11 @@ class ProfileDetailViewModel(
                     relationshipStatus = effectiveRelStatus,
                     completedExchangeCount = effectiveCompletedCount,
                     recentlyRejected = recentlyRejected,
+                    selectedSkillOfferedId = defaultOfferedId,
+                    selectedSkillWantedId = defaultWantedId,
+                    eligibleLearnSkillIds = eligibleLearnIds,
+                    eligibleTeachSkillIds = eligibleTeachIds,
+                    pairs = validPairs,
                     error = if (profile == null) (profileRes.exceptionOrNull()?.message ?: "Lỗi tải hồ sơ") else null
                 )
             }
